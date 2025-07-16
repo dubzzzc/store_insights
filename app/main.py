@@ -7,7 +7,7 @@ app = FastAPI(title="Store Insights API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # or specify your frontend URL like ["https://yoursite.com"]
+    allow_origins=["http://localhost:8000/dashboard"],  # or specify your frontend URL like ["https://yoursite.com"]
     allow_credentials=True,
     allow_methods=["*"],   # Includes OPTIONS
     allow_headers=["*"],
