@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from app.auth import router as auth_router
-from app import insights  # updated import
+from app.insights import router as insights_router  
 
 app = FastAPI(title="Store Insights API")
 
@@ -9,4 +9,4 @@ def root():
     return {"message": "Store Insights API is running"}
 
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
-app.include_router(insights.router, prefix="/insights", tags=["insights"])
+app.include_router(insights_router, prefix="/insights", tags=["insights"])  
