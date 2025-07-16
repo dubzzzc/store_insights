@@ -4,6 +4,9 @@ import jwt, os, bcrypt
 from app.db_core import get_core_connection
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
+print("✅ auth.py loaded and router defined")
+
+
 router = APIRouter()
 security = HTTPBearer()
 
