@@ -27,7 +27,7 @@ def get_sales_insights(user: dict = Depends(get_auth_user)):
                 GROUP BY DATE(sale_date)
                 ORDER BY DATE(sale_date) DESC
                 LIMIT 7
-            """))
+              """)).mappings()
 
             sales_data = []
             for row in result:
