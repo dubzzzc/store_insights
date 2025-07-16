@@ -3,9 +3,11 @@ from app.auth import router as auth_router
 from app.insights import router as insights_router  
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+import os
+from pathlib import Path
 
 app = FastAPI(title="Store Insights API")
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+app.mount("/", StaticFiles(directory="app/static", html=True), name="static")
 
 app.add_middleware(
     CORSMiddleware,
