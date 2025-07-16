@@ -4,9 +4,6 @@ from app.insights import router as insights_router
 
 app = FastAPI(title="Store Insights API")
 
-@app.get("/routes")
-def list_routes():
-    return [route.path for route in app.router.routes]
 
 
 @app.get("/")
