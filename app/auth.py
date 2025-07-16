@@ -2,6 +2,10 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 import jwt, os, bcrypt
 from app.db_core import get_core_connection
+from fastapi import HTTPException
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+security = HTTPBearer()
 
 router = APIRouter()
 
@@ -11,9 +15,20 @@ class LoginInput(BaseModel):
     email: str
     password: str
 
-from fastapi import HTTPException
+
 
 @router.post("/login")
+
+def get_auth_user(token: HTTPAuthorizationCredentials = Depends(security)):
+    try:
+        payload = jwt.decode(token.credentials, SECRET, algorithms=["HS256"])
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+
 def login(data: LoginInput):
     print(f"🔐 Login attempt for {data.email}")
     conn = get_core_connection()
