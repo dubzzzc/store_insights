@@ -6,7 +6,7 @@ from datetime import datetime
 
 router = APIRouter()
 
-@router.get("/insights/sales")
+@router.get("/sales")
 def get_sales_insights(user: dict = Depends(get_auth_user)):
     try:
         # Pull credentials from token
