@@ -3,4 +3,4 @@ uvicorn
 python-dotenv
 mysql-connector-python
 bcrypt
-python-jose[cryptography]
+PyJWT==2.8.0
