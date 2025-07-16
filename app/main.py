@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 
 app = FastAPI(title="Store Insights API")
-app.mount("/", StaticFiles(directory="app/static", html=True), name="static")
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -16,6 +16,8 @@ app.add_middleware(
     allow_methods=["*"],   # Includes OPTIONS
     allow_headers=["*"],
 )
+
+app.mount("/", StaticFiles(directory="app/static", html=True), name="static")
 
 @app.get("/")
 def root():
