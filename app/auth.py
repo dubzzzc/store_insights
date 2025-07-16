@@ -11,6 +11,8 @@ class LoginInput(BaseModel):
     email: str
     password: str
 
+from fastapi import HTTPException
+
 @router.post("/login")
 def login(data: LoginInput):
     print(f"🔐 Login attempt for {data.email}")
@@ -25,24 +27,24 @@ def login(data: LoginInput):
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
+    raw_input = data.password.encode()
+    stored_hash = user["password_hash"].encode()
+
+    print(f"🔍 Raw input: {raw_input}")
+    print(f"🔐 Stored hash: {stored_hash}")
+
     try:
-        raw_input = data.password.encode()
-        stored_hash = user["password_hash"].encode()
-
-        print(f"🔍 Raw input: {raw_input}")
-        print(f"🔐 Stored hash: {stored_hash}")
-
-        if not bcrypt.checkpw(raw_input, stored_hash):
-            print("❌ bcrypt.checkpw failed")
-            raise HTTPException(status_code=401, detail="Invalid password")
-
-        print("✅ Password matched")
-
+        matched = bcrypt.checkpw(raw_input, stored_hash)
     except Exception as e:
-        print(f"💥 Exception during bcrypt check: {e}")
-        raise HTTPException(status_code=500, detail="Internal bcrypt error")
+        print(f"💥 bcrypt threw an error: {e}")
+        raise HTTPException(status_code=500, detail="bcrypt failure")
 
-    # Issue JWT
+    if not matched:
+        print("❌ bcrypt.checkpw returned False")
+        raise HTTPException(status_code=401, detail="Invalid password")
+
+    print("✅ Password matched")
+
     token = jwt.encode({
         "email": user["email"],
         "store_db": user["store_db"],
@@ -51,4 +53,5 @@ def login(data: LoginInput):
     }, SECRET, algorithm="HS256")
 
     return {"token": token}
+
 
