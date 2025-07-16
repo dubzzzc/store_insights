@@ -1,8 +1,17 @@
 from fastapi import FastAPI
 from app.auth import router as auth_router
 from app.insights import router as insights_router  
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="Store Insights API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # or specify your frontend URL like ["https://yoursite.com"]
+    allow_credentials=True,
+    allow_methods=["*"],   # Includes OPTIONS
+    allow_headers=["*"],
+)
 
 @app.get("/")
 def root():
