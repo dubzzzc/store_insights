@@ -17,7 +17,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/", StaticFiles(directory="app/static", html=True), name="static")
+
 
 @app.get("/")
 def root():
@@ -25,3 +25,5 @@ def root():
 
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(insights_router, prefix="/insights", tags=["insights"])  
+
+app.mount("/", StaticFiles(directory="app/static", html=True), name="static")
