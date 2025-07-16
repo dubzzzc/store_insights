@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from app.auth.auth import get_auth_user
+from app.auth import get_auth_user
 from sqlalchemy import create_engine, text
 from collections import defaultdict
 from datetime import datetime
