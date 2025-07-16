@@ -27,45 +27,45 @@
   </table>
 
   <script>
-document.querySelector('button').addEventListener('click', async () => {
-  const email = document.querySelector('input[type=email]').value;
-  const password = document.querySelector('input[type=password]').value;
-
-  // Login and get token
-  const loginRes = await fetch('https://store-insights.onrender.com/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password })
-  });
-
-  const loginData = await loginRes.json();
-
-  if (!loginRes.ok) {
-    alert(loginData.detail || 'Login failed');
-    return;
-  }
-
-  const token = loginData.token;
-
-  // Fetch insights
-  const insightsRes = await fetch('https://store-insights.onrender.com/insights/sales', {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-
-  const insightsData = await insightsRes.json();
-
-  if (!insightsRes.ok) {
-    alert(insightsData.detail || 'Failed to get sales data');
-    return;
-  }
-
-  // Render sales data only inside the "sales" container
-  const salesList = insightsData.sales.map(sale =>
-    `<li>${sale.date}: ${sale.total_items_sold} items - $${sale.total_sales}</li>`
-  ).join('');
-
-  document.getElementById('sales').innerHTML = `<ul>${salesList}</ul>`;
+    document.querySelector('button').addEventListener('click', async (event) => {
+      event.preventDefault(); // ✅ This stops the form from submitting normally
+    
+      const email = document.querySelector('input[type=email]').value;
+      const password = document.querySelector('input[type=password]').value;
+    
+      const loginRes = await fetch('https://store-insights.onrender.com/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+    
+      const loginData = await loginRes.json();
+    
+      if (!loginRes.ok) {
+        alert(loginData.detail || 'Login failed');
+        return;
+      }
+    
+      const token = loginData.token;
+    
+      const insightsRes = await fetch('https://store-insights.onrender.com/insights/sales', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+    
+      const insightsData = await insightsRes.json();
+    
+      if (!insightsRes.ok) {
+        alert(insightsData.detail || 'Failed to get sales data');
+        return;
+      }
+    
+      const salesList = insightsData.sales.map(sale =>
+        `<li>${sale.date}: ${sale.total_items_sold} items - $${sale.total_sales}</li>`
+      ).join('');
+    
+      document.body.innerHTML += `<ul>${salesList}</ul>`;
 });
+
 </script>
 
   
