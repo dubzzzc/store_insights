@@ -10,4 +10,4 @@ def root():
     return {"message": "Store Insights API is running"}
 
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
-app.include_router(insights_router, prefix="/insights", tags=["insights"])
+app.include_router(insights_router.router, prefix="/insights", tags=["insights"])
