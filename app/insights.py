@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
-from jose import jwt, JWTError
+import jwt
+from jwt import InvalidTokenError
 from app.db_router import get_store_connection
 import os
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -12,8 +13,9 @@ def get_auth_user(token: HTTPAuthorizationCredentials = Depends(security)):
     try:
         payload = jwt.decode(token.credentials, SECRET, algorithms=["HS256"])
         return payload
-    except JWTError:
+    except InvalidTokenError:
         raise HTTPException(status_code=403, detail="Invalid token")
+
 
 @router.get("/daily_sales")
 def daily_sales(user=Depends(get_auth_user)):
