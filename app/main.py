@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from app.auth import router as auth_router
-from app.insights import router as insights_router
+from app.routers.insights import router as insights_router
 
 app = FastAPI(title="Store Insights API")
 
