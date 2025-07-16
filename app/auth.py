@@ -2,12 +2,10 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 import jwt, os, bcrypt
 from app.db_core import get_core_connection
-from fastapi import HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-security = HTTPBearer()
-
 router = APIRouter()
+security = HTTPBearer()
 
 SECRET = os.getenv("JWT_SECRET", "changeme")
 
@@ -15,20 +13,8 @@ class LoginInput(BaseModel):
     email: str
     password: str
 
-
-
+# ✅ This is the correct login endpoint
 @router.post("/login")
-
-def get_auth_user(token: HTTPAuthorizationCredentials = Depends(security)):
-    try:
-        payload = jwt.decode(token.credentials, SECRET, algorithms=["HS256"])
-        return payload
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-
 def login(data: LoginInput):
     print(f"🔐 Login attempt for {data.email}")
     conn = get_core_connection()
@@ -45,17 +31,13 @@ def login(data: LoginInput):
     raw_input = data.password.encode()
     stored_hash = user["password_hash"].encode()
 
-    print(f"🔍 Raw input: {raw_input}")
-    print(f"🔐 Stored hash: {stored_hash}")
-
     try:
         matched = bcrypt.checkpw(raw_input, stored_hash)
     except Exception as e:
-        print(f"💥 bcrypt threw an error: {e}")
+        print(f"💥 bcrypt error: {e}")
         raise HTTPException(status_code=500, detail="bcrypt failure")
 
     if not matched:
-        print("❌ bcrypt.checkpw returned False")
         raise HTTPException(status_code=401, detail="Invalid password")
 
     print("✅ Password matched")
@@ -69,4 +51,12 @@ def login(data: LoginInput):
 
     return {"token": token}
 
-
+# ✅ This is the token auth dependency
+def get_auth_user(token: HTTPAuthorizationCredentials = Depends(security)):
+    try:
+        payload = jwt.decode(token.credentials, SECRET, algorithms=["HS256"])
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
