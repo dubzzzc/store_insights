@@ -5,6 +5,11 @@ from app.routers import insights
 
 app = FastAPI(title="Store Insights API")
 
+@app.get("/routes")
+def list_routes():
+    return [route.path for route in app.router.routes]
+
+
 @app.get("/")
 def root():
     return {"message": "Store Insights API is running"}
