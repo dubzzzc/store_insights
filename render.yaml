@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: store-insights-api
+    env: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port 10000"
+    envVars:
+      - key: CORE_DB_HOST
+        value: spirits-db.cbuumpmfxesr.us-east-1.rds.amazonaws.com
+      - key: CORE_DB_USER
+        value: admin
+      - key: CORE_DB_PASSWORD
+        value: your_admin_password
+      - key: CORE_DB_NAME
+        value: platform_core
+      - key: JWT_SECRET
+        value: supersecretkey
