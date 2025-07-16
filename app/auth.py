@@ -1,3 +1,16 @@
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel
+import jwt, os, bcrypt
+from app.db_core import get_core_connection
+
+router = APIRouter()
+
+SECRET = os.getenv("JWT_SECRET", "changeme")
+
+class LoginInput(BaseModel):
+    email: str
+    password: str
+
 @router.post("/login")
 def login(data: LoginInput):
     print(f"🔐 Login attempt for {data.email}")
