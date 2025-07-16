@@ -25,18 +25,24 @@ def login(data: LoginInput):
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
-    raw_input = data.password.encode()
-    stored_hash = user["password_hash"].encode()
+    try:
+        raw_input = data.password.encode()
+        stored_hash = user["password_hash"].encode()
 
-    print(f"🔍 Raw input: {raw_input}")
-    print(f"🔐 Stored hash: {stored_hash}")
+        print(f"🔍 Raw input: {raw_input}")
+        print(f"🔐 Stored hash: {stored_hash}")
 
-    if not bcrypt.checkpw(raw_input, stored_hash):
-        print("❌ bcrypt.checkpw failed")
-        raise HTTPException(status_code=401, detail="Invalid password")
+        if not bcrypt.checkpw(raw_input, stored_hash):
+            print("❌ bcrypt.checkpw failed")
+            raise HTTPException(status_code=401, detail="Invalid password")
 
-    print("✅ Password matched")
+        print("✅ Password matched")
 
+    except Exception as e:
+        print(f"💥 Exception during bcrypt check: {e}")
+        raise HTTPException(status_code=500, detail="Internal bcrypt error")
+
+    # Issue JWT
     token = jwt.encode({
         "email": user["email"],
         "store_db": user["store_db"],
@@ -45,3 +51,4 @@ def login(data: LoginInput):
     }, SECRET, algorithm="HS256")
 
     return {"token": token}
+
