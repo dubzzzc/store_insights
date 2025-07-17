@@ -21,7 +21,7 @@ def get_sales_insights(user: dict = Depends(get_auth_user)):
             sale_filter_query = text("""
                 SELECT SALE
                 FROM jnl
-                WHERE RFLAG = 0 AND LINE IN (950, 980) AND DATE >= :seven_days_ago
+                WHERE RFLAG = 0 AND DATE >= :seven_days_ago
                 GROUP BY SALE
                 HAVING COUNT(DISTINCT LINE) = 2
             """)
