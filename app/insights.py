@@ -26,8 +26,7 @@ def get_sales_insights(user: dict = Depends(get_auth_user)):
                 SELECT SALE
                 FROM jnl
                 WHERE RFLAG = 0 AND DATE >= :seven_days_ago
-                GROUP BY SALE
-                HAVING SUM(LINE = 950) > 0 AND SUM(LINE = 980) > 0
+                GROUP BY SALE                
             """), {"seven_days_ago": seven_days_ago}).mappings()
 
             valid_sales = [row["SALE"] for row in result]
