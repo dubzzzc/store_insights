@@ -16,7 +16,15 @@ _COLUMN_SPECS: Dict[str, Dict[str, Any]] = {
     "date": {"candidates": ["date", "sale_date", "trandate", "trans_date"], "required": True},
     "sku": {"candidates": ["sku", "item", "itemno", "upc"], "required": True},
     "description": {
-        "candidates": ["description", "descr", "item_desc", "desc", "itemdescription", "product_description"],
+        "candidates": [
+            "description",
+            "descr",
+            "descript",
+            "item_desc",
+            "desc",
+            "itemdescription",
+            "product_description",
+        ],
         "required": False,
     },
     "pack": {"candidates": ["pack", "package", "packsize", "pack_size"], "required": False},
