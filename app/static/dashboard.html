@@ -238,6 +238,160 @@
         gap: 0.35rem;
       }
 
+      .tab-group {
+        display: inline-flex;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 0.25rem;
+        gap: 0.25rem;
+      }
+
+      .tab-container {
+        display: flex;
+        justify-content: center;
+        width: 100%;
+        margin-bottom: clamp(1rem, 3vw, 1.5rem);
+      }
+
+      .tab-button {
+        border: none;
+        background: transparent;
+        color: var(--muted);
+        font-weight: 500;
+        padding: 0.35rem 1rem;
+        border-radius: 999px;
+        cursor: pointer;
+        transition: background-color 0.2s ease, color 0.2s ease;
+      }
+
+      .tab-button[data-active="true"] {
+        background: var(--primary);
+        color: #fff;
+        box-shadow: 0 6px 14px rgba(37, 99, 235, 0.18);
+      }
+
+      .success-message {
+        color: #166534;
+        background: #dcfce7;
+        border: 1px solid #bbf7d0;
+        padding: 0.75rem 1rem;
+        border-radius: 0.75rem;
+      }
+
+      .admin-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+      }
+
+      .admin-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: clamp(1.5rem, 3vw, 2.5rem);
+      }
+
+      .user-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 0.75rem;
+      }
+
+      .user-list button {
+        width: 100%;
+        text-align: left;
+        border: 1px solid var(--border);
+        background: var(--surface-alt);
+        border-radius: 0.75rem;
+        padding: 0.75rem 1rem;
+        display: grid;
+        gap: 0.35rem;
+        transition: border-color 0.2s ease, transform 0.2s ease;
+        cursor: pointer;
+      }
+
+      .user-list button:hover {
+        border-color: var(--primary);
+        transform: translateY(-1px);
+      }
+
+      .user-list button[data-active="true"] {
+        border-color: var(--primary);
+        background: rgba(37, 99, 235, 0.08);
+      }
+
+      .user-email {
+        font-weight: 600;
+      }
+
+      .user-meta {
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+
+      .admin-form {
+        display: grid;
+        gap: 1rem;
+        margin-top: 1.5rem;
+      }
+
+      .store-list {
+        display: grid;
+        gap: 0.75rem;
+      }
+
+      .store-card {
+        border: 1px solid var(--border);
+        border-radius: 0.75rem;
+        padding: 0.75rem 1rem;
+        background: var(--surface-alt);
+        display: grid;
+        gap: 0.5rem;
+      }
+
+      .store-card-heading {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .store-card-heading h4 {
+        margin: 0;
+        font-size: 1rem;
+      }
+
+      .store-card-details {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 0.5rem 1rem;
+        margin: 0;
+      }
+
+      .store-card-detail {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+      }
+
+      .store-card-details dt {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+
+      .store-card-details dd {
+        margin: 0;
+        font-weight: 500;
+        font-size: 0.95rem;
+        word-break: break-word;
+      }
+
       .metric-label {
         color: var(--muted);
         font-size: 0.85rem;
@@ -288,6 +442,7 @@
         token: 'store-insights/token',
         stores: 'store-insights/stores',
         selectedStore: 'store-insights/selected-store',
+        adminKey: 'store-insights/admin-key',
       };
 
       const getStorage = () => {
@@ -331,7 +486,10 @@
         },
         clearSession() {
           if (!storageBackend) return;
-          Object.values(STORAGE_KEYS).forEach((key) => storageBackend.removeItem(key));
+          Object.entries(STORAGE_KEYS).forEach(([name, key]) => {
+            if (name === 'adminKey') return;
+            storageBackend.removeItem(key);
+          });
         },
       };
 
@@ -519,6 +677,516 @@
         );
       };
 
+      const TabSwitcher = ({ activeTab, onChange }) => {
+        return (
+          <div className="tab-container">
+            <div className="tab-group">
+              <button
+                type="button"
+                className="tab-button"
+                data-active={activeTab === 'dashboard'}
+                onClick={() => onChange('dashboard')}
+              >
+                Dashboard
+              </button>
+              <button
+                type="button"
+                className="tab-button"
+                data-active={activeTab === 'admin'}
+                onClick={() => onChange('admin')}
+              >
+                Admin
+              </button>
+            </div>
+          </div>
+        );
+      };
+
+      const AdminLoginForm = ({ onSubmit, isLoading, error }) => {
+        const [apiKey, setApiKey] = useState('');
+        const [localError, setLocalError] = useState('');
+
+        const handleSubmit = async (event) => {
+          event.preventDefault();
+          const trimmed = apiKey.trim();
+          if (!trimmed) {
+            setLocalError('Admin key is required');
+            return;
+          }
+          setLocalError('');
+          const success = await onSubmit(trimmed);
+          if (success) {
+            setApiKey('');
+          }
+        };
+
+        return (
+          <form className="admin-form" onSubmit={handleSubmit}>
+            <label>
+              Admin API Key
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(event) => setApiKey(event.target.value)}
+                placeholder="Enter admin key"
+                disabled={isLoading}
+              />
+            </label>
+            {(error || localError) && <div className="error-message">{error || localError}</div>}
+            <button type="submit" disabled={isLoading}>
+              {isLoading ? 'Signing in…' : 'Sign in as admin'}
+            </button>
+          </form>
+        );
+      };
+
+      const UserList = ({ users, selectedUserId, onSelectUser }) => {
+        if (!users?.length) {
+          return <div className="empty-state">No users found yet.</div>;
+        }
+
+        return (
+          <ul className="user-list">
+            {users.map((user) => (
+              <li key={user.id}>
+                <button
+                  type="button"
+                  data-active={selectedUserId === user.id}
+                  onClick={() => onSelectUser(user.id)}
+                >
+                  <span className="user-email">{user.email}</span>
+                  <span className="user-meta">{user.full_name || '—'}</span>
+                  <span className="user-meta">
+                    {(user.stores?.length || 0).toString()} store{user.stores?.length === 1 ? '' : 's'}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        );
+      };
+
+      const CreateUserForm = ({ onSubmit, isSubmitting }) => {
+        const [email, setEmail] = useState('');
+        const [password, setPassword] = useState('');
+        const [fullName, setFullName] = useState('');
+        const [storeDb, setStoreDb] = useState('');
+        const [storeUser, setStoreUser] = useState('');
+        const [storePass, setStorePass] = useState('');
+        const [storeName, setStoreName] = useState('');
+        const [formError, setFormError] = useState('');
+
+        const handleSubmit = async (event) => {
+          event.preventDefault();
+          setFormError('');
+
+          const trimmedEmail = email.trim();
+          const trimmedPassword = password.trim();
+
+          if (!trimmedEmail || !trimmedPassword) {
+            setFormError('Email and password are required');
+            return;
+          }
+
+          const trimmedStoreDb = storeDb.trim();
+          const trimmedStoreUser = storeUser.trim();
+          const storeFieldsFilled =
+            trimmedStoreDb.length || trimmedStoreUser.length || storePass.trim().length || storeName.trim().length;
+
+          if (storeFieldsFilled && (!trimmedStoreDb || !trimmedStoreUser || !storePass.trim())) {
+            setFormError('Store database, user, and password are required to create an initial store assignment');
+            return;
+          }
+
+          const stores = [];
+          if (storeFieldsFilled) {
+            stores.push({
+              store_db: trimmedStoreDb,
+              db_user: trimmedStoreUser,
+              db_pass: storePass,
+              store_name: storeName.trim() || undefined,
+            });
+          }
+
+          const payload = {
+            email: trimmedEmail,
+            password: trimmedPassword,
+            full_name: fullName.trim() || undefined,
+            stores,
+          };
+
+          const success = await onSubmit(payload);
+          if (success) {
+            setEmail('');
+            setPassword('');
+            setFullName('');
+            setStoreDb('');
+            setStoreUser('');
+            setStorePass('');
+            setStoreName('');
+          }
+        };
+
+        return (
+          <form className="admin-form" onSubmit={handleSubmit}>
+            <h3>Create user</h3>
+            <label>
+              Email
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="manager@example.com"
+                disabled={isSubmitting}
+              />
+            </label>
+            <label>
+              Password
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Minimum 8 characters"
+                disabled={isSubmitting}
+              />
+            </label>
+            <label>
+              Full name (optional)
+              <input
+                type="text"
+                value={fullName}
+                onChange={(event) => setFullName(event.target.value)}
+                placeholder="Regional Manager"
+                disabled={isSubmitting}
+              />
+            </label>
+            <div className="metrics">
+              <label>
+                Store database (optional)
+                <input
+                  type="text"
+                  value={storeDb}
+                  onChange={(event) => setStoreDb(event.target.value)}
+                  placeholder="spirits_6885"
+                  disabled={isSubmitting}
+                />
+              </label>
+              <label>
+                DB user
+                <input
+                  type="text"
+                  value={storeUser}
+                  onChange={(event) => setStoreUser(event.target.value)}
+                  placeholder="store_reader"
+                  disabled={isSubmitting}
+                />
+              </label>
+              <label>
+                DB password
+                <input
+                  type="password"
+                  value={storePass}
+                  onChange={(event) => setStorePass(event.target.value)}
+                  placeholder="secret"
+                  disabled={isSubmitting}
+                />
+              </label>
+              <label>
+                Store name
+                <input
+                  type="text"
+                  value={storeName}
+                  onChange={(event) => setStoreName(event.target.value)}
+                  placeholder="Downtown Spirits"
+                  disabled={isSubmitting}
+                />
+              </label>
+            </div>
+            {formError && <div className="error-message">{formError}</div>}
+            <button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Creating user…' : 'Create user'}
+            </button>
+          </form>
+        );
+      };
+
+      const AddStoreForm = ({ onSubmit, isSubmitting, user }) => {
+        const [storeDb, setStoreDb] = useState('');
+        const [storeUser, setStoreUser] = useState('');
+        const [storePass, setStorePass] = useState('');
+        const [storeName, setStoreName] = useState('');
+        const [formError, setFormError] = useState('');
+
+        const handleSubmit = async (event) => {
+          event.preventDefault();
+          setFormError('');
+
+          const trimmedDb = storeDb.trim();
+          const trimmedUser = storeUser.trim();
+          const trimmedPass = storePass.trim();
+
+          if (!trimmedDb || !trimmedUser || !trimmedPass) {
+            setFormError('Database, user, and password are required');
+            return;
+          }
+
+          const payload = {
+            store_db: trimmedDb,
+            db_user: trimmedUser,
+            db_pass: storePass,
+            store_name: storeName.trim() || undefined,
+          };
+
+          const success = await onSubmit(payload);
+          if (success) {
+            setStoreDb('');
+            setStoreUser('');
+            setStorePass('');
+            setStoreName('');
+          }
+        };
+
+        return (
+          <form className="admin-form" onSubmit={handleSubmit}>
+            <h3>Add store to {user?.email || 'user'}</h3>
+            <div className="metrics">
+              <label>
+                Store database
+                <input
+                  type="text"
+                  value={storeDb}
+                  onChange={(event) => setStoreDb(event.target.value)}
+                  placeholder="spirits_6885"
+                  disabled={isSubmitting}
+                />
+              </label>
+              <label>
+                DB user
+                <input
+                  type="text"
+                  value={storeUser}
+                  onChange={(event) => setStoreUser(event.target.value)}
+                  placeholder="store_reader"
+                  disabled={isSubmitting}
+                />
+              </label>
+              <label>
+                DB password
+                <input
+                  type="password"
+                  value={storePass}
+                  onChange={(event) => setStorePass(event.target.value)}
+                  placeholder="secret"
+                  disabled={isSubmitting}
+                />
+              </label>
+              <label>
+                Store name (optional)
+                <input
+                  type="text"
+                  value={storeName}
+                  onChange={(event) => setStoreName(event.target.value)}
+                  placeholder="Downtown Spirits"
+                  disabled={isSubmitting}
+                />
+              </label>
+            </div>
+            {formError && <div className="error-message">{formError}</div>}
+            <button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Adding store…' : 'Add store'}
+            </button>
+          </form>
+        );
+      };
+
+      const StoreAssignments = ({ user, onRemoveStore, isProcessing }) => {
+        if (!user?.stores?.length) {
+          return <div className="empty-state">No store assignments yet.</div>;
+        }
+
+        return (
+          <div className="store-list">
+            {user.stores.map((store) => {
+              const identifier = store.id ?? store.store_db ?? 'legacy';
+              return (
+                <div className="store-card" key={`${user.id}-${identifier}`}>
+                  <div className="store-card-heading">
+                    <h4>{store.store_name || store.store_db || 'Store'}</h4>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => onRemoveStore(user.id, identifier)}
+                      disabled={isProcessing}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <dl className="store-card-details">
+                    <div className="store-card-detail">
+                      <dt>Database</dt>
+                      <dd>{store.store_db || '—'}</dd>
+                    </div>
+                    <div className="store-card-detail">
+                      <dt>DB user</dt>
+                      <dd>{store.db_user || '—'}</dd>
+                    </div>
+                    <div className="store-card-detail">
+                      <dt>DB password</dt>
+                      <dd>{store.db_pass || '—'}</dd>
+                    </div>
+                    <div className="store-card-detail">
+                      <dt>Store name</dt>
+                      <dd>{store.store_name || '—'}</dd>
+                    </div>
+                  </dl>
+                </div>
+              );
+            })}
+          </div>
+        );
+      };
+
+      const AdminPanel = ({
+        users,
+        selectedUserId,
+        onSelectUser,
+        onLogout,
+        onRefresh,
+        onCreateUser,
+        onAddStore,
+        onRemoveStore,
+        isLoading,
+        isProcessing,
+        error,
+        message,
+      }) => {
+        const selectedUser = users.find((user) => user.id === selectedUserId) || users[0] || null;
+
+        useEffect(() => {
+          if (!selectedUser && users.length) {
+            onSelectUser(users[0].id);
+          }
+        }, [users, selectedUser, onSelectUser]);
+
+        return (
+          <div className="admin-grid">
+            <section className="card">
+              <div className="admin-toolbar">
+                <div>
+                  <h2>Users</h2>
+                  <span className="user-meta">Manage dashboard accounts and their stores.</span>
+                </div>
+                <div className="control-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={onRefresh}
+                    disabled={isLoading || isProcessing}
+                  >
+                    Refresh
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => onLogout()}
+                    disabled={isProcessing}
+                  >
+                    Sign out
+                  </button>
+                </div>
+              </div>
+              {error && <div className="error-message">{error}</div>}
+              {message && <div className="success-message">{message}</div>}
+              {isLoading ? (
+                <div className="empty-state">Loading users…</div>
+              ) : (
+                <UserList users={users} selectedUserId={selectedUser?.id} onSelectUser={onSelectUser} />
+              )}
+              <CreateUserForm onSubmit={onCreateUser} isSubmitting={isProcessing} />
+            </section>
+            <section className="card">
+              <h2>Store assignments</h2>
+              {selectedUser ? (
+                <>
+                  <div className="metrics">
+                    <div>
+                      <span className="metric-label">User</span>
+                      <span>{selectedUser.email}</span>
+                    </div>
+                    <div>
+                      <span className="metric-label">Name</span>
+                      <span>{selectedUser.full_name || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="metric-label">Stores</span>
+                      <span>{selectedUser.stores?.length || 0}</span>
+                    </div>
+                  </div>
+                  <StoreAssignments
+                    user={selectedUser}
+                    onRemoveStore={onRemoveStore}
+                    isProcessing={isProcessing}
+                  />
+                  <AddStoreForm
+                    user={selectedUser}
+                    onSubmit={(payload) => onAddStore(selectedUser.id, payload)}
+                    isSubmitting={isProcessing}
+                  />
+                </>
+              ) : (
+                <div className="empty-state">Select a user to manage their stores.</div>
+              )}
+            </section>
+          </div>
+        );
+      };
+
+      const AdminView = ({
+        hasKey,
+        onLogin,
+        onLogout,
+        users,
+        selectedUserId,
+        onSelectUser,
+        onRefresh,
+        onCreateUser,
+        onAddStore,
+        onRemoveStore,
+        isLoading,
+        isProcessing,
+        error,
+        message,
+      }) => {
+        if (!hasKey) {
+          return (
+            <section className="card">
+              <h2>Admin access</h2>
+              <p className="user-meta">
+                Provide the admin API key configured on the server to manage users and store assignments.
+              </p>
+              <AdminLoginForm onSubmit={onLogin} isLoading={isLoading} error={error} />
+            </section>
+          );
+        }
+
+        return (
+          <AdminPanel
+            users={users}
+            selectedUserId={selectedUserId}
+            onSelectUser={onSelectUser}
+            onLogout={onLogout}
+            onRefresh={onRefresh}
+            onCreateUser={onCreateUser}
+            onAddStore={onAddStore}
+            onRemoveStore={onRemoveStore}
+            isLoading={isLoading}
+            isProcessing={isProcessing}
+            error={error}
+            message={message}
+          />
+        );
+      };
+
       const LoginForm = ({ onSubmit, isLoading, error }) => {
         const [email, setEmail] = useState('');
         const [password, setPassword] = useState('');
@@ -561,7 +1229,6 @@
       };
 
       const Dashboard = ({
-        token,
         stores,
         selectedStore,
         sales,
@@ -572,18 +1239,6 @@
         loading,
         error,
       }) => {
-        useEffect(() => {
-          const storeMeta = document.getElementById('store-meta');
-          if (!storeMeta) return;
-          if (!token) {
-            storeMeta.textContent = '';
-            return;
-          }
-
-          const name = selectedStore?.store_name || selectedStore?.store_db;
-          storeMeta.textContent = name ? `Viewing ${name}` : 'Select a store to begin';
-        }, [token, selectedStore]);
-
         const summary = useMemo(() => {
           return sales.reduce(
             (acc, day) => {
@@ -683,6 +1338,7 @@
       };
 
       const App = () => {
+        const [activeTab, setActiveTab] = useState('dashboard');
         const [token, setToken] = useState(() => storage.get(STORAGE_KEYS.token, null));
         const [stores, setStores] = useState(() => storage.get(STORAGE_KEYS.stores, []));
         const [selectedStore, setSelectedStore] = useState(() =>
@@ -693,6 +1349,14 @@
         const [authError, setAuthError] = useState('');
         const [isAuthenticating, setIsAuthenticating] = useState(false);
         const [isLoadingData, setIsLoadingData] = useState(false);
+
+        const [adminKey, setAdminKey] = useState(() => storage.get(STORAGE_KEYS.adminKey, ''));
+        const [adminUsers, setAdminUsers] = useState([]);
+        const [selectedAdminUserId, setSelectedAdminUserId] = useState(null);
+        const [adminError, setAdminError] = useState('');
+        const [adminMessage, setAdminMessage] = useState('');
+        const [isAdminLoading, setIsAdminLoading] = useState(false);
+        const [isAdminProcessing, setIsAdminProcessing] = useState(false);
 
         const tokenRef = useRef(token);
 
@@ -713,6 +1377,20 @@
           setIsAuthenticating(false);
           setIsLoadingData(false);
         }, []);
+
+        const handleAdminLogout = useCallback(
+          (message = '') => {
+            setAdminKey('');
+            storage.remove(STORAGE_KEYS.adminKey);
+            setAdminUsers([]);
+            setSelectedAdminUserId(null);
+            setIsAdminLoading(false);
+            setIsAdminProcessing(false);
+            setAdminMessage('');
+            setAdminError(message);
+          },
+          []
+        );
 
         useEffect(() => {
           tokenRef.current = token;
@@ -740,6 +1418,14 @@
         }, [selectedStore]);
 
         useEffect(() => {
+          if (adminKey) {
+            storage.set(STORAGE_KEYS.adminKey, adminKey);
+          } else {
+            storage.remove(STORAGE_KEYS.adminKey);
+          }
+        }, [adminKey]);
+
+        useEffect(() => {
           if (!stores?.length) {
             if (selectedStore) {
               setSelectedStore(null);
@@ -760,6 +1446,24 @@
             setSelectedStore(match);
           }
         }, [stores, selectedStore]);
+
+        useEffect(() => {
+          const storeMeta = document.getElementById('store-meta');
+          if (!storeMeta) return;
+
+          if (activeTab === 'admin') {
+            storeMeta.textContent = 'Admin tools';
+            return;
+          }
+
+          if (!token) {
+            storeMeta.textContent = '';
+            return;
+          }
+
+          const name = selectedStore?.store_name || selectedStore?.store_db;
+          storeMeta.textContent = name ? `Viewing ${name}` : 'Select a store to begin';
+        }, [activeTab, token, selectedStore]);
 
         const fetchSales = async (authToken, query) => {
           const response = await fetch(`${API_BASE}/insights/sales${query}`, {
@@ -829,6 +1533,238 @@
           loadInsights(token, storeQueryValue);
         }, [token, storeQueryValue, stores, selectedStore]);
 
+        const loadAdminUsers = useCallback(
+          async (key) => {
+            if (!key) {
+              setAdminUsers([]);
+              setSelectedAdminUserId(null);
+              return [];
+            }
+            setIsAdminLoading(true);
+            try {
+              const response = await fetch(`${API_BASE}/admin/users`, {
+                headers: { 'X-Admin-Key': key },
+              });
+              let data = {};
+              try {
+                data = await response.json();
+              } catch (error) {
+                data = {};
+              }
+              if (!response.ok) {
+                const requestError = new Error(data.detail || 'Unable to load admin data');
+                requestError.status = response.status;
+                throw requestError;
+              }
+              const users = data.users || [];
+              setAdminUsers(users);
+              if (!users.length) {
+                setSelectedAdminUserId(null);
+              } else if (
+                !selectedAdminUserId ||
+                !users.some((user) => user.id === selectedAdminUserId)
+              ) {
+                setSelectedAdminUserId(users[0].id);
+              }
+              return users;
+            } catch (error) {
+              setAdminUsers([]);
+              setSelectedAdminUserId(null);
+              throw error;
+            } finally {
+              setIsAdminLoading(false);
+            }
+          },
+          [selectedAdminUserId]
+        );
+
+        const handleAdminLogin = useCallback(
+          async (key) => {
+            setAdminError('');
+            setAdminMessage('');
+            try {
+              await loadAdminUsers(key);
+              setAdminKey(key);
+              return true;
+            } catch (error) {
+              if (error.status === 401) {
+                setAdminError('Invalid admin key');
+              } else {
+                setAdminError(error.message || 'Unable to authenticate admin');
+              }
+              return false;
+            }
+          },
+          [loadAdminUsers]
+        );
+
+        const handleAdminRefresh = useCallback(() => {
+          if (!adminKey) return;
+          setAdminError('');
+          loadAdminUsers(adminKey).catch((error) => {
+            if (error.status === 401) {
+              handleAdminLogout('Admin key rejected. Please sign in again.');
+            } else {
+              setAdminError(error.message || 'Unable to refresh admin data');
+            }
+          });
+        }, [adminKey, loadAdminUsers, handleAdminLogout]);
+
+        useEffect(() => {
+          if (activeTab !== 'admin' || !adminKey) return;
+          setAdminError('');
+          loadAdminUsers(adminKey).catch((error) => {
+            if (error.status === 401) {
+              handleAdminLogout('Admin key rejected. Please sign in again.');
+            } else {
+              setAdminError(error.message || 'Unable to load admin data');
+            }
+          });
+        }, [activeTab, adminKey, loadAdminUsers, handleAdminLogout]);
+
+        const handleAdminCreateUser = useCallback(
+          async (payload) => {
+            if (!adminKey) {
+              setAdminError('Admin session not active');
+              return false;
+            }
+            setIsAdminProcessing(true);
+            setAdminError('');
+            setAdminMessage('');
+            try {
+              const response = await fetch(`${API_BASE}/admin/users`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-Admin-Key': adminKey,
+                },
+                body: JSON.stringify(payload),
+              });
+              let data = {};
+              try {
+                data = await response.json();
+              } catch (error) {
+                data = {};
+              }
+              if (!response.ok) {
+                const requestError = new Error(data.detail || 'Failed to create user');
+                requestError.status = response.status;
+                throw requestError;
+              }
+              const users = await loadAdminUsers(adminKey);
+              const newUser = users.find((user) => user.id === data.id);
+              if (newUser) {
+                setSelectedAdminUserId(newUser.id);
+              }
+              setAdminMessage('User created successfully');
+              return true;
+            } catch (error) {
+              if (error.status === 401) {
+                handleAdminLogout('Admin session expired. Please sign in again.');
+              } else {
+                setAdminError(error.message || 'Failed to create user');
+              }
+              return false;
+            } finally {
+              setIsAdminProcessing(false);
+            }
+          },
+          [adminKey, loadAdminUsers, handleAdminLogout]
+        );
+
+        const handleAdminAddStore = useCallback(
+          async (userId, payload) => {
+            if (!adminKey) {
+              setAdminError('Admin session not active');
+              return false;
+            }
+            setIsAdminProcessing(true);
+            setAdminError('');
+            setAdminMessage('');
+            try {
+              const response = await fetch(`${API_BASE}/admin/users/${userId}/stores`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-Admin-Key': adminKey,
+                },
+                body: JSON.stringify(payload),
+              });
+              let data = {};
+              try {
+                data = await response.json();
+              } catch (error) {
+                data = {};
+              }
+              if (!response.ok) {
+                const requestError = new Error(data.detail || 'Failed to add store');
+                requestError.status = response.status;
+                throw requestError;
+              }
+              await loadAdminUsers(adminKey);
+              setSelectedAdminUserId(userId);
+              setAdminMessage('Store added successfully');
+              return true;
+            } catch (error) {
+              if (error.status === 401) {
+                handleAdminLogout('Admin session expired. Please sign in again.');
+              } else {
+                setAdminError(error.message || 'Failed to add store');
+              }
+              return false;
+            } finally {
+              setIsAdminProcessing(false);
+            }
+          },
+          [adminKey, loadAdminUsers, handleAdminLogout]
+        );
+
+        const handleAdminRemoveStore = useCallback(
+          async (userId, identifier) => {
+            if (!adminKey) {
+              setAdminError('Admin session not active');
+              return;
+            }
+            setIsAdminProcessing(true);
+            setAdminError('');
+            setAdminMessage('');
+            try {
+              const response = await fetch(
+                `${API_BASE}/admin/users/${userId}/stores/${encodeURIComponent(identifier)}`,
+                {
+                  method: 'DELETE',
+                  headers: {
+                    'X-Admin-Key': adminKey,
+                  },
+                }
+              );
+              let data = {};
+              try {
+                data = await response.json();
+              } catch (error) {
+                data = {};
+              }
+              if (!response.ok) {
+                const requestError = new Error(data.detail || 'Failed to remove store');
+                requestError.status = response.status;
+                throw requestError;
+              }
+              await loadAdminUsers(adminKey);
+              setSelectedAdminUserId(userId);
+              setAdminMessage('Store removed successfully');
+            } catch (error) {
+              if (error.status === 401) {
+                handleAdminLogout('Admin session expired. Please sign in again.');
+              } else {
+                setAdminError(error.message || 'Failed to remove store');
+              }
+            } finally {
+              setIsAdminProcessing(false);
+            }
+          },
+          [adminKey, loadAdminUsers, handleAdminLogout]
+        );
+
         const handleLogin = async ({ email, password }) => {
           setIsAuthenticating(true);
           setAuthError('');
@@ -856,6 +1792,7 @@
             } else {
               setSelectedStore(null);
             }
+            setActiveTab('dashboard');
           } catch (error) {
             setAuthError(error.message);
           } finally {
@@ -869,18 +1806,8 @@
           }
         };
 
-        if (!token) {
-          return (
-            <section className="card">
-              <h2>Sign in</h2>
-              <LoginForm onSubmit={handleLogin} isLoading={isAuthenticating} error={authError} />
-            </section>
-          );
-        }
-
-        return (
+        const dashboardContent = token ? (
           <Dashboard
-            token={token}
             stores={stores}
             selectedStore={selectedStore}
             sales={sales}
@@ -891,6 +1818,37 @@
             loading={isLoadingData}
             error={authError}
           />
+        ) : (
+          <section className="card">
+            <h2>Sign in</h2>
+            <LoginForm onSubmit={handleLogin} isLoading={isAuthenticating} error={authError} />
+          </section>
+        );
+
+        const adminContent = (
+          <AdminView
+            hasKey={Boolean(adminKey)}
+            onLogin={handleAdminLogin}
+            onLogout={handleAdminLogout}
+            users={adminUsers}
+            selectedUserId={selectedAdminUserId}
+            onSelectUser={setSelectedAdminUserId}
+            onRefresh={handleAdminRefresh}
+            onCreateUser={handleAdminCreateUser}
+            onAddStore={handleAdminAddStore}
+            onRemoveStore={handleAdminRemoveStore}
+            isLoading={isAdminLoading}
+            isProcessing={isAdminProcessing}
+            error={adminError}
+            message={adminMessage}
+          />
+        );
+
+        return (
+          <>
+            <TabSwitcher activeTab={activeTab} onChange={setActiveTab} />
+            {activeTab === 'dashboard' ? dashboardContent : adminContent}
+          </>
         );
       };
 

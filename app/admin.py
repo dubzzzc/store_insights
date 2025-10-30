@@ -43,6 +43,17 @@ class CreateUserResponse(BaseModel):
     stores: List[StoreAssignment]
 
 
+class AdminUser(BaseModel):
+    id: int
+    email: EmailStr
+    full_name: Optional[str]
+    stores: List[StoreAssignmentRecord] = Field(default_factory=list)
+
+
+class AdminUsersResponse(BaseModel):
+    users: List[AdminUser]
+
+
 @router.post("/users", response_model=CreateUserResponse, status_code=status.HTTP_201_CREATED)
 def create_user(payload: CreateUserRequest, _: None = Depends(_require_admin)):
     conn = get_core_connection()
@@ -176,6 +187,68 @@ def _list_store_assignments(cursor, user_id: int) -> List[StoreAssignmentRecord]
             )
 
     return stores
+
+
+@router.get("/users", response_model=AdminUsersResponse)
+def list_users(_: None = Depends(_require_admin)):
+    conn = get_core_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute("SELECT id, email, full_name FROM users ORDER BY email")
+        rows = cursor.fetchall() or []
+
+        users: List[AdminUser] = []
+        for row in rows:
+            stores = _list_store_assignments(cursor, row["id"])
+            users.append(
+                AdminUser(
+                    id=row["id"],
+                    email=row["email"],
+                    full_name=row.get("full_name"),
+                    stores=stores,
+                )
+            )
+
+        return AdminUsersResponse(users=users)
+    except HTTPException:
+        raise
+    except mysql.connector.Error as err:
+        raise HTTPException(status_code=500, detail=f"Failed to load users: {err}")
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@router.get("/users/{user_id}", response_model=AdminUser)
+def get_user(user_id: int, _: None = Depends(_require_admin)):
+    conn = get_core_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute(
+            "SELECT id, email, full_name FROM users WHERE id = %s",
+            (user_id,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+        stores = _list_store_assignments(cursor, user_id)
+
+        return AdminUser(
+            id=row["id"],
+            email=row["email"],
+            full_name=row.get("full_name"),
+            stores=stores,
+        )
+    except HTTPException:
+        raise
+    except mysql.connector.Error as err:
+        raise HTTPException(status_code=500, detail=f"Failed to load user: {err}")
+    finally:
+        cursor.close()
+        conn.close()
 
 
 class StoreAssignmentResponse(BaseModel):
