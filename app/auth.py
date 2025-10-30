@@ -117,15 +117,26 @@ def login(data: LoginInput):
             }
         )
 
+    admin_key = None
+    if role == "admin":
+        admin_key = os.getenv("ADMIN_API_KEY")
+        if not admin_key:
+            admin_key = None
+
     token = jwt.encode(token_payload, SECRET, algorithm="HS256")
 
-    return {
+    response_payload = {
         "token": token,
         "stores": stores,
         "role": role,
         "email": user["email"],
         "full_name": full_name,
     }
+
+    if admin_key:
+        response_payload["admin_key"] = admin_key
+
+    return response_payload
 
 # ✅ This is the token auth dependency
 def get_auth_user(token: HTTPAuthorizationCredentials = Depends(security)):

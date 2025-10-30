@@ -770,44 +770,6 @@
         );
       };
 
-      const AdminLoginForm = ({ onSubmit, isLoading, error }) => {
-        const [apiKey, setApiKey] = useState('');
-        const [localError, setLocalError] = useState('');
-
-        const handleSubmit = async (event) => {
-          event.preventDefault();
-          const trimmed = apiKey.trim();
-          if (!trimmed) {
-            setLocalError('Admin key is required');
-            return;
-          }
-          setLocalError('');
-          const success = await onSubmit(trimmed);
-          if (success) {
-            setApiKey('');
-          }
-        };
-
-        return (
-          <form className="admin-form" onSubmit={handleSubmit}>
-            <label>
-              Admin API Key
-              <input
-                type="password"
-                value={apiKey}
-                onChange={(event) => setApiKey(event.target.value)}
-                placeholder="Enter admin key"
-                disabled={isLoading}
-              />
-            </label>
-            {(error || localError) && <div className="error-message">{error || localError}</div>}
-            <button type="submit" disabled={isLoading}>
-              {isLoading ? 'Signing in…' : 'Sign in as admin'}
-            </button>
-          </form>
-        );
-      };
-
       const UserList = ({ users, selectedUserId, onSelectUser }) => {
         if (!users?.length) {
           return <div className="empty-state">No users found yet.</div>;
@@ -1134,7 +1096,6 @@
         users,
         selectedUserId,
         onSelectUser,
-        onLogout,
         onRefresh,
         onCreateUser,
         onAddStore,
@@ -1169,14 +1130,6 @@
                   >
                     Refresh
                   </button>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={() => onLogout()}
-                    disabled={isProcessing}
-                  >
-                    Sign out
-                  </button>
                 </div>
               </div>
               {error && <div className="error-message">{error}</div>}
@@ -1197,18 +1150,18 @@
                       <span className="metric-label">User</span>
                       <span>{selectedUser.email}</span>
                     </div>
-                  <div>
-                    <span className="metric-label">Name</span>
-                    <span>{selectedUser.full_name || '—'}</span>
-                  </div>
-                  <div>
-                    <span className="metric-label">Role</span>
-                    <span>{formatRole(selectedUser.user_role)}</span>
-                  </div>
-                  <div>
-                    <span className="metric-label">Stores</span>
-                    <span>{selectedUser.stores?.length || 0}</span>
-                  </div>
+                    <div>
+                      <span className="metric-label">Name</span>
+                      <span>{selectedUser.full_name || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="metric-label">Role</span>
+                      <span>{formatRole(selectedUser.user_role)}</span>
+                    </div>
+                    <div>
+                      <span className="metric-label">Stores</span>
+                      <span>{selectedUser.stores?.length || 0}</span>
+                    </div>
                   </div>
                   <StoreAssignments
                     user={selectedUser}
@@ -1231,8 +1184,6 @@
 
       const AdminView = ({
         hasKey,
-        onLogin,
-        onLogout,
         users,
         selectedUserId,
         onSelectUser,
@@ -1244,36 +1195,36 @@
         isProcessing,
         error,
         message,
-      }) => {
-        if (!hasKey) {
-          return (
-            <section className="card">
-              <h2>Admin access</h2>
-              <p className="user-meta">
-                Provide the admin API key configured on the server to manage users and store assignments.
-              </p>
-              <AdminLoginForm onSubmit={onLogin} isLoading={isLoading} error={error} />
-            </section>
-          );
-        }
+        }) => {
+          if (!hasKey) {
+            return (
+              <section className="card">
+                <h2>Admin access unavailable</h2>
+                {error ? <div className="error-message">{error}</div> : null}
+                <p className="user-meta">
+                  Configure the <code>ADMIN_API_KEY</code> environment variable on the server to enable admin
+                  management tools for this account.
+                </p>
+              </section>
+            );
+          }
 
-        return (
-          <AdminPanel
-            users={users}
-            selectedUserId={selectedUserId}
-            onSelectUser={onSelectUser}
-            onLogout={onLogout}
-            onRefresh={onRefresh}
-            onCreateUser={onCreateUser}
-            onAddStore={onAddStore}
-            onRemoveStore={onRemoveStore}
-            isLoading={isLoading}
-            isProcessing={isProcessing}
-            error={error}
-            message={message}
-          />
-        );
-      };
+          return (
+            <AdminPanel
+              users={users}
+              selectedUserId={selectedUserId}
+              onSelectUser={onSelectUser}
+              onRefresh={onRefresh}
+              onCreateUser={onCreateUser}
+              onAddStore={onAddStore}
+              onRemoveStore={onRemoveStore}
+              isLoading={isLoading}
+              isProcessing={isProcessing}
+              error={error}
+              message={message}
+            />
+          );
+        };
 
       const LoginForm = ({ onSubmit, isLoading, error }) => {
         const [email, setEmail] = useState('');
@@ -1662,10 +1613,10 @@
         };
 
         useEffect(() => {
-          if (!token) return;
+          if (!token || userRole === 'admin') return;
           if (stores.length > 1 && !selectedStore) return;
           loadInsights(token, storeQueryValue);
-        }, [token, storeQueryValue, stores, selectedStore]);
+        }, [token, storeQueryValue, stores, selectedStore, userRole]);
 
         const loadAdminUsers = useCallback(
           async (key) => {
@@ -1712,36 +1663,8 @@
           [selectedAdminUserId]
         );
 
-        const handleAdminLogin = useCallback(
-          async (key) => {
-            setAdminError('');
-            setAdminMessage('');
-            if (userRole !== 'admin') {
-              setAdminError('Admin access is restricted to admin accounts.');
-              return false;
-            }
-            if (!token) {
-              setAdminError('Sign in as an admin to continue.');
-              return false;
-            }
-            try {
-              await loadAdminUsers(key);
-              setAdminKey(key);
-              return true;
-            } catch (error) {
-              if (error.status === 401) {
-                setAdminError('Invalid admin key');
-              } else {
-                setAdminError(error.message || 'Unable to authenticate admin');
-              }
-              return false;
-            }
-          },
-          [loadAdminUsers, token, userRole]
-        );
-
         const handleAdminRefresh = useCallback(() => {
-          if (!adminKey) return;
+          if (!adminKey || userRole !== 'admin') return;
           setAdminError('');
           loadAdminUsers(adminKey).catch((error) => {
             if (error.status === 401) {
@@ -1750,10 +1673,10 @@
               setAdminError(error.message || 'Unable to refresh admin data');
             }
           });
-        }, [adminKey, loadAdminUsers, handleAdminLogout]);
+        }, [adminKey, loadAdminUsers, handleAdminLogout, userRole]);
 
         useEffect(() => {
-          if (activeTab !== 'admin' || !adminKey) return;
+          if (!adminKey || userRole !== 'admin') return;
           setAdminError('');
           loadAdminUsers(adminKey).catch((error) => {
             if (error.status === 401) {
@@ -1762,7 +1685,7 @@
               setAdminError(error.message || 'Unable to load admin data');
             }
           });
-        }, [activeTab, adminKey, loadAdminUsers, handleAdminLogout]);
+        }, [adminKey, userRole, loadAdminUsers, handleAdminLogout]);
 
         const handleAdminCreateUser = useCallback(
           async (payload) => {
@@ -1910,6 +1833,8 @@
         const handleLogin = async ({ email, password }) => {
           setIsAuthenticating(true);
           setAuthError('');
+          setAdminError('');
+          setAdminMessage('');
           try {
             const response = await fetch(`${API_BASE}/auth/login`, {
               method: 'POST',
@@ -1927,19 +1852,46 @@
               throw new Error(data.detail || 'Login failed');
             }
 
+            const nextRole = data.role || 'owner';
+            const isAdminAccount = nextRole === 'admin';
+            const nextStores = Array.isArray(data.stores) ? data.stores : [];
+            const receivedKey = data.admin_key || '';
+
             setToken(data.token);
-            setUserRole(data.role || 'owner');
+            setUserRole(nextRole);
             setProfile((prev) => ({
               email: data.email || prev?.email || email,
               full_name: data.full_name || prev?.full_name || '',
             }));
-            setStores(data.stores || []);
-            if (data.stores?.length) {
-              setSelectedStore(data.stores[0]);
-            } else {
+
+            if (isAdminAccount) {
+              setStores([]);
               setSelectedStore(null);
+              setSales([]);
+              setSyncLogs([]);
+              setAdminUsers([]);
+              setSelectedAdminUserId(null);
+              setAdminMessage('');
+              setAdminKey(receivedKey);
+              if (!receivedKey) {
+                setAdminError('Admin tools are unavailable because ADMIN_API_KEY is not configured on the server.');
+              } else {
+                setAdminError('');
+              }
+              setActiveTab('admin');
+            } else {
+              setStores(nextStores);
+              setSelectedStore(nextStores[0] || null);
+              setAdminKey('');
+              setAdminUsers([]);
+              setSelectedAdminUserId(null);
+              setSales([]);
+              setSyncLogs([]);
+              setActiveTab('dashboard');
             }
-            setActiveTab('dashboard');
+
+            setIsLoadingData(false);
+            setAuthError('');
           } catch (error) {
             setAuthError(error.message);
           } finally {
@@ -1948,12 +1900,19 @@
         };
 
         const refresh = () => {
-          if (token) {
+          if (token && userRole !== 'admin') {
             loadInsights(token, storeQueryValue);
           }
         };
 
-        const dashboardContent = token ? (
+        const loginCard = (
+          <section className="card">
+            <h2>Sign in</h2>
+            <LoginForm onSubmit={handleLogin} isLoading={isAuthenticating} error={authError} />
+          </section>
+        );
+
+        const dashboardContent = (
           <Dashboard
             stores={stores}
             selectedStore={selectedStore}
@@ -1964,18 +1923,11 @@
             loading={isLoadingData}
             error={authError}
           />
-        ) : (
-          <section className="card">
-            <h2>Sign in</h2>
-            <LoginForm onSubmit={handleLogin} isLoading={isAuthenticating} error={authError} />
-          </section>
         );
 
         const adminContent = (
           <AdminView
             hasKey={Boolean(adminKey)}
-            onLogin={handleAdminLogin}
-            onLogout={handleAdminLogout}
             users={adminUsers}
             selectedUserId={selectedAdminUserId}
             onSelectUser={setSelectedAdminUserId}
@@ -1991,6 +1943,7 @@
         );
 
         const canAccessAdmin = userRole === 'admin';
+        const displayedTab = canAccessAdmin ? 'admin' : activeTab;
         const storesLength = stores?.length || 0;
 
         const displayName = useMemo(() => {
@@ -2008,7 +1961,7 @@
           if (!token) {
             return 'Sign in to view your dashboard';
           }
-          if (activeTab === 'admin' && canAccessAdmin) {
+          if (displayedTab === 'admin') {
             return 'Admin tools';
           }
           const storeLabel = selectedStore?.store_name || selectedStore?.store_db;
@@ -2019,24 +1972,16 @@
             return 'Select a store to begin';
           }
           return 'No stores associated with this account';
-        }, [token, activeTab, canAccessAdmin, selectedStore, storesLength]);
+        }, [token, displayedTab, selectedStore, storesLength]);
 
         const isLoggedIn = Boolean(token);
         const greetingText = isLoggedIn ? `Hello, ${displayName || 'there'}` : '';
 
-        const handleTabChange = useCallback(
-          (tab) => {
-            if (tab === 'admin' && !canAccessAdmin) {
-              return;
-            }
-            setActiveTab(tab);
-          },
-          [canAccessAdmin]
-        );
-
-        const displayedTab = canAccessAdmin ? activeTab : 'dashboard';
-        const currentContent =
-          displayedTab === 'admin' && canAccessAdmin ? adminContent : dashboardContent;
+        const currentContent = !isLoggedIn
+          ? loginCard
+          : displayedTab === 'admin'
+          ? adminContent
+          : dashboardContent;
 
         return (
           <div className="app-shell">
@@ -2064,14 +2009,7 @@
                 )}
               </div>
             </header>
-            <main>
-              <TabSwitcher
-                activeTab={displayedTab}
-                onChange={handleTabChange}
-                showAdmin={canAccessAdmin}
-              />
-              {currentContent}
-            </main>
+            <main>{currentContent}</main>
           </div>
         );
       };
