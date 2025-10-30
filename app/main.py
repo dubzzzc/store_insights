@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from app.auth import router as auth_router
-from app.insights import router as insights_router  
+from app.insights import router as insights_router
+from app.admin import router as admin_router
+from app.sync import router as sync_router
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
@@ -24,6 +26,8 @@ def root():
     return {"message": "Store Insights API is running"}
 
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
-app.include_router(insights_router, prefix="/insights", tags=["insights"])  
+app.include_router(insights_router, prefix="/insights", tags=["insights"])
+app.include_router(admin_router, prefix="/admin", tags=["admin"])
+app.include_router(sync_router, prefix="/sync", tags=["sync"])
 
 app.mount("/", StaticFiles(directory="app/static", html=True), name="static")
