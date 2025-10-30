@@ -18,6 +18,18 @@ def _require_admin(api_key: str = Header(..., alias="X-Admin-Key")) -> None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin credentials")
 
 
+def _has_column(cursor, table_name: str, column_name: str) -> bool:
+    """Return True when the given column exists on the target table."""
+
+    try:
+        cursor.execute(f"SHOW COLUMNS FROM {table_name} LIKE %s", (column_name,))
+        return cursor.fetchone() is not None
+    except mysql.connector.Error as err:
+        if err.errno == errorcode.ER_NO_SUCH_TABLE:
+            return False
+        raise
+
+
 class StoreAssignment(BaseModel):
     store_db: str = Field(..., description="Database name for the tenant store")
     db_user: str = Field(..., description="Database user with read access")
@@ -60,6 +72,8 @@ def create_user(payload: CreateUserRequest, _: None = Depends(_require_admin)):
     cursor = conn.cursor(dictionary=True)
 
     try:
+        supports_full_name = _has_column(cursor, "users", "full_name")
+
         cursor.execute("SELECT id FROM users WHERE email = %s", (payload.email,))
         if cursor.fetchone():
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already exists")
@@ -69,9 +83,11 @@ def create_user(payload: CreateUserRequest, _: None = Depends(_require_admin)):
         insert_columns = ["email", "password_hash"]
         insert_values = [payload.email, password_hash]
 
-        if payload.full_name:
+        stored_full_name: Optional[str] = None
+        if payload.full_name and supports_full_name:
             insert_columns.append("full_name")
             insert_values.append(payload.full_name)
+            stored_full_name = payload.full_name
 
         placeholders = ", ".join(["%s"] * len(insert_values))
         column_clause = ", ".join(insert_columns)
@@ -123,7 +139,7 @@ def create_user(payload: CreateUserRequest, _: None = Depends(_require_admin)):
         return CreateUserResponse(
             id=user_id,
             email=payload.email,
-            full_name=payload.full_name,
+            full_name=stored_full_name,
             stores=payload.stores,
         )
     except HTTPException:
@@ -195,7 +211,14 @@ def list_users(_: None = Depends(_require_admin)):
     cursor = conn.cursor(dictionary=True)
 
     try:
-        cursor.execute("SELECT id, email, full_name FROM users ORDER BY email")
+        supports_full_name = _has_column(cursor, "users", "full_name")
+
+        selected_columns = ["id", "email"]
+        if supports_full_name:
+            selected_columns.append("full_name")
+
+        column_clause = ", ".join(selected_columns)
+        cursor.execute(f"SELECT {column_clause} FROM users ORDER BY email")
         rows = cursor.fetchall() or []
 
         users: List[AdminUser] = []
@@ -226,8 +249,15 @@ def get_user(user_id: int, _: None = Depends(_require_admin)):
     cursor = conn.cursor(dictionary=True)
 
     try:
+        supports_full_name = _has_column(cursor, "users", "full_name")
+
+        selected_columns = ["id", "email"]
+        if supports_full_name:
+            selected_columns.append("full_name")
+
+        column_clause = ", ".join(selected_columns)
         cursor.execute(
-            "SELECT id, email, full_name FROM users WHERE id = %s",
+            f"SELECT {column_clause} FROM users WHERE id = %s",
             (user_id,),
         )
         row = cursor.fetchone()
