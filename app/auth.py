@@ -93,24 +93,27 @@ def login(data: LoginInput):
 
     conn.close()
 
-    if not stores:
+    if not stores and role != "admin":
         raise HTTPException(status_code=403, detail="No stores assigned to this user")
 
-    # Default to the first store so existing clients keep working
-    primary_store = stores[0]
+    primary_store = stores[0] if stores else {}
 
-    token = jwt.encode(
-        {
-            "email": user["email"],
-            "stores": stores,
-            "store_db": primary_store.get("store_db"),
-            "db_user": primary_store.get("db_user"),
-            "db_pass": primary_store.get("db_pass"),
-            "role": role,
-        },
-        SECRET,
-        algorithm="HS256",
-    )
+    token_payload = {
+        "email": user["email"],
+        "stores": stores,
+        "role": role,
+    }
+
+    if primary_store:
+        token_payload.update(
+            {
+                "store_db": primary_store.get("store_db"),
+                "db_user": primary_store.get("db_user"),
+                "db_pass": primary_store.get("db_pass"),
+            }
+        )
+
+    token = jwt.encode(token_payload, SECRET, algorithm="HS256")
 
     return {"token": token, "stores": stores, "role": role}
 

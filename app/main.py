@@ -8,6 +8,8 @@ from fastapi.staticfiles import StaticFiles
 import os
 from pathlib import Path
 
+from app.bootstrap import bootstrap_admin_user
+
 app = FastAPI(title="Store Insights API")
 
 
@@ -31,3 +33,10 @@ app.include_router(admin_router, prefix="/admin", tags=["admin"])
 app.include_router(sync_router, prefix="/sync", tags=["sync"])
 
 app.mount("/", StaticFiles(directory="app/static", html=True), name="static")
+
+
+@app.on_event("startup")
+def _bootstrap_admin_account() -> None:
+    """Create or update the default admin account when credentials are provided."""
+
+    bootstrap_admin_user()
