@@ -1,10 +1,85 @@
+from decimal import Decimal
+from datetime import date as date_type, datetime, timedelta
+from typing import Any, Dict, List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import bindparam, create_engine, text
+
 from app.auth import get_auth_user
-from sqlalchemy import create_engine, text
-from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List
 
 router = APIRouter()
+
+
+_COLUMN_SPECS: Dict[str, Dict[str, Any]] = {
+    "sale": {"candidates": ["sale"], "required": True},
+    "rflag": {"candidates": ["rflag"], "required": False},
+    "date": {"candidates": ["date", "sale_date", "trandate", "trans_date"], "required": True},
+    "sku": {"candidates": ["sku", "item", "itemno", "upc"], "required": True},
+    "description": {
+        "candidates": ["description", "descr", "item_desc", "desc", "itemdescription", "product_description"],
+        "required": False,
+    },
+    "pack": {"candidates": ["pack", "package", "packsize", "pack_size"], "required": False},
+    "qty": {"candidates": ["qty", "quantity", "qtysold", "qty_sold"], "required": True},
+    "price": {"candidates": ["price", "amount", "total", "extended", "extprice", "extendedprice"], "required": True},
+}
+
+
+def _quote_identifier(column: str) -> str:
+    if column.startswith("`") and column.endswith("`"):
+        return column
+    return f"`{column}`"
+
+
+def _resolve_jnl_columns(connection, schema: str) -> Dict[str, Optional[str]]:
+    result = connection.execute(
+        text(
+            """
+            SELECT COLUMN_NAME
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table
+            """
+        ),
+        {"schema": schema, "table": "jnl"},
+    )
+    available = {row[0].lower(): row[0] for row in result}
+
+    resolved: Dict[str, Optional[str]] = {}
+    missing: List[str] = []
+
+    for key, spec in _COLUMN_SPECS.items():
+        column_name: Optional[str] = None
+        for candidate in spec["candidates"]:
+            if candidate.lower() in available:
+                column_name = available[candidate.lower()]
+                break
+
+        if column_name is None and spec.get("required"):
+            missing.append(spec["candidates"][0])
+
+        resolved[key] = column_name
+
+    if missing:
+        raise HTTPException(
+            status_code=500,
+            detail=f"jnl table is missing required columns: {', '.join(sorted(missing))}",
+        )
+
+    return resolved
+
+
+def _coerce_number(value: Any, default: float = 0.0) -> float:
+    if value is None:
+        return default
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
 
 def _select_store(user: dict, requested_store: Optional[str]) -> Dict[str, Any]:
     stores: List[Dict[str, Any]] = user.get("stores") or []
@@ -57,30 +132,80 @@ def get_sales_insights(
         print(f"📅 Filtering from: {seven_days_ago}")
 
         with engine.connect() as conn:
-            result = conn.execute(text("""
-                SELECT SALE
-                FROM jnl
-                WHERE RFLAG = 0 AND DATE >= :seven_days_ago
-                GROUP BY SALE                
-            """), {"seven_days_ago": seven_days_ago}).mappings()
+            columns = _resolve_jnl_columns(conn, db_name)
 
-            valid_sales = [row["SALE"] for row in result]
+            sale_column = _quote_identifier(columns["sale"])
+            date_column = _quote_identifier(columns["date"])
+            sku_column = _quote_identifier(columns["sku"])
+            qty_column = _quote_identifier(columns["qty"])
+            price_column = _quote_identifier(columns["price"])
+            rflag_column = _quote_identifier(columns["rflag"]) if columns.get("rflag") else None
+            description_column = (
+                _quote_identifier(columns["description"]) if columns.get("description") else "''"
+            )
+            pack_column = _quote_identifier(columns["pack"]) if columns.get("pack") else None
+
+            where_clauses = [f"{date_column} >= :seven_days_ago"]
+            if rflag_column:
+                where_clauses.append(f"{rflag_column} = 0")
+
+            sales_sql = f"""
+                SELECT {sale_column} AS sale_id
+                FROM jnl
+                WHERE {' AND '.join(where_clauses)}
+                GROUP BY {sale_column}
+            """
+
+            result = conn.execute(text(sales_sql), {"seven_days_ago": seven_days_ago}).mappings()
+
+            valid_sales = [row["sale_id"] for row in result]
             print(f"✅ Valid sales with tender lines: {len(valid_sales)} found")
 
             if not valid_sales:
                 return {"store": {"store_db": db_name, "store_id": selected_store.get("store_id")}, "sales": []}
 
-            items = conn.execute(text("""
-                SELECT DATE, SKU, DESCRIPTION, PACK, QTY, PRICE
+            select_fields = [
+                f"{date_column} AS sale_date",
+                f"{sku_column} AS sku",
+                f"{qty_column} AS quantity",
+                f"{price_column} AS price",
+            ]
+
+            if description_column == "''":
+                select_fields.append("'' AS description")
+            else:
+                select_fields.append(f"{description_column} AS description")
+
+            if pack_column:
+                select_fields.append(f"{pack_column} AS pack")
+            else:
+                select_fields.append("1 AS pack")
+
+            items_sql = text(
+                f"""
+                SELECT {', '.join(select_fields)}
                 FROM jnl
-                WHERE SALE IN :sales AND SKU > 0
-            """), {"sales": tuple(valid_sales)}).mappings()
+                WHERE {sale_column} IN :sales AND {sku_column} > 0
+                """
+            ).bindparams(bindparam("sales", expanding=True))
+
+            items = conn.execute(items_sql, {"sales": tuple(valid_sales)}).mappings()
 
             sales_summary = {}
 
             for row in items:
-                date_str = row["DATE"].strftime('%Y-%m-%d')
-                qty = row["PACK"] * row["QTY"]
+                date_value = row.get("sale_date")
+                if isinstance(date_value, datetime):
+                    date_str = date_value.strftime('%Y-%m-%d')
+                elif isinstance(date_value, date_type):
+                    date_str = date_value.strftime('%Y-%m-%d')
+                else:
+                    date_str = str(date_value)
+
+                pack_value = _coerce_number(row.get("pack"), default=1.0)
+                qty_value = _coerce_number(row.get("quantity"), default=0.0)
+                price_value = _coerce_number(row.get("price"), default=0.0)
+                qty = pack_value * qty_value
 
                 if date_str not in sales_summary:
                     sales_summary[date_str] = {
@@ -89,9 +214,15 @@ def get_sales_insights(
                     }
 
                 sales_summary[date_str]["total_items_sold"] += qty
-                sales_summary[date_str]["total_sales"] += row["PRICE"]
+                sales_summary[date_str]["total_sales"] += price_value
 
-                print(f"🧾 {date_str} | SKU: {row['SKU']} | {row['DESCRIPTION']} | Qty: {qty} | Price: {row['PRICE']}")
+                description_value = row.get("description")
+                print(
+                    "🧾 "
+                    f"{date_str} | SKU: {row.get('sku')} | "
+                    f"{description_value if description_value is not None else ''} | "
+                    f"Qty: {qty} | Price: {price_value}"
+                )
 
             # Format response
             return {

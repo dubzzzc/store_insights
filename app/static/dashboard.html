@@ -531,7 +531,16 @@
 
       const getStoreIdentifier = (store) => {
         if (!store) return '';
-        return store.store_id ?? store.store_db ?? '';
+        if (store.store_id !== undefined && store.store_id !== null) {
+          return String(store.store_id);
+        }
+        if (store.store_db) {
+          return String(store.store_db);
+        }
+        if (store.store_name) {
+          return String(store.store_name);
+        }
+        return '';
       };
 
       const formatRole = (role) => {
@@ -1499,6 +1508,26 @@
             storage.remove(STORAGE_KEYS.stores);
           }
         }, [stores]);
+
+        useEffect(() => {
+          if (!stores?.length) return;
+          if (!selectedStore) {
+            setSelectedStore(stores[0]);
+            return;
+          }
+
+          const identifier = getStoreIdentifier(selectedStore);
+          const match = stores.find((store) => getStoreIdentifier(store) === identifier);
+
+          if (!match) {
+            setSelectedStore(stores[0]);
+            return;
+          }
+
+          if (match !== selectedStore) {
+            setSelectedStore(match);
+          }
+        }, [stores, selectedStore]);
 
         useEffect(() => {
           if (selectedStore) {
