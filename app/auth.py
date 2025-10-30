@@ -104,6 +104,10 @@ def login(data: LoginInput):
         "role": role,
     }
 
+    full_name = user.get("full_name")
+    if full_name:
+        token_payload["full_name"] = full_name
+
     if primary_store:
         token_payload.update(
             {
@@ -115,7 +119,13 @@ def login(data: LoginInput):
 
     token = jwt.encode(token_payload, SECRET, algorithm="HS256")
 
-    return {"token": token, "stores": stores, "role": role}
+    return {
+        "token": token,
+        "stores": stores,
+        "role": role,
+        "email": user["email"],
+        "full_name": full_name,
+    }
 
 # ✅ This is the token auth dependency
 def get_auth_user(token: HTTPAuthorizationCredentials = Depends(security)):

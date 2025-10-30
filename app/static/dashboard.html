@@ -42,18 +42,47 @@
         border-bottom: 1px solid var(--border);
         display: flex;
         justify-content: space-between;
-        align-items: center;
-        gap: 1rem;
+        align-items: flex-start;
+        gap: 1.5rem;
       }
 
-      header h1 {
+      .header-brand {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+      }
+
+      .header-brand h1 {
         margin: 0;
         font-size: clamp(1.25rem, 2.5vw, 1.75rem);
       }
 
-      header span {
+      .header-meta {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 0.5rem;
+        text-align: right;
+        min-width: 200px;
+      }
+
+      .header-greeting {
+        font-weight: 600;
+        font-size: 1rem;
+      }
+
+      .header-status {
         color: var(--muted);
         font-size: 0.95rem;
+      }
+
+      .header-actions {
+        display: flex;
+        justify-content: flex-end;
+      }
+
+      .header-actions button {
+        min-width: 120px;
       }
 
       main {
@@ -252,6 +281,7 @@
         justify-content: center;
         width: 100%;
         margin-bottom: clamp(1rem, 3vw, 1.5rem);
+        grid-column: 1 / -1;
       }
 
       .tab-button {
@@ -414,6 +444,16 @@
           align-items: flex-start;
         }
 
+        .header-meta {
+          align-items: flex-start;
+          text-align: left;
+          width: 100%;
+        }
+
+        .header-actions {
+          width: 100%;
+        }
+
         main {
           grid-template-columns: 1fr;
         }
@@ -421,13 +461,7 @@
     </style>
   </head>
   <body>
-    <div class="app-shell">
-      <header>
-        <h1>Store Insights</h1>
-        <span id="store-meta"></span>
-      </header>
-      <main id="root"></main>
-    </div>
+    <div id="root"></div>
 
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -444,6 +478,7 @@
         selectedStore: 'store-insights/selected-store',
         adminKey: 'store-insights/admin-key',
         role: 'store-insights/role',
+        profile: 'store-insights/profile',
       };
 
       const getStorage = () => {
@@ -504,25 +539,29 @@
         return role.charAt(0).toUpperCase() + role.slice(1);
       };
 
-      const decodeRoleFromToken = (token) => {
+      const decodeTokenPayload = (token) => {
         if (!token || typeof window === 'undefined' || typeof window.atob !== 'function') {
-          return '';
+          return null;
         }
 
         try {
           const segments = token.split('.');
           if (segments.length < 2) {
-            return '';
+            return null;
           }
 
           const payload = segments[1].replace(/-/g, '+').replace(/_/g, '/');
           const padded = payload.padEnd(Math.ceil(payload.length / 4) * 4, '=');
-          const decoded = JSON.parse(window.atob(padded));
-          return decoded?.role || '';
+          return JSON.parse(window.atob(padded));
         } catch (error) {
-          console.warn('Unable to decode token role', error);
-          return '';
+          console.warn('Unable to decode token payload', error);
+          return null;
         }
+      };
+
+      const decodeRoleFromToken = (token) => {
+        const payload = decodeTokenPayload(token);
+        return (payload && payload.role) || '';
       };
 
       const StoreSelector = ({ stores, selectedStore, onChange }) => {
@@ -1284,7 +1323,6 @@
         syncLogs,
         onStoreChange,
         onRefresh,
-        onLogout,
         loading,
         error,
       }) => {
@@ -1315,9 +1353,6 @@
                 <div className="control-actions">
                   <button type="button" onClick={onRefresh} disabled={loading}>
                     {loading ? 'Refreshing…' : 'Refresh insights'}
-                  </button>
-                  <button type="button" className="secondary-button" onClick={onLogout}>
-                    Sign out
                   </button>
                 </div>
               </div>
@@ -1390,6 +1425,7 @@
         const [activeTab, setActiveTab] = useState('dashboard');
         const [token, setToken] = useState(() => storage.get(STORAGE_KEYS.token, null));
         const [userRole, setUserRole] = useState(() => storage.get(STORAGE_KEYS.role, ''));
+        const [profile, setProfile] = useState(() => storage.get(STORAGE_KEYS.profile, null));
         const [stores, setStores] = useState(() => storage.get(STORAGE_KEYS.stores, []));
         const [selectedStore, setSelectedStore] = useState(() =>
           storage.get(STORAGE_KEYS.selectedStore, null)
@@ -1415,21 +1451,6 @@
           return identifier ? `?store=${encodeURIComponent(identifier)}` : '';
         }, [selectedStore]);
 
-        const handleLogout = useCallback((message = '') => {
-          storage.clearSession();
-          setToken(null);
-          setUserRole('');
-          setStores([]);
-          setSelectedStore(null);
-          setSales([]);
-          setSyncLogs([]);
-          tokenRef.current = null;
-          setAuthError(message);
-          setIsAuthenticating(false);
-          setIsLoadingData(false);
-          setActiveTab('dashboard');
-        }, []);
-
         const handleAdminLogout = useCallback(
           (message = '') => {
             setAdminKey('');
@@ -1444,6 +1465,26 @@
           []
         );
 
+        const handleLogout = useCallback(
+          (message = '') => {
+            storage.clearSession();
+            setToken(null);
+            setUserRole('');
+            setProfile(null);
+            setStores([]);
+            setSelectedStore(null);
+            setSales([]);
+            setSyncLogs([]);
+            tokenRef.current = null;
+            setAuthError(message);
+            setIsAuthenticating(false);
+            setIsLoadingData(false);
+            setActiveTab('dashboard');
+            handleAdminLogout('');
+          },
+          [handleAdminLogout]
+        );
+
         useEffect(() => {
           tokenRef.current = token;
           if (token) {
@@ -1454,14 +1495,43 @@
         }, [token]);
 
         useEffect(() => {
-          if (!token || userRole) {
+          if (profile && (profile.email || profile.full_name)) {
+            storage.set(STORAGE_KEYS.profile, profile);
+          } else {
+            storage.remove(STORAGE_KEYS.profile);
+          }
+        }, [profile]);
+
+        useEffect(() => {
+          if (!token) {
             return;
           }
-          const decodedRole = decodeRoleFromToken(token);
-          if (decodedRole) {
-            setUserRole(decodedRole);
+
+          const payload = decodeTokenPayload(token);
+          if (!payload) {
+            return;
           }
-        }, [token, userRole]);
+
+          if (!userRole && payload.role) {
+            setUserRole(payload.role);
+          }
+
+          if (!profile?.email || (!profile?.full_name && payload.full_name)) {
+            setProfile((prev) => {
+              const next = prev ? { ...prev } : {};
+              let changed = false;
+              if (!next.email && payload.email) {
+                next.email = payload.email;
+                changed = true;
+              }
+              if (!next.full_name && payload.full_name) {
+                next.full_name = payload.full_name;
+                changed = true;
+              }
+              return changed ? next : prev;
+            });
+          }
+        }, [token, userRole, profile]);
 
         useEffect(() => {
           if (userRole) {
@@ -1488,12 +1558,12 @@
         }, [selectedStore]);
 
         useEffect(() => {
-          if (adminKey) {
+          if (adminKey && userRole === 'admin') {
             storage.set(STORAGE_KEYS.adminKey, adminKey);
           } else {
             storage.remove(STORAGE_KEYS.adminKey);
           }
-        }, [adminKey]);
+        }, [adminKey, userRole]);
 
         useEffect(() => {
           if (userRole !== 'admin' && adminKey) {
@@ -1528,24 +1598,6 @@
             setSelectedStore(match);
           }
         }, [stores, selectedStore]);
-
-        useEffect(() => {
-          const storeMeta = document.getElementById('store-meta');
-          if (!storeMeta) return;
-
-          if (activeTab === 'admin' && userRole === 'admin') {
-            storeMeta.textContent = 'Admin tools';
-            return;
-          }
-
-          if (!token) {
-            storeMeta.textContent = '';
-            return;
-          }
-
-          const name = selectedStore?.store_name || selectedStore?.store_db;
-          storeMeta.textContent = name ? `Viewing ${name}` : 'Select a store to begin';
-        }, [activeTab, token, selectedStore, userRole]);
 
         const fetchSales = async (authToken, query) => {
           const response = await fetch(`${API_BASE}/insights/sales${query}`, {
@@ -1664,6 +1716,14 @@
           async (key) => {
             setAdminError('');
             setAdminMessage('');
+            if (userRole !== 'admin') {
+              setAdminError('Admin access is restricted to admin accounts.');
+              return false;
+            }
+            if (!token) {
+              setAdminError('Sign in as an admin to continue.');
+              return false;
+            }
             try {
               await loadAdminUsers(key);
               setAdminKey(key);
@@ -1677,7 +1737,7 @@
               return false;
             }
           },
-          [loadAdminUsers]
+          [loadAdminUsers, token, userRole]
         );
 
         const handleAdminRefresh = useCallback(() => {
@@ -1869,6 +1929,10 @@
 
             setToken(data.token);
             setUserRole(data.role || 'owner');
+            setProfile((prev) => ({
+              email: data.email || prev?.email || email,
+              full_name: data.full_name || prev?.full_name || '',
+            }));
             setStores(data.stores || []);
             if (data.stores?.length) {
               setSelectedStore(data.stores[0]);
@@ -1897,7 +1961,6 @@
             syncLogs={syncLogs}
             onStoreChange={setSelectedStore}
             onRefresh={refresh}
-            onLogout={handleLogout}
             loading={isLoadingData}
             error={authError}
           />
@@ -1928,6 +1991,39 @@
         );
 
         const canAccessAdmin = userRole === 'admin';
+        const storesLength = stores?.length || 0;
+
+        const displayName = useMemo(() => {
+          if (profile?.full_name && profile.full_name.trim()) {
+            return profile.full_name.trim();
+          }
+          if (profile?.email) {
+            return profile.email;
+          }
+          const payload = decodeTokenPayload(token);
+          return (payload && payload.email) || '';
+        }, [profile, token]);
+
+        const headerStatus = useMemo(() => {
+          if (!token) {
+            return 'Sign in to view your dashboard';
+          }
+          if (activeTab === 'admin' && canAccessAdmin) {
+            return 'Admin tools';
+          }
+          const storeLabel = selectedStore?.store_name || selectedStore?.store_db;
+          if (storeLabel) {
+            return `Viewing ${storeLabel}`;
+          }
+          if (storesLength > 0) {
+            return 'Select a store to begin';
+          }
+          return 'No stores associated with this account';
+        }, [token, activeTab, canAccessAdmin, selectedStore, storesLength]);
+
+        const isLoggedIn = Boolean(token);
+        const greetingText = isLoggedIn ? `Hello, ${displayName || 'there'}` : '';
+
         const handleTabChange = useCallback(
           (tab) => {
             if (tab === 'admin' && !canAccessAdmin) {
@@ -1943,14 +2039,40 @@
           displayedTab === 'admin' && canAccessAdmin ? adminContent : dashboardContent;
 
         return (
-          <>
-            <TabSwitcher
-              activeTab={displayedTab}
-              onChange={handleTabChange}
-              showAdmin={canAccessAdmin}
-            />
-            {currentContent}
-          </>
+          <div className="app-shell">
+            <header>
+              <div className="header-brand">
+                <h1>Store Insights</h1>
+              </div>
+              <div className="header-meta">
+                {isLoggedIn ? (
+                  <>
+                    <span className="header-greeting">{greetingText}</span>
+                    <span className="header-status">{headerStatus}</span>
+                    <div className="header-actions">
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => handleLogout('')}
+                      >
+                        Sign out
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <span className="header-status">{headerStatus}</span>
+                )}
+              </div>
+            </header>
+            <main>
+              <TabSwitcher
+                activeTab={displayedTab}
+                onChange={handleTabChange}
+                showAdmin={canAccessAdmin}
+              />
+              {currentContent}
+            </main>
+          </div>
         );
       };
 
