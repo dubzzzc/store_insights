@@ -47,6 +47,7 @@ def login(data: LoginInput):
     print("✅ Password matched")
 
     stores: List[Dict[str, Any]] = []
+    role = user.get("user_role") or "owner"
 
     try:
         cursor.execute(
@@ -105,12 +106,13 @@ def login(data: LoginInput):
             "store_db": primary_store.get("store_db"),
             "db_user": primary_store.get("db_user"),
             "db_pass": primary_store.get("db_pass"),
+            "role": role,
         },
         SECRET,
         algorithm="HS256",
     )
 
-    return {"token": token, "stores": stores}
+    return {"token": token, "stores": stores, "role": role}
 
 # ✅ This is the token auth dependency
 def get_auth_user(token: HTTPAuthorizationCredentials = Depends(security)):

@@ -443,6 +443,7 @@
         stores: 'store-insights/stores',
         selectedStore: 'store-insights/selected-store',
         adminKey: 'store-insights/admin-key',
+        role: 'store-insights/role',
       };
 
       const getStorage = () => {
@@ -496,6 +497,32 @@
       const getStoreIdentifier = (store) => {
         if (!store) return '';
         return store.store_id ?? store.store_db ?? '';
+      };
+
+      const formatRole = (role) => {
+        if (!role) return '—';
+        return role.charAt(0).toUpperCase() + role.slice(1);
+      };
+
+      const decodeRoleFromToken = (token) => {
+        if (!token || typeof window === 'undefined' || typeof window.atob !== 'function') {
+          return '';
+        }
+
+        try {
+          const segments = token.split('.');
+          if (segments.length < 2) {
+            return '';
+          }
+
+          const payload = segments[1].replace(/-/g, '+').replace(/_/g, '/');
+          const padded = payload.padEnd(Math.ceil(payload.length / 4) * 4, '=');
+          const decoded = JSON.parse(window.atob(padded));
+          return decoded?.role || '';
+        } catch (error) {
+          console.warn('Unable to decode token role', error);
+          return '';
+        }
       };
 
       const StoreSelector = ({ stores, selectedStore, onChange }) => {
@@ -677,7 +704,7 @@
         );
       };
 
-      const TabSwitcher = ({ activeTab, onChange }) => {
+      const TabSwitcher = ({ activeTab, onChange, showAdmin }) => {
         return (
           <div className="tab-container">
             <div className="tab-group">
@@ -689,14 +716,16 @@
               >
                 Dashboard
               </button>
-              <button
-                type="button"
-                className="tab-button"
-                data-active={activeTab === 'admin'}
-                onClick={() => onChange('admin')}
-              >
-                Admin
-              </button>
+              {showAdmin ? (
+                <button
+                  type="button"
+                  className="tab-button"
+                  data-active={activeTab === 'admin'}
+                  onClick={() => onChange('admin')}
+                >
+                  Admin
+                </button>
+              ) : null}
             </div>
           </div>
         );
@@ -755,6 +784,7 @@
                   onClick={() => onSelectUser(user.id)}
                 >
                   <span className="user-email">{user.email}</span>
+                  <span className="user-meta">{formatRole(user.user_role)}</span>
                   <span className="user-meta">{user.full_name || '—'}</span>
                   <span className="user-meta">
                     {(user.stores?.length || 0).toString()} store{user.stores?.length === 1 ? '' : 's'}
@@ -770,6 +800,7 @@
         const [email, setEmail] = useState('');
         const [password, setPassword] = useState('');
         const [fullName, setFullName] = useState('');
+        const [role, setRole] = useState('owner');
         const [storeDb, setStoreDb] = useState('');
         const [storeUser, setStoreUser] = useState('');
         const [storePass, setStorePass] = useState('');
@@ -812,6 +843,7 @@
             email: trimmedEmail,
             password: trimmedPassword,
             full_name: fullName.trim() || undefined,
+            user_role: role,
             stores,
           };
 
@@ -820,6 +852,7 @@
             setEmail('');
             setPassword('');
             setFullName('');
+            setRole('owner');
             setStoreDb('');
             setStoreUser('');
             setStorePass('');
@@ -859,6 +892,18 @@
                 placeholder="Regional Manager"
                 disabled={isSubmitting}
               />
+            </label>
+            <label>
+              Role
+              <select
+                value={role}
+                onChange={(event) => setRole(event.target.value)}
+                disabled={isSubmitting}
+              >
+                <option value="owner">Owner</option>
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
             </label>
             <div className="metrics">
               <label>
@@ -1113,14 +1158,18 @@
                       <span className="metric-label">User</span>
                       <span>{selectedUser.email}</span>
                     </div>
-                    <div>
-                      <span className="metric-label">Name</span>
-                      <span>{selectedUser.full_name || '—'}</span>
-                    </div>
-                    <div>
-                      <span className="metric-label">Stores</span>
-                      <span>{selectedUser.stores?.length || 0}</span>
-                    </div>
+                  <div>
+                    <span className="metric-label">Name</span>
+                    <span>{selectedUser.full_name || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="metric-label">Role</span>
+                    <span>{formatRole(selectedUser.user_role)}</span>
+                  </div>
+                  <div>
+                    <span className="metric-label">Stores</span>
+                    <span>{selectedUser.stores?.length || 0}</span>
+                  </div>
                   </div>
                   <StoreAssignments
                     user={selectedUser}
@@ -1340,6 +1389,7 @@
       const App = () => {
         const [activeTab, setActiveTab] = useState('dashboard');
         const [token, setToken] = useState(() => storage.get(STORAGE_KEYS.token, null));
+        const [userRole, setUserRole] = useState(() => storage.get(STORAGE_KEYS.role, ''));
         const [stores, setStores] = useState(() => storage.get(STORAGE_KEYS.stores, []));
         const [selectedStore, setSelectedStore] = useState(() =>
           storage.get(STORAGE_KEYS.selectedStore, null)
@@ -1368,6 +1418,7 @@
         const handleLogout = useCallback((message = '') => {
           storage.clearSession();
           setToken(null);
+          setUserRole('');
           setStores([]);
           setSelectedStore(null);
           setSales([]);
@@ -1376,6 +1427,7 @@
           setAuthError(message);
           setIsAuthenticating(false);
           setIsLoadingData(false);
+          setActiveTab('dashboard');
         }, []);
 
         const handleAdminLogout = useCallback(
@@ -1402,6 +1454,24 @@
         }, [token]);
 
         useEffect(() => {
+          if (!token || userRole) {
+            return;
+          }
+          const decodedRole = decodeRoleFromToken(token);
+          if (decodedRole) {
+            setUserRole(decodedRole);
+          }
+        }, [token, userRole]);
+
+        useEffect(() => {
+          if (userRole) {
+            storage.set(STORAGE_KEYS.role, userRole);
+          } else {
+            storage.remove(STORAGE_KEYS.role);
+          }
+        }, [userRole]);
+
+        useEffect(() => {
           if (stores?.length) {
             storage.set(STORAGE_KEYS.stores, stores);
           } else {
@@ -1424,6 +1494,18 @@
             storage.remove(STORAGE_KEYS.adminKey);
           }
         }, [adminKey]);
+
+        useEffect(() => {
+          if (userRole !== 'admin' && adminKey) {
+            handleAdminLogout();
+          }
+        }, [userRole, adminKey, handleAdminLogout]);
+
+        useEffect(() => {
+          if (activeTab === 'admin' && userRole !== 'admin') {
+            setActiveTab('dashboard');
+          }
+        }, [activeTab, userRole]);
 
         useEffect(() => {
           if (!stores?.length) {
@@ -1451,7 +1533,7 @@
           const storeMeta = document.getElementById('store-meta');
           if (!storeMeta) return;
 
-          if (activeTab === 'admin') {
+          if (activeTab === 'admin' && userRole === 'admin') {
             storeMeta.textContent = 'Admin tools';
             return;
           }
@@ -1463,7 +1545,7 @@
 
           const name = selectedStore?.store_name || selectedStore?.store_db;
           storeMeta.textContent = name ? `Viewing ${name}` : 'Select a store to begin';
-        }, [activeTab, token, selectedStore]);
+        }, [activeTab, token, selectedStore, userRole]);
 
         const fetchSales = async (authToken, query) => {
           const response = await fetch(`${API_BASE}/insights/sales${query}`, {
@@ -1786,6 +1868,7 @@
             }
 
             setToken(data.token);
+            setUserRole(data.role || 'owner');
             setStores(data.stores || []);
             if (data.stores?.length) {
               setSelectedStore(data.stores[0]);
@@ -1844,10 +1927,29 @@
           />
         );
 
+        const canAccessAdmin = userRole === 'admin';
+        const handleTabChange = useCallback(
+          (tab) => {
+            if (tab === 'admin' && !canAccessAdmin) {
+              return;
+            }
+            setActiveTab(tab);
+          },
+          [canAccessAdmin]
+        );
+
+        const displayedTab = canAccessAdmin ? activeTab : 'dashboard';
+        const currentContent =
+          displayedTab === 'admin' && canAccessAdmin ? adminContent : dashboardContent;
+
         return (
           <>
-            <TabSwitcher activeTab={activeTab} onChange={setActiveTab} />
-            {activeTab === 'dashboard' ? dashboardContent : adminContent}
+            <TabSwitcher
+              activeTab={displayedTab}
+              onChange={handleTabChange}
+              showAdmin={canAccessAdmin}
+            />
+            {currentContent}
           </>
         );
       };

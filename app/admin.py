@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import List, Optional
 
 import bcrypt
@@ -30,6 +31,12 @@ def _has_column(cursor, table_name: str, column_name: str) -> bool:
         raise
 
 
+class UserRole(str, Enum):
+    admin = "admin"
+    owner = "owner"
+    user = "user"
+
+
 class StoreAssignment(BaseModel):
     store_db: str = Field(..., description="Database name for the tenant store")
     db_user: str = Field(..., description="Database user with read access")
@@ -45,6 +52,10 @@ class CreateUserRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8)
     full_name: Optional[str] = Field(None, description="Optional display name for the user")
+    user_role: Optional[UserRole] = Field(
+        None,
+        description="Role of the user (admin, owner, or user). Defaults to owner when supported.",
+    )
     stores: List[StoreAssignment] = Field(default_factory=list)
 
 
@@ -52,6 +63,7 @@ class CreateUserResponse(BaseModel):
     id: int
     email: EmailStr
     full_name: Optional[str]
+    user_role: Optional[UserRole]
     stores: List[StoreAssignment]
 
 
@@ -59,6 +71,7 @@ class AdminUser(BaseModel):
     id: int
     email: EmailStr
     full_name: Optional[str]
+    user_role: Optional[UserRole]
     stores: List[StoreAssignmentRecord] = Field(default_factory=list)
 
 
@@ -73,6 +86,7 @@ def create_user(payload: CreateUserRequest, _: None = Depends(_require_admin)):
 
     try:
         supports_full_name = _has_column(cursor, "users", "full_name")
+        supports_user_role = _has_column(cursor, "users", "user_role")
 
         cursor.execute("SELECT id FROM users WHERE email = %s", (payload.email,))
         if cursor.fetchone():
@@ -84,10 +98,17 @@ def create_user(payload: CreateUserRequest, _: None = Depends(_require_admin)):
         insert_values = [payload.email, password_hash]
 
         stored_full_name: Optional[str] = None
+        stored_user_role: Optional[str] = None
         if payload.full_name and supports_full_name:
             insert_columns.append("full_name")
             insert_values.append(payload.full_name)
             stored_full_name = payload.full_name
+
+        if supports_user_role:
+            role_value = payload.user_role.value if payload.user_role else UserRole.owner.value
+            insert_columns.append("user_role")
+            insert_values.append(role_value)
+            stored_user_role = role_value
 
         placeholders = ", ".join(["%s"] * len(insert_values))
         column_clause = ", ".join(insert_columns)
@@ -140,6 +161,7 @@ def create_user(payload: CreateUserRequest, _: None = Depends(_require_admin)):
             id=user_id,
             email=payload.email,
             full_name=stored_full_name,
+            user_role=stored_user_role,
             stores=payload.stores,
         )
     except HTTPException:
@@ -212,10 +234,13 @@ def list_users(_: None = Depends(_require_admin)):
 
     try:
         supports_full_name = _has_column(cursor, "users", "full_name")
+        supports_user_role = _has_column(cursor, "users", "user_role")
 
         selected_columns = ["id", "email"]
         if supports_full_name:
             selected_columns.append("full_name")
+        if supports_user_role:
+            selected_columns.append("user_role")
 
         column_clause = ", ".join(selected_columns)
         cursor.execute(f"SELECT {column_clause} FROM users ORDER BY email")
@@ -224,11 +249,13 @@ def list_users(_: None = Depends(_require_admin)):
         users: List[AdminUser] = []
         for row in rows:
             stores = _list_store_assignments(cursor, row["id"])
+            user_role = row.get("user_role") if supports_user_role else None
             users.append(
                 AdminUser(
                     id=row["id"],
                     email=row["email"],
                     full_name=row.get("full_name"),
+                    user_role=user_role,
                     stores=stores,
                 )
             )
@@ -250,10 +277,13 @@ def get_user(user_id: int, _: None = Depends(_require_admin)):
 
     try:
         supports_full_name = _has_column(cursor, "users", "full_name")
+        supports_user_role = _has_column(cursor, "users", "user_role")
 
         selected_columns = ["id", "email"]
         if supports_full_name:
             selected_columns.append("full_name")
+        if supports_user_role:
+            selected_columns.append("user_role")
 
         column_clause = ", ".join(selected_columns)
         cursor.execute(
@@ -266,10 +296,13 @@ def get_user(user_id: int, _: None = Depends(_require_admin)):
 
         stores = _list_store_assignments(cursor, user_id)
 
+        user_role = row.get("user_role") if supports_user_role else None
+
         return AdminUser(
             id=row["id"],
             email=row["email"],
             full_name=row.get("full_name"),
+            user_role=user_role,
             stores=stores,
         )
     except HTTPException:
