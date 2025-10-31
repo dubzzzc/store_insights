@@ -484,24 +484,24 @@ def get_sales_insights(
                 rcv_col = _pick_column(cols, ["rcvdate", "received_date", "rcv_date"]) or None
                 ord_col = _pick_column(cols, ["orddate", "order_date"]) or None
 
-                # Build where clause: status in (4,6,8) with date filters
-                where_parts = [f"`{status_col}` IN (4, 6, 8)"]
+                # Build where clause: status in (4,6,8) with date filters (qualify all columns with table alias)
+                where_parts = [f"{table}.`{status_col}` IN (4, 6, 8)"]
                 params: Dict[str, Any] = {}
 
                 # Date filters: status 4,6 use rcvdate; status 8 uses orddate
                 if start or end:
                     date_filters = []
                     if rcv_col and start:
-                        date_filters.append(f"(`{status_col}` IN (4, 6) AND DATE(`{rcv_col}`) >= :rcv_start)")
+                        date_filters.append(f"({table}.`{status_col}` IN (4, 6) AND DATE({table}.`{rcv_col}`) >= :rcv_start)")
                         params["rcv_start"] = start
                     if rcv_col and end:
-                        date_filters.append(f"(`{status_col}` IN (4, 6) AND DATE(`{rcv_col}`) <= :rcv_end)")
+                        date_filters.append(f"({table}.`{status_col}` IN (4, 6) AND DATE({table}.`{rcv_col}`) <= :rcv_end)")
                         params["rcv_end"] = end
                     if ord_col and start:
-                        date_filters.append(f"(`{status_col}` = 8 AND DATE(`{ord_col}`) >= :ord_start)")
+                        date_filters.append(f"({table}.`{status_col}` = 8 AND DATE({table}.`{ord_col}`) >= :ord_start)")
                         params["ord_start"] = start
                     if ord_col and end:
-                        date_filters.append(f"(`{status_col}` = 8 AND DATE(`{ord_col}`) <= :ord_end)")
+                        date_filters.append(f"({table}.`{status_col}` = 8 AND DATE({table}.`{ord_col}`) <= :ord_end)")
                         params["ord_end"] = end
                     if date_filters:
                         where_parts.append(f"({' OR '.join(date_filters)})")
@@ -511,22 +511,22 @@ def get_sales_insights(
                 vnd_join_col = _pick_column(vnd_cols, ["vendor", "vcode", "code", "id"]) or "vendor"
                 vnd_name_col = _pick_column(vnd_cols, ["name", "desc", "description", "vname"]) or "name"
 
-                select_parts = [f"`{status_col}` AS status", f"`{vendor_col}` AS vendor_num"]
+                select_parts = [f"{table}.`{status_col}` AS status", f"{table}.`{vendor_col}` AS vendor_num"]
                 join_part = ""
                 if vnd_cols:
-                    select_parts.append(f"COALESCE(vnd.`{vnd_name_col}`, CONCAT('{table}.', `{vendor_col}`)) AS vendor_name")
+                    select_parts.append(f"COALESCE(vnd.`{vnd_name_col}`, CONCAT('{table}.', {table}.`{vendor_col}`)) AS vendor_name")
                     join_part = f"LEFT JOIN vnd ON vnd.`{vnd_join_col}` = {table}.`{vendor_col}`"
                 else:
-                    select_parts.append(f"CONCAT('{table}.', `{vendor_col}`) AS vendor_name")
+                    select_parts.append(f"CONCAT('{table}.', {table}.`{vendor_col}`) AS vendor_name")
 
                 if total_col:
-                    select_parts.append(f"SUM(`{total_col}`) AS po_total")
+                    select_parts.append(f"SUM({table}.`{total_col}`) AS po_total")
                 else:
                     select_parts.append("0 AS po_total")
 
                 select_parts.append("COUNT(*) AS order_count")
 
-                group_by_cols = f"`{status_col}`, `{vendor_col}`"
+                group_by_cols = f"{table}.`{status_col}`, {table}.`{vendor_col}`"
                 if vnd_cols:
                     group_by_cols += f", vnd.`{vnd_name_col}`"
 
@@ -536,7 +536,7 @@ def get_sales_insights(
                     {join_part}
                     WHERE {' AND '.join(where_parts)}
                     GROUP BY {group_by_cols}
-                    ORDER BY `{status_col}`, order_count DESC
+                    ORDER BY {table}.`{status_col}`, order_count DESC
                 """
 
                 rows = conn.execute(text(sql), params).mappings()

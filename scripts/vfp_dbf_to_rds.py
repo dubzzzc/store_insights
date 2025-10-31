@@ -79,7 +79,7 @@ def debug_config_path(msg: str, path: str):
         pass
 
 def find_ksv_root(start: Optional[str] = None) -> Optional[str]:
-    """
+    r"""
     Try to locate a folder literally named 'ksv' (C:\ksv or ancestor).
     Priority:
       1) current working dir or its parents
