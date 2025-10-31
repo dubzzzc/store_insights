@@ -279,7 +279,7 @@ def get_sales_insights(
                 "average_daily_sales": round(gross_total / days_captured, 2) if days_captured else 0.0,
             }
 
-            # Hourly breakdown: prefer jnh.tstamp joined by sale id
+            # Hourly breakdown: prefer jnh.tstamp joined by jnl sale id, but filter dates using jnl's date column
             hourly: List[Dict[str, Any]] = []
             if _table_exists(conn, db_name, "jnh"):
                 jnh_cols = _get_columns(conn, db_name, "jnh")
@@ -292,14 +292,16 @@ def get_sales_insights(
                 jnl_sku = "sku" if "sku" in jnl_cols else None
                 jnl_qty = _pick_column(jnl_cols, ["qty", "quantity"]) or None
                 jnl_price = _pick_column(jnl_cols, ["amount", "price", "total"]) or None
+                jnl_date_filter_col = _pick_column(jnl_cols, ["sale_date", "trans_date", "transaction_date", "tdate", "date"]) or None
 
                 where_parts = ["1=1"]
                 params2: Dict[str, Any] = {}
-                if start:
-                    where_parts.append(f"DATE(jnh.`{jnh_time}`) >= :h_start")
+                # Filter by date using jnl's date column (jnh.tstamp is time-only on many schemas)
+                if jnl_date_filter_col and start:
+                    where_parts.append(f"DATE(jnl.`{jnl_date_filter_col}`) >= :h_start")
                     params2["h_start"] = start
-                if end:
-                    where_parts.append(f"DATE(jnh.`{jnh_time}`) <= :h_end")
+                if jnl_date_filter_col and end:
+                    where_parts.append(f"DATE(jnl.`{jnl_date_filter_col}`) <= :h_end")
                     params2["h_end"] = end
                 if jnl_rflag:
                     where_parts.append(f"jnl.`{jnl_rflag}` = 0")
@@ -325,12 +327,12 @@ def get_sales_insights(
                 rows = conn.execute(text(hourly_sql), params2).mappings()
                 hourly = [{"hour": f"{int(r['hour']):02d}:00", "total_sales": float(r["total_sales"]) } for r in rows]
 
-            # Payment methods from jnl tenders 980-989
+            # Payment methods from jnl tenders 980-989 (filter dates using jnl's date column)
             payment_methods: List[Dict[str, Any]] = []
             if _table_exists(conn, db_name, "jnl"):
                 cols = _get_columns(conn, db_name, "jnl")
                 cat_col = "cat" if "cat" in cols else None
-                date_expr = f"DATE(`{date_col}`)" if table == "jnl" else f"DATE(`{date_col}`)"
+                jnl_date_filter_col = _pick_column(cols, ["sale_date", "trans_date", "transaction_date", "tdate", "date"]) or None
                 amt_col = None
                 for c in ["amount", "total", "price"]:
                     if c in cols:
@@ -338,11 +340,11 @@ def get_sales_insights(
                         break
                 where_parts = ["1=1"]
                 params3: Dict[str, Any] = {}
-                if start:
-                    where_parts.append(f"{date_expr} >= :p_start")
+                if jnl_date_filter_col and start:
+                    where_parts.append(f"DATE(`{jnl_date_filter_col}`) >= :p_start")
                     params3["p_start"] = start
-                if end:
-                    where_parts.append(f"{date_expr} <= :p_end")
+                if jnl_date_filter_col and end:
+                    where_parts.append(f"DATE(`{jnl_date_filter_col}`) <= :p_end")
                     params3["p_end"] = end
                 if cat_col and amt_col:
                     tender_sql = f"""
