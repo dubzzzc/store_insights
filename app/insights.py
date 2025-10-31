@@ -506,18 +506,22 @@ def get_sales_insights(
                     if date_filters:
                         where_parts.append(f"({' OR '.join(date_filters)})")
 
-                # Join vnd for vendor name
+                # Join vnd for vendor name (only if table and columns exist)
                 vnd_cols = _get_columns(conn, db_name, "vnd") if _table_exists(conn, db_name, "vnd") else []
-                vnd_join_col = _pick_column(vnd_cols, ["vendor", "vcode", "code", "id"]) or "vendor"
-                vnd_name_col = _pick_column(vnd_cols, ["name", "desc", "description", "vname"]) or "name"
+                vnd_join_col = _pick_column(vnd_cols, ["vendor", "vcode", "code", "id"])
+                vnd_name_col = _pick_column(vnd_cols, ["name", "desc", "description", "vname"])
 
                 select_parts = [f"{table}.`{status_col}` AS status", f"{table}.`{vendor_col}` AS vendor_num"]
                 join_part = ""
-                if vnd_cols:
+                
+                # Only join vnd if both join column and name column exist
+                if vnd_cols and vnd_join_col and vnd_name_col:
                     select_parts.append(f"COALESCE(vnd.`{vnd_name_col}`, CONCAT('{table}.', {table}.`{vendor_col}`)) AS vendor_name")
                     join_part = f"LEFT JOIN vnd ON vnd.`{vnd_join_col}` = {table}.`{vendor_col}`"
+                    use_vnd = True
                 else:
                     select_parts.append(f"CONCAT('{table}.', {table}.`{vendor_col}`) AS vendor_name")
+                    use_vnd = False
 
                 if total_col:
                     select_parts.append(f"SUM({table}.`{total_col}`) AS po_total")
@@ -527,7 +531,7 @@ def get_sales_insights(
                 select_parts.append("COUNT(*) AS order_count")
 
                 group_by_cols = f"{table}.`{status_col}`, {table}.`{vendor_col}`"
-                if vnd_cols:
+                if use_vnd and vnd_name_col:
                     group_by_cols += f", vnd.`{vnd_name_col}`"
 
                 sql = f"""
