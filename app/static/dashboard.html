@@ -1508,32 +1508,7 @@
         );
       };
 
-      const UserList = ({ users, selectedUserId, onSelectUser }) => {
-        if (!users?.length) {
-          return <div className="empty-state">No users found yet.</div>;
-        }
 
-        return (
-          <ul className="user-list">
-            {users.map((user) => (
-              <li key={user.id}>
-                <button
-                  type="button"
-                  data-active={selectedUserId === user.id}
-                  onClick={() => onSelectUser(user.id)}
-                >
-                  <span className="user-email">{user.email}</span>
-                  <span className="user-meta">{formatRole(user.user_role)}</span>
-                  <span className="user-meta">{user.full_name || '—'}</span>
-                  <span className="user-meta">
-                    {(user.stores?.length || 0).toString()} store{user.stores?.length === 1 ? '' : 's'}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        );
-      };
 
 
 const CreateUserForm = ({ onSubmit, isSubmitting }) => {
