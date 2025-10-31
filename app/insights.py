@@ -159,6 +159,8 @@ def _detect_sales_source(conn, db_name: str) -> Optional[Dict[str, str]]:
 @router.get("/sales")
 def get_sales_insights(
     store: Optional[str] = Query(default=None, description="Store identifier (store_id or store_db)"),
+    start: Optional[str] = Query(default=None, description="Start date (YYYY-MM-DD)"),
+    end: Optional[str] = Query(default=None, description="End date (YYYY-MM-DD)"),
     user: dict = Depends(get_auth_user),
 ):
     try:
@@ -194,6 +196,14 @@ def get_sales_insights(
                 where_clauses.append("`rflag` = 0")
             if detected.get("has_sku"):
                 where_clauses.append("`sku` > 0")
+            # Date range filters on DATE(date_col)
+            params = {}
+            if start:
+                where_clauses.append("DATE(`{}`) >= :start".format(date_col))
+                params["start"] = start
+            if end:
+                where_clauses.append("DATE(`{}`) <= :end".format(date_col))
+                params["end"] = end
             where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
             sql = f"""
@@ -208,7 +218,7 @@ def get_sales_insights(
                 LIMIT 7
             """
 
-            result = conn.execute(text(sql)).mappings()
+            result = conn.execute(text(sql), params).mappings()
 
             sales_data = []
             for row in result:

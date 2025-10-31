@@ -1963,7 +1963,7 @@ const AdminView = ({
       };
 
 
-const SalesModule = ({
+      const SalesModule = ({
   summary,
   sales,
   topItems,
@@ -1971,7 +1971,9 @@ const SalesModule = ({
   syncLogs,
   storeLabel,
   onRefresh,
-  isLoading,
+        isLoading,
+        dateRange,
+        onDateRangeChange,
 }) => {
   const derivedSummary = useMemo(() => {
     const fallback = sales.reduce(
@@ -2122,9 +2124,23 @@ const SalesModule = ({
         <div className="sales-chart-header">
           <div>
             <h3>{activeMeta.title}</h3>
-            <p className="chart-subtitle">Last 7 days</p>
+            <p className="chart-subtitle">
+              {dateRange?.start && dateRange?.end
+                ? `${formatDate(dateRange.start)} to ${formatDate(dateRange.end)}`
+                : 'Selected range'}
+            </p>
           </div>
           <div className="inline-actions">
+            <input
+              type="date"
+              value={dateRange?.start || ''}
+              onChange={(e) => onDateRangeChange({ ...(dateRange || {}), start: e.target.value })}
+            />
+            <input
+              type="date"
+              value={dateRange?.end || ''}
+              onChange={(e) => onDateRangeChange({ ...(dateRange || {}), end: e.target.value })}
+            />
             <button type="button" className="secondary" onClick={onRefresh} disabled={isLoading}>
               {isLoading ? 'Refreshing…' : 'Refresh'}
             </button>
@@ -2476,6 +2492,8 @@ const ModuleNav = ({ active, onChange }) => {
   onModuleChange,
   loading,
   error,
+        dateRange,
+        onDateRangeChange,
 }) => {
   const storeLabel = useMemo(() => {
     if (storeInfo?.store_name) return storeInfo.store_name;
@@ -2491,19 +2509,7 @@ const ModuleNav = ({ active, onChange }) => {
   return (
     <div className="app-main">
       <div className="app-main-inner">
-              {stores?.length > 1 ? (
-                <div className="panel">
-                  <div className="panel-header">
-                    <h2 className="panel-title">Store Controls</h2>
-                    <div className="inline-actions">
-                      <button type="button" className="secondary" onClick={() => onRefresh()} disabled={loading}>
-                        {loading ? 'Refreshing…' : 'Refresh'}
-                      </button>
-                    </div>
-                  </div>
-            <StoreSelector stores={stores} selectedStore={selectedStore} onChange={onStoreChange} />
-          </div>
-        ) : null}
+        {/* Store selector now lives only in the header; duplicate removed */}
 
         {error ? (
           <div className="panel">
@@ -2526,6 +2532,8 @@ const ModuleNav = ({ active, onChange }) => {
             storeLabel={storeLabel}
             onRefresh={onRefresh}
             isLoading={loading}
+            dateRange={dateRange}
+            onDateRangeChange={onDateRangeChange}
           />
         ) : null}
 
@@ -2565,6 +2573,15 @@ const ModuleNav = ({ active, onChange }) => {
         const [isAuthenticating, setIsAuthenticating] = useState(false);
         const [isLoadingData, setIsLoadingData] = useState(false);
 
+        const todayYmd = () => {
+          const d = new Date();
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          const dd = String(d.getDate()).padStart(2, '0');
+          return `${y}-${m}-${dd}`;
+        };
+        const [dateRange, setDateRange] = useState({ start: todayYmd(), end: todayYmd() });
+
         const [adminKey, setAdminKey] = useState(() => storage.get(STORAGE_KEYS.adminKey, ''));
         const [adminUsers, setAdminUsers] = useState([]);
         const [selectedAdminUserId, setSelectedAdminUserId] = useState(null);
@@ -2576,9 +2593,13 @@ const ModuleNav = ({ active, onChange }) => {
         const tokenRef = useRef(token);
 
         const storeQueryValue = useMemo(() => {
+          const params = [];
           const identifier = getStoreIdentifier(selectedStore);
-          return identifier ? `?store=${encodeURIComponent(identifier)}` : '';
-        }, [selectedStore]);
+          if (identifier) params.push(`store=${encodeURIComponent(identifier)}`);
+          if (dateRange?.start) params.push(`start=${encodeURIComponent(dateRange.start)}`);
+          if (dateRange?.end) params.push(`end=${encodeURIComponent(dateRange.end)}`);
+          return params.length ? `?${params.join('&')}` : '';
+        }, [selectedStore, dateRange]);
 
         const handleAdminLogout = useCallback(
           (message = '') => {
@@ -3197,6 +3218,8 @@ const ModuleNav = ({ active, onChange }) => {
                 onModuleChange={setActiveModule}
                 loading={isLoadingData}
                 error={authError}
+                dateRange={dateRange}
+                onDateRangeChange={setDateRange}
               />
             );
 
