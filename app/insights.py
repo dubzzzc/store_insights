@@ -471,87 +471,138 @@ def get_sales_insights(
                     for r in rows
                 ]
 
-            # Purchase orders: group by vendor with status, total, and vendor name from vnd
-            # Status 4 and 6 filter on rcvdate; status 8 filters on orddate. Aggregate across poh/pod.
+            # Purchase orders: today's POs grouped by vendor, with expandable order details from pod
+            # poh.vendor matches vnd.vendor, use vnd.lastname as vendor name
             purchase_orders: List[Dict[str, Any]] = []
-            for table in ("poh", "pod"):
-                if not _table_exists(conn, db_name, table):
-                    continue
-                cols = _get_columns(conn, db_name, table)
-                status_col = _pick_column(cols, ["status", "stat"]) or "status"
-                vendor_col = _pick_column(cols, ["vendor", "vcode"]) or "vendor"
-                total_col = _pick_column(cols, ["total"]) or None
-                rcv_col = _pick_column(cols, ["rcvdate", "received_date", "rcv_date"]) or None
-                ord_col = _pick_column(cols, ["orddate", "order_date"]) or None
+            if _table_exists(conn, db_name, "poh"):
+                poh_cols = _get_columns(conn, db_name, "poh")
+                poh_status_col = _pick_column(poh_cols, ["status", "stat"]) or "status"
+                poh_vendor_col = _pick_column(poh_cols, ["vendor", "vcode"]) or "vendor"
+                poh_total_col = _pick_column(poh_cols, ["total"]) or None
+                poh_rcv_col = _pick_column(poh_cols, ["rcvdate", "received_date", "rcv_date"]) or None
+                poh_ord_col = _pick_column(poh_cols, ["orddate", "order_date"]) or None
+                poh_id_col = _pick_column(poh_cols, ["id", "po_id", "poh_id", "invno"]) or None
 
-                # Build where clause: status in (4,6,8) with date filters (qualify all columns with table alias)
-                where_parts = [f"{table}.`{status_col}` IN (4, 6, 8)"]
+                # Use today's date from the selected date range (or default to today)
+                from datetime import datetime
+                today_str = end if end else datetime.now().strftime('%Y-%m-%d')
+
+                # Group by vendor for today's POs
+                where_parts = [f"poh.`{poh_status_col}` IN (4, 6, 8)"]
                 params: Dict[str, Any] = {}
 
-                # Date filters: status 4,6 use rcvdate; status 8 uses orddate
-                if start or end:
-                    date_filters = []
-                    if rcv_col and start:
-                        date_filters.append(f"({table}.`{status_col}` IN (4, 6) AND DATE({table}.`{rcv_col}`) >= :rcv_start)")
-                        params["rcv_start"] = start
-                    if rcv_col and end:
-                        date_filters.append(f"({table}.`{status_col}` IN (4, 6) AND DATE({table}.`{rcv_col}`) <= :rcv_end)")
-                        params["rcv_end"] = end
-                    if ord_col and start:
-                        date_filters.append(f"({table}.`{status_col}` = 8 AND DATE({table}.`{ord_col}`) >= :ord_start)")
-                        params["ord_start"] = start
-                    if ord_col and end:
-                        date_filters.append(f"({table}.`{status_col}` = 8 AND DATE({table}.`{ord_col}`) <= :ord_end)")
-                        params["ord_end"] = end
-                    if date_filters:
-                        where_parts.append(f"({' OR '.join(date_filters)})")
+                # Date filters: status 4,6 use rcvdate; status 8 uses orddate - filter to today only
+                date_filters = []
+                if poh_rcv_col:
+                    date_filters.append(f"(poh.`{poh_status_col}` IN (4, 6) AND DATE(poh.`{poh_rcv_col}`) = :today)")
+                if poh_ord_col:
+                    date_filters.append(f"(poh.`{poh_status_col}` = 8 AND DATE(poh.`{poh_ord_col}`) = :today)")
+                if date_filters:
+                    where_parts.append(f"({' OR '.join(date_filters)})")
+                    params["today"] = today_str
 
-                # Join vnd for vendor name (only if table and columns exist)
+                # Join vnd: poh.vendor = vnd.vendor, use vnd.lastname
                 vnd_cols = _get_columns(conn, db_name, "vnd") if _table_exists(conn, db_name, "vnd") else []
-                vnd_join_col = _pick_column(vnd_cols, ["vendor", "vcode", "code", "id"])
-                vnd_name_col = _pick_column(vnd_cols, ["name", "desc", "description", "vname"])
+                vnd_vendor_col = _pick_column(vnd_cols, ["vendor"])
+                vnd_lastname_col = _pick_column(vnd_cols, ["lastname", "last_name", "lname"])
 
-                select_parts = [f"{table}.`{status_col}` AS status", f"{table}.`{vendor_col}` AS vendor_num"]
+                select_parts = [f"poh.`{poh_status_col}` AS status", f"poh.`{poh_vendor_col}` AS vendor_num"]
                 join_part = ""
                 
-                # Only join vnd if both join column and name column exist
-                if vnd_cols and vnd_join_col and vnd_name_col:
-                    select_parts.append(f"COALESCE(vnd.`{vnd_name_col}`, CONCAT('{table}.', {table}.`{vendor_col}`)) AS vendor_name")
-                    join_part = f"LEFT JOIN vnd ON vnd.`{vnd_join_col}` = {table}.`{vendor_col}`"
+                if vnd_cols and vnd_vendor_col and vnd_lastname_col:
+                    select_parts.append(f"COALESCE(vnd.`{vnd_lastname_col}`, CONCAT('Vendor ', poh.`{poh_vendor_col}`)) AS vendor_name")
+                    join_part = f"LEFT JOIN vnd ON vnd.`{vnd_vendor_col}` = poh.`{poh_vendor_col}`"
                     use_vnd = True
                 else:
-                    select_parts.append(f"CONCAT('{table}.', {table}.`{vendor_col}`) AS vendor_name")
+                    select_parts.append(f"CONCAT('Vendor ', poh.`{poh_vendor_col}`) AS vendor_name")
                     use_vnd = False
 
-                if total_col:
-                    select_parts.append(f"SUM({table}.`{total_col}`) AS po_total")
+                if poh_total_col:
+                    select_parts.append(f"SUM(poh.`{poh_total_col}`) AS po_total")
                 else:
                     select_parts.append("0 AS po_total")
 
                 select_parts.append("COUNT(*) AS order_count")
 
-                group_by_cols = f"{table}.`{status_col}`, {table}.`{vendor_col}`"
-                if use_vnd and vnd_name_col:
-                    group_by_cols += f", vnd.`{vnd_name_col}`"
+                group_by_cols = f"poh.`{poh_status_col}`, poh.`{poh_vendor_col}`"
+                if use_vnd and vnd_lastname_col:
+                    group_by_cols += f", vnd.`{vnd_lastname_col}`"
 
                 sql = f"""
                     SELECT {', '.join(select_parts)}
-                    FROM {table}
+                    FROM poh
                     {join_part}
                     WHERE {' AND '.join(where_parts)}
                     GROUP BY {group_by_cols}
-                    ORDER BY {table}.`{status_col}`, order_count DESC
+                    ORDER BY poh.`{poh_status_col}`, order_count DESC
                 """
 
                 rows = conn.execute(text(sql), params).mappings()
                 status_map = {4: "posted", 6: "received", 8: "open"}
+                
+                # For each vendor, fetch individual order details from pod
                 for r in rows:
+                    vendor_num = str(r.get("vendor_num", ""))
+                    status_code = int(r.get("status", 0))
+                    
+                    # Fetch order details from pod for this vendor
+                    order_details = []
+                    if _table_exists(conn, db_name, "pod") and poh_id_col:
+                        pod_cols = _get_columns(conn, db_name, "pod")
+                        pod_po_col = _pick_column(pod_cols, ["po", "po_id", "poh_id", "invno"]) or poh_id_col
+                        pod_total_col = _pick_column(pod_cols, ["total", "amount", "price"]) or None
+                        pod_date_col = _pick_column(pod_cols, ["date", "pdate", "created_at"]) or None
+                        
+                        # Get POs from poh for this vendor with today's date and matching status
+                        poh_ids_where = [f"poh.`{poh_vendor_col}` = :vnum", f"poh.`{poh_status_col}` = :stat"]
+                        poh_ids_params = {"vnum": vendor_num, "stat": status_code}
+                        
+                        if date_filters:
+                            poh_ids_where.append(f"({' OR '.join(date_filters)})")
+                            poh_ids_params.update(params)
+                        
+                        poh_ids_sql = f"""
+                            SELECT poh.`{poh_id_col}` AS po_id
+                            FROM poh
+                            WHERE {' AND '.join(poh_ids_where)}
+                        """
+                        poh_id_rows = conn.execute(text(poh_ids_sql), poh_ids_params).mappings()
+                        po_ids = [str(row.get("po_id")) for row in poh_id_rows if row.get("po_id")]
+                        
+                        if po_ids and pod_po_col:
+                            pod_where = [f"`{pod_po_col}` IN :poids"]
+                            pod_params = {"poids": tuple(po_ids)}
+                            
+                            pod_select = [f"`{pod_po_col}` AS po_id"]
+                            if pod_total_col:
+                                pod_select.append(f"SUM(`{pod_total_col}`) AS order_total")
+                            else:
+                                pod_select.append("0 AS order_total")
+                            if pod_date_col:
+                                pod_select.append(f"MIN(DATE(`{pod_date_col}`)) AS order_date")
+                            
+                            pod_sql = f"""
+                                SELECT {', '.join(pod_select)}
+                                FROM pod
+                                WHERE {' AND '.join(pod_where)}
+                                GROUP BY `{pod_po_col}`
+                                ORDER BY `{pod_po_col}` DESC
+                            """
+                            pod_rows = conn.execute(text(pod_sql), pod_params).mappings()
+                            for pod_row in pod_rows:
+                                order_details.append({
+                                    "po_id": str(pod_row.get("po_id", "")),
+                                    "order_total": float(pod_row.get("order_total", 0) or 0),
+                                    "order_date": str(pod_row.get("order_date", "")) if pod_row.get("order_date") else None,
+                                })
+                    
                     purchase_orders.append({
                         "vendor_name": str(r.get("vendor_name", "")),
-                        "vendor_num": str(r.get("vendor_num", "")),
-                        "status": status_map.get(int(r.get("status", 0)), str(r.get("status", ""))),
+                        "vendor_num": vendor_num,
+                        "status": status_map.get(status_code, str(status_code)),
                         "order_count": int(r.get("order_count", 0) or 0),
                         "po_total": float(r.get("po_total", 0) or 0),
+                        "orders": order_details,
                     })
 
             # Inventory value via inv lcost/acost * onhand
