@@ -375,15 +375,28 @@ def get_sales_insights(
             if _table_exists(conn, db_name, "jnl"):
                 cols = _get_columns(conn, db_name, "jnl")
                 if "cat" in cols:
-                    where_parts = ["1=1", "`sku` > 0", "`rflag` = 0", "`cat` LIKE 'P%'"]
+                    # Determine jnl date/qty/price columns
+                    jnl_date_col = _pick_column(cols, ["sale_date", "trans_date", "transaction_date", "tdate", "date"]) or None
+                    jnl_qty_col = _pick_column(cols, ["qty", "quantity"]) or None
+                    jnl_price_col = _pick_column(cols, ["amount", "total", "price"]) or None
+
+                    where_parts = ["1=1", "jnl.`sku` > 0", "jnl.`rflag` = 0", "jnl.`cat` LIKE 'P%'"]
                     params4: Dict[str, Any] = {}
-                    if start:
-                        where_parts.append(f"DATE(`{date_col}`) >= :c_start")
+                    if start and jnl_date_col:
+                        where_parts.append(f"DATE(jnl.`{jnl_date_col}`) >= :c_start")
                         params4["c_start"] = start
-                    if end:
-                        where_parts.append(f"DATE(`{date_col}`) <= :c_end")
+                    if end and jnl_date_col:
+                        where_parts.append(f"DATE(jnl.`{jnl_date_col}`) <= :c_end")
                         params4["c_end"] = end
-                    amt_expr = amount_expr
+
+                    # Compute amount expression specific to jnl
+                    if jnl_price_col and jnl_qty_col:
+                        amt_expr = f"SUM(jnl.`{jnl_qty_col}` * jnl.`{jnl_price_col}`)"
+                    elif jnl_price_col:
+                        amt_expr = f"SUM(jnl.`{jnl_price_col}`)"
+                    else:
+                        amt_expr = "SUM(0)"
+
                     cat_join_label = None
                     if _table_exists(conn, db_name, "cat"):
                         cat_cols = _get_columns(conn, db_name, "cat")
