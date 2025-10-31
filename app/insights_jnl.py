@@ -170,7 +170,21 @@ def get_sales_insights(
             print(f"✅ Valid sales with tender lines: {len(valid_sales)} found")
 
             if not valid_sales:
-                return {"store": {"store_db": db_name, "store_id": selected_store.get("store_id")}, "sales": []}
+                return {
+                    "store": {
+                        "store_db": db_name,
+                        "store_id": selected_store.get("store_id"),
+                        "store_name": selected_store.get("store_name"),
+                    },
+                    "sales": [],
+                    "summary": {
+                        "gross_sales": 0.0,
+                        "total_items": 0.0,
+                        "days_captured": 0,
+                        "average_daily_sales": 0.0,
+                    },
+                    "top_items": [],
+                }
 
             select_fields = [
                 f"{date_column} AS sale_date",
@@ -199,7 +213,10 @@ def get_sales_insights(
 
             items = conn.execute(items_sql, {"sales": tuple(valid_sales)}).mappings()
 
-            sales_summary = {}
+            sales_summary: Dict[str, Dict[str, float]] = {}
+            sku_summary: Dict[str, Dict[str, Any]] = {}
+            total_sales_value = 0.0
+            total_items_value = 0.0
 
             for row in items:
                 date_value = row.get("sale_date")
@@ -224,6 +241,29 @@ def get_sales_insights(
                 sales_summary[date_str]["total_items_sold"] += qty
                 sales_summary[date_str]["total_sales"] += price_value
 
+                total_items_value += qty
+                total_sales_value += price_value
+
+                sku_key_raw = row.get("sku")
+                sku_key = str(sku_key_raw) if sku_key_raw is not None else ""
+                if sku_key:
+                    sku_entry = sku_summary.setdefault(
+                        sku_key,
+                        {
+                            "sku": sku_key,
+                            "description": "",
+                            "total_items_sold": 0.0,
+                            "total_sales": 0.0,
+                        },
+                    )
+                    sku_entry["total_items_sold"] += qty
+                    sku_entry["total_sales"] += price_value
+
+                    if not sku_entry["description"]:
+                        description_value = row.get("description")
+                        if description_value is not None:
+                            sku_entry["description"] = str(description_value)
+
                 description_value = row.get("description")
                 print(
                     "🧾 "
@@ -233,6 +273,23 @@ def get_sales_insights(
                 )
 
             # Format response
+            days_captured = len(sales_summary)
+            average_daily_sales = round(total_sales_value / days_captured, 2) if days_captured else 0.0
+
+            top_items = sorted(
+                (
+                    {
+                        "sku": item["sku"],
+                        "description": item["description"],
+                        "total_items_sold": round(item["total_items_sold"], 2),
+                        "total_sales": round(item["total_sales"], 2),
+                    }
+                    for item in sku_summary.values()
+                ),
+                key=lambda item: item["total_sales"],
+                reverse=True,
+            )[:10]
+
             return {
                 "store": {
                     "store_db": db_name,
@@ -243,10 +300,17 @@ def get_sales_insights(
                     {
                         "date": date,
                         "total_items_sold": summary["total_items_sold"],
-                        "total_sales": round(summary["total_sales"], 2)
+                        "total_sales": round(summary["total_sales"], 2),
                     }
                     for date, summary in sorted(sales_summary.items(), reverse=True)
-                ]
+                ],
+                "summary": {
+                    "gross_sales": round(total_sales_value, 2),
+                    "total_items": round(total_items_value, 2),
+                    "days_captured": days_captured,
+                    "average_daily_sales": average_daily_sales,
+                },
+                "top_items": top_items,
             }
 
     except Exception as e:

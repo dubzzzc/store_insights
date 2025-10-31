@@ -40,6 +40,11 @@
         padding: 1.5rem clamp(1.5rem, 4vw, 3rem);
         background: var(--surface);
         border-bottom: 1px solid var(--border);
+      }
+
+      .header-inner {
+        margin: 0 auto;
+        width: min(1200px, 100%);
         display: flex;
         justify-content: space-between;
         align-items: flex-start;
@@ -92,6 +97,8 @@
         gap: clamp(1.5rem, 3vw, 2.5rem);
         grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
         align-content: start;
+        width: min(1200px, 100%);
+        margin: 0 auto;
       }
 
       .card {
@@ -267,6 +274,18 @@
         gap: 0.35rem;
       }
 
+      .metric-note {
+        margin-top: 0.75rem;
+        padding-top: 0.75rem;
+        border-top: 1px dashed var(--border);
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .metric-note strong {
+        color: var(--text);
+      }
+
       .tab-group {
         display: inline-flex;
         background: var(--surface);
@@ -438,8 +457,22 @@
         max-width: 100%;
       }
 
+      .chart-wrapper {
+        min-height: 260px;
+      }
+
+      .chart-wrapper canvas {
+        height: 100% !important;
+        width: 100% !important;
+      }
+
+      .table-wrapper {
+        width: 100%;
+        overflow-x: auto;
+      }
+
       @media (max-width: 768px) {
-        header {
+        .header-inner {
           flex-direction: column;
           align-items: flex-start;
         }
@@ -527,6 +560,65 @@
             storageBackend.removeItem(key);
           });
         },
+      };
+
+      const currencyFormatter = new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+      });
+
+      const quantityFormatter = new Intl.NumberFormat(undefined, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      });
+
+      const integerFormatter = new Intl.NumberFormat(undefined, {
+        maximumFractionDigits: 0,
+      });
+
+      const formatCurrency = (value) => {
+        const numeric = Number(value ?? 0);
+        if (Number.isNaN(numeric)) {
+          return '—';
+        }
+        return currencyFormatter.format(numeric);
+      };
+
+      const formatQuantity = (value) => {
+        const numeric = Number(value ?? 0);
+        if (Number.isNaN(numeric)) {
+          return '—';
+        }
+        return quantityFormatter.format(numeric);
+      };
+
+      const formatInteger = (value) => {
+        const numeric = Number(value ?? 0);
+        if (Number.isNaN(numeric)) {
+          return '—';
+        }
+        return integerFormatter.format(numeric);
+      };
+
+      const formatDate = (value) => {
+        if (!value) return '—';
+        const isoLike =
+          typeof value === 'string' && !value.includes('T') ? `${value}T00:00:00` : value;
+        const date = new Date(isoLike);
+        if (Number.isNaN(date.getTime())) {
+          return String(value);
+        }
+        return date.toLocaleDateString(undefined, {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        });
+      };
+
+      const toNumber = (value, fallback = 0) => {
+        const numeric = Number(value);
+        return Number.isNaN(numeric) ? fallback : numeric;
       };
 
       const getStoreIdentifier = (store) => {
@@ -1279,23 +1371,83 @@
       const Dashboard = ({
         stores,
         selectedStore,
+        storeInfo,
         sales,
+        summary,
+        topItems,
         syncLogs,
         onStoreChange,
         onRefresh,
         loading,
         error,
       }) => {
-        const summary = useMemo(() => {
-          return sales.reduce(
+        const derivedSummary = useMemo(() => {
+          const fallback = sales.reduce(
             (acc, day) => {
-              acc.sales += Number(day.total_sales || 0);
-              acc.items += Number(day.total_items_sold || 0);
+              acc.sales += toNumber(day.total_sales, 0);
+              acc.items += toNumber(day.total_items_sold, 0);
               return acc;
             },
             { sales: 0, items: 0 }
           );
+          const fallbackDays = sales.length;
+          const base = summary || {};
+          const grossSales = toNumber(base.gross_sales, fallback.sales);
+          const totalItems = toNumber(base.total_items, fallback.items);
+          const rawDays =
+            base.days_captured !== undefined && base.days_captured !== null
+              ? toNumber(base.days_captured, fallbackDays)
+              : fallbackDays;
+          const safeDays = rawDays > 0 ? rawDays : fallbackDays;
+          const averageDailySales =
+            base.average_daily_sales !== undefined && base.average_daily_sales !== null
+              ? toNumber(base.average_daily_sales, safeDays ? grossSales / safeDays : 0)
+              : safeDays
+              ? fallback.sales / safeDays
+              : 0;
+
+          return {
+            grossSales,
+            totalItems,
+            daysCaptured: rawDays,
+            averageDailySales,
+          };
+        }, [sales, summary]);
+
+        const hasSalesData =
+          sales.length > 0 || derivedSummary.daysCaptured > 0 || derivedSummary.grossSales > 0;
+
+        const topDay = useMemo(() => {
+          if (!sales?.length) return null;
+          const ranked = [...sales].sort(
+            (a, b) => toNumber(b.total_sales, 0) - toNumber(a.total_sales, 0)
+          );
+          const winner = ranked[0];
+          if (!winner) return null;
+          return {
+            date: winner.date,
+            totalSales: toNumber(winner.total_sales, 0),
+            items: toNumber(winner.total_items_sold, 0),
+          };
         }, [sales]);
+
+        const displayedTopItems = useMemo(() => {
+          if (!topItems?.length) return [];
+          return topItems.slice(0, 5);
+        }, [topItems]);
+
+        const remainingTopItems = Math.max((topItems?.length || 0) - displayedTopItems.length, 0);
+
+        const activeStoreLabel = useMemo(() => {
+          if (storeInfo?.store_name) return storeInfo.store_name;
+          if (storeInfo?.store_db) return storeInfo.store_db;
+          if (selectedStore?.store_name) return selectedStore.store_name;
+          if (selectedStore?.store_db) return selectedStore.store_db;
+          if (selectedStore?.store_id !== undefined && selectedStore?.store_id !== null) {
+            return `Store #${selectedStore.store_id}`;
+          }
+          return '';
+        }, [storeInfo, selectedStore]);
 
         return (
           <>
@@ -1320,22 +1472,104 @@
 
             <section className="card">
               <h2>7-Day Summary</h2>
+              {hasSalesData ? (
+                <>
+                  <div className="metrics">
+                    <div>
+                      <span className="metric-label">Gross sales</span>
+                      <span className="metric-value">{formatCurrency(derivedSummary.grossSales)}</span>
+                    </div>
+                    <div>
+                      <span className="metric-label">Items sold</span>
+                      <span className="metric-value">{formatQuantity(derivedSummary.totalItems)}</span>
+                    </div>
+                    <div>
+                      <span className="metric-label">Average daily sales</span>
+                      <span className="metric-value">{formatCurrency(derivedSummary.averageDailySales)}</span>
+                    </div>
+                    <div>
+                      <span className="metric-label">Days captured</span>
+                      <span className="metric-value">{formatInteger(derivedSummary.daysCaptured)}</span>
+                    </div>
+                  </div>
+                  {topDay ? (
+                    <div className="metric-note">
+                      <strong>{formatDate(topDay.date)}</strong> was the strongest day with {formatCurrency(topDay.totalSales)}
+                      {' '}across {formatQuantity(topDay.items)} items.
+                    </div>
+                  ) : null}
+                  {activeStoreLabel ? (
+                    <div className="metric-note">
+                      Showing the last seven days for <strong>{activeStoreLabel}</strong>.
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div className="empty-state">No sales recorded in the last 7 days.</div>
+              )}
+            </section>
+
+            <section className="card">
+              <h2>Top Products (7 Days)</h2>
+              {displayedTopItems.length ? (
+                <>
+                  <div className="table-wrapper">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>SKU</th>
+                          <th>Product</th>
+                          <th>Items</th>
+                          <th>Sales</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {displayedTopItems.map((item, index) => (
+                          <tr key={`${item.sku}-${index}`}>
+                            <td>{index + 1}</td>
+                            <td>{item.sku || '—'}</td>
+                            <td>{item.description || '—'}</td>
+                            <td>{formatQuantity(item.total_items_sold)}</td>
+                            <td>{formatCurrency(item.total_sales)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {remainingTopItems > 0 ? (
+                    <div className="metric-note">
+                      Showing top {displayedTopItems.length} of {topItems.length} items by sales.
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div className="empty-state">No product performance available for this window.</div>
+              )}
+            </section>
+
+            <section className="card">
+              <h2>Daily Sales</h2>
               {sales.length ? (
-                <div className="metrics">
-                  <div>
-                    <span className="metric-label">Gross sales</span>
-                    <span className="metric-value">
-                      ${summary.sales.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="metric-label">Items sold</span>
-                    <span className="metric-value">{summary.items.toLocaleString()}</span>
-                  </div>
-                  <div>
-                    <span className="metric-label">Days captured</span>
-                    <span className="metric-value">{sales.length}</span>
-                  </div>
+                <div className="table-wrapper">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Items Sold</th>
+                        <th>Total Sales</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sales.map((sale) => (
+                        <tr key={sale.date}>
+                          <td>{formatDate(sale.date)}</td>
+                          <td>{formatQuantity(sale.total_items_sold)}</td>
+                          <td>{formatCurrency(sale.total_sales)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               ) : (
                 <div className="empty-state">No sales recorded in the last 7 days.</div>
@@ -1343,34 +1577,10 @@
             </section>
 
             <section className="card">
-              <h2>Daily Sales</h2>
-              {sales.length ? (
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Items Sold</th>
-                      <th>Total Sales ($)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sales.map((sale) => (
-                      <tr key={sale.date}>
-                        <td>{sale.date}</td>
-                        <td>{sale.total_items_sold}</td>
-                        <td>{sale.total_sales.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <div className="empty-state">No sales recorded in the last 7 days.</div>
-              )}
-            </section>
-
-            <section className="card">
               <h2>Sales Trend (7 Days)</h2>
-              <SalesChart sales={sales} />
+              <div className="chart-wrapper">
+                <SalesChart sales={sales} />
+              </div>
             </section>
 
             <section className="card">
@@ -1391,6 +1601,9 @@
           storage.get(STORAGE_KEYS.selectedStore, null)
         );
         const [sales, setSales] = useState([]);
+        const [salesSummary, setSalesSummary] = useState(null);
+        const [topItems, setTopItems] = useState([]);
+        const [storeMeta, setStoreMeta] = useState(null);
         const [syncLogs, setSyncLogs] = useState([]);
         const [authError, setAuthError] = useState('');
         const [isAuthenticating, setIsAuthenticating] = useState(false);
@@ -1434,6 +1647,9 @@
             setStores([]);
             setSelectedStore(null);
             setSales([]);
+            setSalesSummary(null);
+            setTopItems([]);
+            setStoreMeta(null);
             setSyncLogs([]);
             tokenRef.current = null;
             setAuthError(message);
@@ -1594,7 +1810,12 @@
             requestError.status = response.status;
             throw requestError;
           }
-          return payload.sales || [];
+          return {
+            sales: payload.sales || [],
+            summary: payload.summary || null,
+            topItems: payload.top_items || [],
+            store: payload.store || null,
+          };
         };
 
         const fetchSyncLogs = async (authToken, query) => {
@@ -1619,18 +1840,25 @@
           if (!authToken) return;
           setIsLoadingData(true);
           try {
-            const [salesData, syncData] = await Promise.all([
+            const [salesPayload, syncData] = await Promise.all([
               fetchSales(authToken, query),
               fetchSyncLogs(authToken, query),
             ]);
             if (authToken !== tokenRef.current) {
               return;
             }
-            setSales(salesData);
+            setSales(salesPayload.sales || []);
+            setSalesSummary(salesPayload.summary || null);
+            setTopItems(salesPayload.topItems || []);
+            setStoreMeta(salesPayload.store || null);
             setSyncLogs(syncData);
             setAuthError('');
           } catch (error) {
             console.error(error);
+            setSales([]);
+            setSalesSummary(null);
+            setTopItems([]);
+            setStoreMeta(null);
             if (error.status === 401) {
               handleLogout('Session expired. Please sign in again.');
               return;
@@ -1897,6 +2125,9 @@
               setStores([]);
               setSelectedStore(null);
               setSales([]);
+              setSalesSummary(null);
+              setTopItems([]);
+              setStoreMeta(null);
               setSyncLogs([]);
               setAdminUsers([]);
               setSelectedAdminUserId(null);
@@ -1915,6 +2146,9 @@
               setAdminUsers([]);
               setSelectedAdminUserId(null);
               setSales([]);
+              setSalesSummary(null);
+              setTopItems([]);
+              setStoreMeta(null);
               setSyncLogs([]);
               setActiveTab('dashboard');
             }
@@ -1945,7 +2179,10 @@
           <Dashboard
             stores={stores}
             selectedStore={selectedStore}
+            storeInfo={storeMeta}
             sales={sales}
+            summary={salesSummary}
+            topItems={topItems}
             syncLogs={syncLogs}
             onStoreChange={setSelectedStore}
             onRefresh={refresh}
@@ -1993,7 +2230,11 @@
           if (displayedTab === 'admin') {
             return 'Admin tools';
           }
-          const storeLabel = selectedStore?.store_name || selectedStore?.store_db;
+          const storeLabel =
+            selectedStore?.store_name ||
+            selectedStore?.store_db ||
+            storeMeta?.store_name ||
+            storeMeta?.store_db;
           if (storeLabel) {
             return `Viewing ${storeLabel}`;
           }
@@ -2001,7 +2242,7 @@
             return 'Select a store to begin';
           }
           return 'No stores associated with this account';
-        }, [token, displayedTab, selectedStore, storesLength]);
+        }, [token, displayedTab, selectedStore, storeMeta, storesLength]);
 
         const isLoggedIn = Boolean(token);
         const greetingText = isLoggedIn ? `Hello, ${displayName || 'there'}` : '';
@@ -2015,27 +2256,29 @@
         return (
           <div className="app-shell">
             <header>
-              <div className="header-brand">
-                <h1>Store Insights</h1>
-              </div>
-              <div className="header-meta">
-                {isLoggedIn ? (
-                  <>
-                    <span className="header-greeting">{greetingText}</span>
+              <div className="header-inner">
+                <div className="header-brand">
+                  <h1>Store Insights</h1>
+                </div>
+                <div className="header-meta">
+                  {isLoggedIn ? (
+                    <>
+                      <span className="header-greeting">{greetingText}</span>
+                      <span className="header-status">{headerStatus}</span>
+                      <div className="header-actions">
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => handleLogout('')}
+                        >
+                          Sign out
+                        </button>
+                      </div>
+                    </>
+                  ) : (
                     <span className="header-status">{headerStatus}</span>
-                    <div className="header-actions">
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        onClick={() => handleLogout('')}
-                      >
-                        Sign out
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <span className="header-status">{headerStatus}</span>
-                )}
+                  )}
+                </div>
               </div>
             </header>
             <main>{currentContent}</main>
