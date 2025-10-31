@@ -2022,7 +2022,7 @@ const AdminView = ({
     };
   }, [sales]);
 
-  const dateRange = useMemo(() => {
+  const computedRange = useMemo(() => {
     if (!sales?.length) return null;
     const range = sales.reduce(
       (acc, entry) => {
@@ -2050,6 +2050,17 @@ const AdminView = ({
     }
     return range;
   }, [sales]);
+
+  const displayRange = useMemo(() => {
+    if (dateRange?.start && dateRange?.end) {
+      const start = new Date(`${dateRange.start}T00:00:00`);
+      const end = new Date(`${dateRange.end}T00:00:00`);
+      if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
+        return { start, end };
+      }
+    }
+    return computedRange;
+  }, [dateRange, computedRange]);
 
   const [view, setView] = useState('hourly');
   const hourly = breakdowns?.hourly || [];
@@ -2097,11 +2108,11 @@ const AdminView = ({
             <span className="hero-eyebrow">{`Sales · ${activeMeta.label}`}</span>
             <h2 className="hero-title">{storeLabel || 'Store Insights'}</h2>
             <div className="hero-dates">
-              {dateRange ? (
+              {displayRange ? (
                 <>
-                  <span>{formatDate(dateRange.start)}</span>
+                  <span>{formatDate(displayRange.start)}</span>
                   <span className="hero-divider">to</span>
-                  <span>{formatDate(dateRange.end)}</span>
+                  <span>{formatDate(displayRange.end)}</span>
                 </>
               ) : (
                 <span className="hero-subtitle">Waiting for recent activity</span>
