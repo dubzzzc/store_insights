@@ -1342,10 +1342,25 @@
       const WeatherCard = () => {
         const [weather, setWeather] = useState({ temp: null, desc: '', place: '' });
         const [error, setError] = useState('');
+        const [unit, setUnit] = useState('C'); // 'C' or 'F'
 
         useEffect(() => {
+          const fetchCityName = async (lat, lon) => {
+            try {
+              const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1`;
+              const res = await fetch(url, { headers: { 'User-Agent': 'StoreInsights/1.0' } });
+              const data = await res.json();
+              const city = data?.address?.city || data?.address?.town || data?.address?.village 
+                || data?.address?.municipality || data?.address?.county || 'Unknown';
+              return city;
+            } catch (e) {
+              return null;
+            }
+          };
+
           const fetchWeather = async (lat, lon) => {
             try {
+              const cityName = await fetchCityName(lat, lon);
               const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=auto`;
               const res = await fetch(url);
               const data = await res.json();
@@ -1360,7 +1375,7 @@
                 85: 'Snow showers', 86: 'Snow showers',
                 95: 'Thunderstorm', 96: 'Thunderstorm', 99: 'Thunderstorm',
               };
-              setWeather({ temp, desc: labels[code] || '—', place: '' });
+              setWeather({ temp, desc: labels[code] || '—', place: cityName || '' });
             } catch (e) {
               setError('Unable to load weather');
             }
@@ -1376,13 +1391,27 @@
           }
         }, []);
 
+        const toggleUnit = () => {
+          setUnit(unit === 'C' ? 'F' : 'C');
+        };
+
+        const displayTemp = () => {
+          if (weather.temp === null) return '—';
+          if (unit === 'F') {
+            const fahrenheit = (weather.temp * 9/5) + 32;
+            return `${Math.round(fahrenheit)}°F`;
+          }
+          return `${Math.round(weather.temp)}°C`;
+        };
+
         if (error) return <div className="empty-state">{error}</div>;
         return (
           <div className="summary-grid">
-            <div className="summary-card">
+            <div className="summary-card" style={{ cursor: 'pointer' }} onClick={toggleUnit} title="Click to toggle °C / °F">
               <h3>Current</h3>
-              <strong>{weather.temp !== null ? `${weather.temp}°C` : '—'}</strong>
+              <strong>{displayTemp()}</strong>
               <span>{weather.desc}</span>
+              {weather.place ? <span style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>{weather.place}</span> : null}
             </div>
           </div>
         );
