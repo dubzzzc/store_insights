@@ -80,7 +80,8 @@ class AdminUsersResponse(BaseModel):
 
 
 # Response container for store assignment actions
-## (moved up) class StoreAssignmentResponse(BaseModel): store: StoreAssignmentRecord
+class StoreAssignmentResponse(BaseModel):
+    store: StoreAssignmentRecord
 
 
 # --- New admin helpers for uploader creds management ---
@@ -423,8 +424,7 @@ def get_user(user_id: int, _: None = Depends(_require_admin)):
         conn.close()
 
 
-class StoreAssignmentResponse(BaseModel):
-    store: StoreAssignmentRecord
+## duplicate removed: StoreAssignmentResponse defined above
 
 
 @router.post(
