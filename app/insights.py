@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.auth import get_auth_user
 from sqlalchemy import create_engine, text
 from typing import Optional, Dict, Any, List
+from datetime import datetime
 
 """
 This module re-exports the sales insights router that dynamically adapts to
