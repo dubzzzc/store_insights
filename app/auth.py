@@ -47,6 +47,7 @@ def login(data: LoginInput):
     print("✅ Password matched")
 
     stores: List[Dict[str, Any]] = []
+    role = user.get("user_role") or "owner"
 
     try:
         cursor.execute(
@@ -92,25 +93,50 @@ def login(data: LoginInput):
 
     conn.close()
 
-    if not stores:
+    if not stores and role != "admin":
         raise HTTPException(status_code=403, detail="No stores assigned to this user")
 
-    # Default to the first store so existing clients keep working
-    primary_store = stores[0]
+    primary_store = stores[0] if stores else {}
 
-    token = jwt.encode(
-        {
-            "email": user["email"],
-            "stores": stores,
-            "store_db": primary_store.get("store_db"),
-            "db_user": primary_store.get("db_user"),
-            "db_pass": primary_store.get("db_pass"),
-        },
-        SECRET,
-        algorithm="HS256",
-    )
+    token_payload = {
+        "email": user["email"],
+        "stores": stores,
+        "role": role,
+    }
 
-    return {"token": token, "stores": stores}
+    full_name = user.get("full_name")
+    if full_name:
+        token_payload["full_name"] = full_name
+
+    if primary_store:
+        token_payload.update(
+            {
+                "store_db": primary_store.get("store_db"),
+                "db_user": primary_store.get("db_user"),
+                "db_pass": primary_store.get("db_pass"),
+            }
+        )
+
+    admin_key = None
+    if role == "admin":
+        admin_key = os.getenv("ADMIN_API_KEY")
+        if not admin_key:
+            admin_key = None
+
+    token = jwt.encode(token_payload, SECRET, algorithm="HS256")
+
+    response_payload = {
+        "token": token,
+        "stores": stores,
+        "role": role,
+        "email": user["email"],
+        "full_name": full_name,
+    }
+
+    if admin_key:
+        response_payload["admin_key"] = admin_key
+
+    return response_payload
 
 # ✅ This is the token auth dependency
 def get_auth_user(token: HTTPAuthorizationCredentials = Depends(security)):

@@ -1,75 +1,3245 @@
 <!DOCTYPE html>
-<html>
-<head>
-  <title>Store Insights Dashboard</title>
-</head>
-<body>
-  <h1>Login to Store Insights</h1>
-
-  <form id="login-form">
-  <input type="email" placeholder="Email" required />
-  <input type="password" placeholder="Password" required />
-  <button type="submit">Login</button>
-</form>
-
-
-  <hr>
-
-  <h2>Last 7 Days of Sales</h2>
-  <table border="1" id="salesTable" style="display: none;">
-    <thead>
-      <tr>
-        <th>Date</th>
-        <th>Total Items Sold</th>
-        <th>Total Sales ($)</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-
-  <script>
-    document.querySelector('button').addEventListener('click', async (event) => {
-      event.preventDefault(); // ✅ This stops the form from submitting normally
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Store Insights Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     
-      const email = document.querySelector('input[type=email]').value;
-      const password = document.querySelector('input[type=password]').value;
-    
-      const loginRes = await fetch('https://store-insights.onrender.com/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+<style>
+  :root {
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --page-bg: #0b3d5c;
+    --page-bg-accent: #0fa8b8;
+    --panel-bg: #ffffff;
+    --panel-border: rgba(15, 23, 42, 0.12);
+    --panel-soft: rgba(255, 255, 255, 0.1);
+    --primary: #0ea5e9;
+    --primary-strong: #0284c7;
+    --primary-soft: rgba(14, 165, 233, 0.12);
+    --neutral: #f1f5f9;
+    --neutral-soft: rgba(148, 163, 184, 0.18);
+    --text: #0f172a;
+    --text-muted: #475569;
+    --danger: #dc2626;
+    color-scheme: light dark;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: linear-gradient(135deg, var(--page-bg), var(--page-bg-accent));
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+  }
+
+  .app-shell {
+    width: 100%;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    color: #fff;
+    padding: clamp(1.5rem, 4vw, 2.75rem) clamp(1.5rem, 6vw, 3.5rem) clamp(1.25rem, 3vw, 2.25rem);
+  }
+
+  .header-bar {
+    margin: 0 auto;
+    width: min(1200px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .brand-icon {
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 1rem;
+    background: rgba(255, 255, 255, 0.12);
+    display: grid;
+    place-items: center;
+    font-weight: 700;
+    font-size: 1.15rem;
+  }
+
+  .brand h1 {
+    margin: 0;
+    font-size: clamp(1.5rem, 4vw, 2.1rem);
+    letter-spacing: 0.02em;
+  }
+
+  .session-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    text-align: right;
+  }
+
+  .session-greeting {
+    font-size: clamp(1rem, 2.4vw, 1.25rem);
+    font-weight: 600;
+  }
+
+  .session-subtext {
+    color: rgba(226, 232, 240, 0.75);
+    font-size: 0.95rem;
+  }
+
+  .header-controls {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    background: rgba(15, 23, 42, 0.24);
+    border-radius: 1rem;
+    padding: 1rem 1.25rem;
+  }
+
+  .store-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .store-controls label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.72);
+  }
+
+  .store-controls select {
+    padding: 0.65rem 1rem;
+    border-radius: 0.75rem;
+    border: none;
+    background: rgba(15, 23, 42, 0.45);
+    color: #fff;
+    min-width: 200px;
+  }
+
+  .store-controls select:focus {
+    outline: 2px solid rgba(255, 255, 255, 0.6);
+  }
+
+  .sign-out {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.65rem 1.15rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    background: rgba(15, 23, 42, 0.4);
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease;
+  }
+
+  .sign-out:hover,
+  .sign-out:focus {
+    transform: translateY(-1px);
+    background: rgba(255, 255, 255, 0.18);
+    outline: none;
+  }
+
+  .app-main {
+    flex: 1;
+    background: #f8fafc;
+    border-top-left-radius: 2.25rem;
+    border-top-right-radius: 2.25rem;
+    margin-top: clamp(1.25rem, 3vw, 2.25rem);
+    padding: clamp(1.75rem, 4vw, 3rem) clamp(1.25rem, 5vw, 3rem) clamp(3rem, 6vw, 4rem);
+  }
+
+  .app-main-inner {
+    margin: 0 auto;
+    width: min(1200px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: clamp(1.5rem, 3vw, 2.25rem);
+  }
+
+  .module-nav {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(14px);
+    padding: 0.85rem;
+    border-radius: 1.1rem;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+  }
+
+  .module-nav button {
+    border: none;
+    border-radius: 0.85rem;
+    padding: 0.65rem 1.4rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: transparent;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+  }
+
+  .module-nav button:hover,
+  .module-nav button:focus {
+    color: var(--text);
+    background: var(--neutral);
+    outline: none;
+    transform: translateY(-1px);
+  }
+
+  .module-nav button.active {
+    background: var(--primary);
+    color: #fff;
+    box-shadow: 0 12px 30px rgba(14, 165, 233, 0.25);
+  }
+
+  .panel {
+    background: var(--panel-bg);
+    border-radius: 1.5rem;
+    padding: clamp(1.5rem, 3vw, 2.25rem);
+    box-shadow: 0 24px 55px rgba(15, 23, 42, 0.06);
+    display: grid;
+    gap: clamp(1.5rem, 3vw, 2rem);
+    border: 1px solid var(--panel-border);
+  }
+
+  .panel.sales-panel {
+    gap: clamp(1.75rem, 3.5vw, 2.5rem);
+    background: linear-gradient(165deg, rgba(14, 165, 233, 0.12), rgba(14, 165, 233, 0.02));
+    border: 1px solid rgba(14, 165, 233, 0.18);
+  }
+
+  .sales-hero {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    justify-content: space-between;
+    align-items: stretch;
+    background: rgba(255, 255, 255, 0.65);
+    border-radius: 1.25rem;
+    padding: clamp(1rem, 3vw, 1.75rem);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  }
+
+  .sales-hero-left {
+    display: flex;
+    flex: 1 1 260px;
+    gap: 1.1rem;
+    align-items: center;
+  }
+
+  .hero-icon {
+    width: 3.25rem;
+    height: 3.25rem;
+    border-radius: 1.1rem;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.3), rgba(14, 165, 233, 0.05));
+    color: var(--primary-strong);
+    font-weight: 700;
+    font-size: 1.1rem;
+  }
+
+  .hero-copy {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .hero-eyebrow {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--primary-strong);
+    font-weight: 700;
+  }
+
+  .hero-title {
+    margin: 0;
+    font-size: clamp(1.45rem, 3vw, 1.85rem);
+  }
+
+  .hero-subtitle {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+  }
+
+  .hero-dates {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.65rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    align-items: center;
+  }
+
+  .hero-dates span {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .hero-divider {
+    padding: 0 0.35rem;
+    opacity: 0.65;
+  }
+
+  .sales-hero-metric {
+    flex: 0 0 auto;
+    min-width: 200px;
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.35), rgba(14, 165, 233, 0.05));
+    border-radius: 1rem;
+    padding: 1.1rem 1.4rem;
+    display: grid;
+    gap: 0.4rem;
+    align-content: center;
+    border: 1px solid rgba(14, 165, 233, 0.25);
+  }
+
+  .sales-hero-metric span {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  .sales-hero-metric strong {
+    font-size: clamp(1.8rem, 4vw, 2.2rem);
+    line-height: 1.1;
+  }
+
+  @media (max-width: 640px) {
+    .sales-hero {
+      align-items: stretch;
+    }
+
+    .sales-hero-metric {
+      width: 100%;
+    }
+  }
+
+  .sales-chart-card {
+    border-radius: 1.25rem;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    background: rgba(255, 255, 255, 0.92);
+    padding: clamp(1rem, 2.5vw, 1.6rem);
+    display: grid;
+    gap: 1.25rem;
+  }
+
+  .sales-chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .sales-chart-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+  }
+
+  .chart-subtitle {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  .sales-chart-grid {
+    display: grid;
+    gap: 1.5rem;
+  }
+
+  @media (min-width: 960px) {
+    .sales-chart-grid.with-legend {
+      grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+      align-items: stretch;
+    }
+  }
+
+  .sales-chart-grid .chart-legend {
+    border-radius: 1rem;
+    background: rgba(255, 255, 255, 0.75);
+    padding: 1rem 1.25rem;
+    box-shadow: 0 16px 32px rgba(15, 23, 42, 0.08);
+    border: 1px solid rgba(14, 165, 233, 0.15);
+  }
+
+  .sales-view-tabs {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .sales-view-tabs button {
+    border: none;
+    border-radius: 0.9rem;
+    padding: 0.85rem 1.1rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    background: rgba(255, 255, 255, 0.7);
+    color: var(--text-muted);
+    cursor: pointer;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, color 0.2s ease;
+  }
+
+  .sales-view-tabs button:hover,
+  .sales-view-tabs button:focus {
+    transform: translateY(-1px);
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.9);
+    outline: none;
+  }
+
+  .sales-view-tabs button.active {
+    background: linear-gradient(135deg, var(--primary), var(--primary-strong));
+    color: #fff;
+    box-shadow: 0 16px 32px rgba(14, 165, 233, 0.35);
+  }
+
+  .panel-header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .panel-title {
+    margin: 0;
+    font-size: clamp(1.25rem, 2.8vw, 1.55rem);
+    letter-spacing: 0.01em;
+  }
+
+  .summary-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+
+  .summary-card {
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.18), rgba(14, 165, 233, 0.04));
+    border-radius: 1rem;
+    padding: 1rem 1.25rem;
+    display: grid;
+    gap: 0.3rem;
+    border: 1px solid rgba(14, 165, 233, 0.15);
+  }
+
+  .summary-card h3 {
+    margin: 0;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+  }
+
+  .summary-card strong {
+    font-size: clamp(1.3rem, 3vw, 1.6rem);
+  }
+
+  .summary-card span {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  .chart-card {
+    border-radius: 1.25rem;
+    border: 1px solid var(--panel-border);
+    padding: 1.25rem;
+    display: grid;
+    gap: 0.75rem;
+    background: #fff;
+  }
+
+  .insight-grid {
+    display: grid;
+    gap: 1.5rem;
+  }
+
+  .insight-grid.two-column {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+
+  .insight-grid.two-column > .sync-card,
+  .insight-grid.two-column > .table-card,
+  .insight-grid.two-column > .chart-card {
+    height: 100%;
+  }
+
+  .chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .chart-header h3 {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .chart-area {
+    position: relative;
+    width: 100%;
+    min-height: clamp(220px, 40vh, 360px);
+  }
+
+  .chart-legend {
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .legend-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .legend-label {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .legend-color {
+    width: 0.85rem;
+    height: 0.85rem;
+    border-radius: 0.35rem;
+  }
+
+  .legend-value {
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .table-card {
+    border-radius: 1.25rem;
+    border: 1px solid var(--panel-border);
+    overflow: hidden;
+    background: #fff;
+  }
+
+  .table-card h3 {
+    margin: 0;
+    padding: 1.1rem 1.4rem 0;
+    font-size: 1rem;
+  }
+
+  .table-wrapper {
+    overflow-x: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  th,
+  td {
+    padding: 0.85rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+    font-size: 0.95rem;
+  }
+
+  th {
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+  }
+
+  tr:last-child td {
+    border-bottom: none;
+  }
+
+  .empty-state {
+    background: var(--neutral);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    text-align: center;
+    color: var(--text-muted);
+  }
+
+  .purchase-list,
+  .history-table {
+    border-radius: 1.25rem;
+    border: 1px solid var(--panel-border);
+    overflow: hidden;
+    background: #fff;
+  }
+
+  .purchase-row {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: 2fr auto;
+    padding: 0.9rem 1.25rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  }
+
+  .purchase-row:last-child {
+    border-bottom: none;
+  }
+
+  .purchase-row strong {
+    font-size: 1rem;
+  }
+
+  .search-bar {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .search-bar input {
+    flex: 1;
+    min-width: 200px;
+    padding: 0.75rem 1rem;
+    border-radius: 0.9rem;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+  }
+
+  .search-bar button {
+    border: none;
+    padding: 0.75rem 1.4rem;
+    border-radius: 0.9rem;
+    background: var(--primary);
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .sync-card {
+    border-radius: 1.25rem;
+    border: 1px solid var(--panel-border);
+    padding: 1.25rem;
+    background: #fff;
+    display: grid;
+    gap: 1rem;
+  }
+
+  .sync-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .sync-table th,
+  .sync-table td {
+    padding: 0.75rem 0.5rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+    text-align: left;
+    font-size: 0.9rem;
+  }
+
+  .sync-status {
+    text-transform: capitalize;
+    font-weight: 600;
+  }
+
+  .sync-status.success {
+    color: #0f766e;
+  }
+
+  .sync-status.failed {
+    color: #dc2626;
+  }
+
+  .sync-status.pending {
+    color: #92400e;
+  }
+
+  .sync-status.running {
+    color: #2563eb;
+  }
+
+  button:disabled,
+  .sign-out:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .admin-layout {
+    padding: clamp(1.5rem, 4vw, 3rem);
+    width: min(1100px, 100%);
+    margin: 0 auto;
+    display: grid;
+    gap: clamp(1.5rem, 3vw, 2.5rem);
+  }
+
+  .admin-card {
+    background: #fff;
+    border-radius: 1.25rem;
+    border: 1px solid var(--panel-border);
+    padding: clamp(1.5rem, 3vw, 2.25rem);
+    box-shadow: 0 24px 55px rgba(15, 23, 42, 0.06);
+    display: grid;
+    gap: 1.25rem;
+  }
+
+  .admin-card h2 {
+    margin: 0;
+    font-size: clamp(1.25rem, 3vw, 1.5rem);
+  }
+
+  .admin-grid {
+    display: grid;
+    gap: 1.25rem;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  }
+
+  .admin-list {
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 1rem;
+    overflow: hidden auto;
+    max-height: 360px;
+  }
+
+  .admin-user {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    display: grid;
+    gap: 0.35rem;
+    cursor: pointer;
+  }
+
+  .admin-user:last-child {
+    border-bottom: none;
+  }
+
+  .admin-user.active {
+    background: var(--primary-soft);
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.3rem 0.6rem;
+    border-radius: 999px;
+    background: rgba(14, 165, 233, 0.18);
+    color: var(--primary-strong);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+  }
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  input,
+  select,
+  button {
+    font: inherit;
+  }
+
+  input,
+  select {
+    background: #fff;
+    color: inherit;
+  }
+
+  input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .form-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+
+  .inline-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .inline-actions button {
+    padding: 0.75rem 1.25rem;
+    border-radius: 0.9rem;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--primary);
+    color: #fff;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .inline-actions button.secondary {
+    background: rgba(148, 163, 184, 0.2);
+    color: var(--text);
+  }
+
+  .inline-actions button:hover,
+  .inline-actions button:focus {
+    outline: none;
+    transform: translateY(-1px);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.18);
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .login-layout {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: clamp(1.5rem, 6vw, 3rem);
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(19, 78, 110, 0.92));
+  }
+
+  .login-card {
+    width: min(420px, 100%);
+    background: rgba(15, 23, 42, 0.82);
+    backdrop-filter: blur(12px);
+    color: #fff;
+    border-radius: 1.5rem;
+    padding: clamp(1.75rem, 4vw, 2.5rem);
+    display: grid;
+    gap: 1.5rem;
+    box-shadow: 0 30px 60px rgba(15, 23, 42, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .login-card h1 {
+    margin: 0;
+    text-align: center;
+    font-size: clamp(1.7rem, 4vw, 2.2rem);
+  }
+
+  .login-card p {
+    margin: 0;
+    text-align: center;
+    color: rgba(226, 232, 240, 0.7);
+  }
+
+  .login-card label {
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .login-card input {
+    background: rgba(15, 23, 42, 0.65);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    color: #fff;
+    padding: 0.8rem 1rem;
+    border-radius: 0.9rem;
+  }
+
+  .login-card input::placeholder {
+    color: rgba(226, 232, 240, 0.6);
+  }
+
+  .login-card button {
+    padding: 0.85rem 1.25rem;
+    border-radius: 0.95rem;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--primary);
+    color: #fff;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .login-card button:hover,
+  .login-card button:focus {
+    outline: none;
+    transform: translateY(-1px);
+    box-shadow: 0 12px 28px rgba(14, 165, 233, 0.35);
+  }
+
+  .login-card button.secondary {
+    background: rgba(15, 23, 42, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+  }
+
+  .login-error,
+  .admin-error {
+    padding: 0.9rem 1.1rem;
+    border-radius: 0.95rem;
+    background: rgba(220, 38, 38, 0.18);
+    color: #fecaca;
+    font-weight: 600;
+  }
+
+  .login-message,
+  .admin-message {
+    padding: 0.9rem 1.1rem;
+    border-radius: 0.95rem;
+    background: rgba(16, 185, 129, 0.2);
+    color: #d1fae5;
+    font-weight: 600;
+  }
+
+  @media (max-width: 768px) {
+    header {
+      padding: clamp(1.25rem, 5vw, 2rem);
+    }
+
+    .header-controls {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .store-controls {
+      width: 100%;
+    }
+
+    .store-controls select {
+      width: 100%;
+    }
+
+    .module-nav {
+      overflow-x: auto;
+    }
+
+    .chart-area {
+      height: 260px;
+    }
+
+    .panel {
+      padding: clamp(1.25rem, 4vw, 2rem);
+    }
+
+    .chart-card,
+    .table-card,
+    .sync-card,
+    .purchase-list,
+    .history-table {
+      border-radius: 1rem;
+    }
+  }
+</style>
+
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+    <script type="text/babel">
+      const { useState, useMemo, useEffect, useRef, useCallback } = React;
+      const API_BASE = '';
+
+      const STORAGE_KEYS = {
+        token: 'store-insights/token',
+        stores: 'store-insights/stores',
+        selectedStore: 'store-insights/selected-store',
+        adminKey: 'store-insights/admin-key',
+        role: 'store-insights/role',
+        profile: 'store-insights/profile',
+      };
+
+      const getStorage = () => {
+        try {
+          if (typeof window === 'undefined' || !window.localStorage) {
+            return null;
+          }
+          return window.localStorage;
+        } catch (error) {
+          console.warn('Storage unavailable', error);
+          return null;
+        }
+      };
+
+      const storageBackend = getStorage();
+
+      const storage = {
+        get(key, fallback = null) {
+          if (!storageBackend) return fallback;
+          const rawValue = storageBackend.getItem(key);
+          if (rawValue === null) return fallback;
+          try {
+            return JSON.parse(rawValue);
+          } catch (error) {
+            return rawValue;
+          }
+        },
+        set(key, value) {
+          if (!storageBackend) return;
+          if (value === undefined || value === null) {
+            storageBackend.removeItem(key);
+            return;
+          }
+          const serialized =
+            typeof value === 'string' ? value : JSON.stringify(value);
+          storageBackend.setItem(key, serialized);
+        },
+        remove(key) {
+          if (!storageBackend) return;
+          storageBackend.removeItem(key);
+        },
+        clearSession() {
+          if (!storageBackend) return;
+          Object.entries(STORAGE_KEYS).forEach(([name, key]) => {
+            if (name === 'adminKey') return;
+            storageBackend.removeItem(key);
+          });
+        },
+      };
+
+      const currencyFormatter = new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
       });
-    
-      const loginData = await loginRes.json();
-    
-      if (!loginRes.ok) {
-        alert(loginData.detail || 'Login failed');
+
+      const quantityFormatter = new Intl.NumberFormat(undefined, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      });
+
+      const integerFormatter = new Intl.NumberFormat(undefined, {
+        maximumFractionDigits: 0,
+      });
+
+      const formatCurrency = (value) => {
+        const numeric = Number(value ?? 0);
+        if (Number.isNaN(numeric)) {
+          return '—';
+        }
+        return currencyFormatter.format(numeric);
+      };
+
+      const formatQuantity = (value) => {
+        const numeric = Number(value ?? 0);
+        if (Number.isNaN(numeric)) {
+          return '—';
+        }
+        return quantityFormatter.format(numeric);
+      };
+
+      const formatInteger = (value) => {
+        const numeric = Number(value ?? 0);
+        if (Number.isNaN(numeric)) {
+          return '—';
+        }
+        return integerFormatter.format(numeric);
+      };
+
+      const formatDate = (value) => {
+        if (!value) return '—';
+        const isoLike =
+          typeof value === 'string' && !value.includes('T') ? `${value}T00:00:00` : value;
+        const date = new Date(isoLike);
+        if (Number.isNaN(date.getTime())) {
+          return String(value);
+        }
+        return date.toLocaleDateString(undefined, {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        });
+      };
+
+      const toNumber = (value, fallback = 0) => {
+        const numeric = Number(value);
+        return Number.isNaN(numeric) ? fallback : numeric;
+      };
+
+      const getStoreIdentifier = (store) => {
+        if (!store) return '';
+        if (store.store_id !== undefined && store.store_id !== null) {
+          return String(store.store_id);
+        }
+        if (store.store_db) {
+          return String(store.store_db);
+        }
+        if (store.store_name) {
+          return String(store.store_name);
+        }
+        return '';
+      };
+
+      const formatRole = (role) => {
+        if (!role) return '—';
+        return role.charAt(0).toUpperCase() + role.slice(1);
+      };
+
+      const decodeTokenPayload = (token) => {
+        if (!token || typeof window === 'undefined' || typeof window.atob !== 'function') {
+          return null;
+        }
+
+        try {
+          const segments = token.split('.');
+          if (segments.length < 2) {
+            return null;
+          }
+
+          const payload = segments[1].replace(/-/g, '+').replace(/_/g, '/');
+          const padded = payload.padEnd(Math.ceil(payload.length / 4) * 4, '=');
+          return JSON.parse(window.atob(padded));
+        } catch (error) {
+          console.warn('Unable to decode token payload', error);
+          return null;
+        }
+      };
+
+      const decodeRoleFromToken = (token) => {
+        const payload = decodeTokenPayload(token);
+        return (payload && payload.role) || '';
+      };
+
+      const StoreSelector = ({ stores, selectedStore, onChange }) => {
+        if (!stores?.length) return null;
+        const options = stores.map((store) => ({
+          value: getStoreIdentifier(store) || store.store_db || String(store.store_name || ''),
+          label: store.store_name || store.store_db || `Store #${store.store_id}`,
+        }));
+
+        const selectedValue = getStoreIdentifier(selectedStore) || options[0]?.value || '';
+
+        useEffect(() => {
+          if (!selectedStore && options.length) {
+            const first = stores.find((s) => getStoreIdentifier(s) === options[0].value) || stores[0];
+            onChange(first);
+          }
+        }, [stores, selectedStore, onChange]);
+
+        if (stores.length === 1) {
+          return (
+            <div>
+              <span className="metric-label">Store</span>
+              <div>{options[0]?.label}</div>
+            </div>
+          );
+        }
+
+        return (
+          <label>
+            Store
+            <select
+              value={selectedValue}
+              onChange={(event) => {
+                const selected = stores.find((store) => getStoreIdentifier(store) === event.target.value);
+                onChange(selected);
+              }}
+            >
+              {options.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        );
+      };
+
+      const HourlySalesChart = ({ data }) => {
+        const canvasRef = useRef(null);
+        const chartRef = useRef(null);
+
+        useEffect(() => {
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+
+          if (!data?.length) {
+            if (chartRef.current) {
+              chartRef.current.destroy();
+              chartRef.current = null;
+            }
+            return;
+          }
+
+          const labels = data.map((entry) => entry.hour);
+          const totals = data.map((entry) => Number(entry.total_sales) || 0);
+
+          if (chartRef.current) {
+            chartRef.current.data.labels = labels;
+            chartRef.current.data.datasets[0].data = totals;
+            chartRef.current.update();
+          } else {
+            chartRef.current = new Chart(canvas, {
+              type: 'bar',
+              data: {
+                labels,
+                datasets: [
+                  {
+                    data: totals,
+                    backgroundColor: '#0ea5e9',
+                    borderRadius: 6,
+                    maxBarThickness: 32,
+                  },
+                ],
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                  x: { grid: { display: false } },
+                  y: {
+                    ticks: {
+                      callback: (value) => formatCurrency(value),
+                    },
+                    grid: { color: 'rgba(148, 163, 184, 0.2)' },
+                  },
+                },
+                plugins: {
+                  legend: { display: false },
+                  tooltip: {
+                    callbacks: {
+                      label: (context) => formatCurrency(context.raw),
+                    },
+                  },
+                },
+              },
+            });
+          }
+
+          return () => {
+            if (chartRef.current) {
+              chartRef.current.destroy();
+              chartRef.current = null;
+            }
+          };
+        }, [data]);
+
+        if (!data?.length) {
+          return <div className="empty-state">No hourly sales recorded.</div>;
+        }
+
+        return <canvas ref={canvasRef}></canvas>;
+      };
+
+      const BreakdownPieChart = ({ data, labelKey }) => {
+        const canvasRef = useRef(null);
+        const chartRef = useRef(null);
+
+        useEffect(() => {
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+
+          if (!data?.length) {
+            if (chartRef.current) {
+              chartRef.current.destroy();
+              chartRef.current = null;
+            }
+            return;
+          }
+
+          const labels = data.map((entry) => entry[labelKey] || '—');
+          const totals = data.map((entry) => Number(entry.total_sales) || 0);
+          const colors = totals.map((_, index) => {
+            const palette = [
+              '#0ea5e9',
+              '#6366f1',
+              '#f97316',
+              '#22d3ee',
+              '#14b8a6',
+              '#facc15',
+              '#fb7185',
+              '#8b5cf6',
+              '#ec4899',
+              '#f43f5e',
+            ];
+            return palette[index % palette.length];
+          });
+
+          if (chartRef.current) {
+            chartRef.current.data.labels = labels;
+            chartRef.current.data.datasets[0].data = totals;
+            chartRef.current.data.datasets[0].backgroundColor = colors;
+            chartRef.current.update();
+          } else {
+            chartRef.current = new Chart(canvas, {
+              type: 'doughnut',
+              data: {
+                labels,
+                datasets: [
+                  {
+                    data: totals,
+                    backgroundColor: colors,
+                    borderWidth: 0,
+                  },
+                ],
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '60%',
+                plugins: {
+                  legend: { display: false },
+                  tooltip: {
+                    callbacks: {
+                      label: (context) => formatCurrency(context.raw),
+                    },
+                  },
+                },
+              },
+            });
+          }
+
+          return () => {
+            if (chartRef.current) {
+              chartRef.current.destroy();
+              chartRef.current = null;
+            }
+          };
+        }, [data, labelKey]);
+
+        if (!data?.length) {
+          return <div className="empty-state">No data for this view.</div>;
+        }
+
+        return <canvas ref={canvasRef}></canvas>;
+      };
+
+      const BreakdownLegend = ({ items, labelKey }) => {
+        if (!items?.length) return null;
+        const palette = [
+          '#0ea5e9',
+          '#6366f1',
+          '#f97316',
+          '#22d3ee',
+          '#14b8a6',
+          '#facc15',
+          '#fb7185',
+          '#8b5cf6',
+          '#ec4899',
+          '#f43f5e',
+        ];
+        return (
+          <div className="chart-legend">
+            {items.map((entry, index) => (
+              <div className="legend-row" key={`${entry[labelKey]}-${index}`}>
+                <div className="legend-label">
+                  <span
+                    className="legend-color"
+                    style={{ background: palette[index % palette.length] }}
+                  ></span>
+                  {entry[labelKey] || '—'}
+                </div>
+                <div className="legend-value">
+                  {formatCurrency(entry.total_sales)}
+                  {entry.percentage !== undefined ? ` · ${entry.percentage}%` : ''}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      };
+
+      const SalesChart = ({ sales }) => {
+        const canvasRef = useRef(null);
+        const chartRef = useRef(null);
+
+        useEffect(() => {
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+
+          if (!sales?.length) {
+            if (chartRef.current) {
+              chartRef.current.destroy();
+              chartRef.current = null;
+            }
+            return;
+          }
+
+          const labels = sales.map((item) => item.date).reverse();
+          const totals = sales.map((item) => item.total_sales).reverse();
+          const qty = sales.map((item) => item.total_items_sold).reverse();
+
+          if (chartRef.current) {
+            chartRef.current.data.labels = labels;
+            chartRef.current.data.datasets[0].data = totals;
+            chartRef.current.data.datasets[1].data = qty;
+            chartRef.current.update();
+            return;
+          }
+
+          chartRef.current = new Chart(canvas, {
+            type: 'line',
+            data: {
+              labels,
+              datasets: [
+                {
+                  label: 'Sales ($)',
+                  data: totals,
+                  borderColor: '#2563eb',
+                  backgroundColor: 'rgba(37, 99, 235, 0.12)',
+                  tension: 0.35,
+                  fill: true,
+                  yAxisID: 'y',
+                },
+                {
+                  label: 'Items Sold',
+                  data: qty,
+                  borderColor: '#f97316',
+                  backgroundColor: 'rgba(249, 115, 22, 0.12)',
+                  tension: 0.35,
+                  fill: true,
+                  yAxisID: 'y1',
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {
+                y: {
+                  position: 'left',
+                  title: { display: true, text: 'Sales ($)' },
+                },
+                y1: {
+                  position: 'right',
+                  grid: { drawOnChartArea: false },
+                  title: { display: true, text: 'Items' },
+                },
+              },
+              plugins: {
+                legend: { display: true },
+                tooltip: { mode: 'index', intersect: false },
+              },
+            },
+          });
+
+          return () => {
+            if (chartRef.current) {
+              chartRef.current.destroy();
+              chartRef.current = null;
+            }
+          };
+        }, [sales]);
+
+        if (!sales?.length) {
+          return <div className="empty-state">No sales data available for charting.</div>;
+        }
+
+        return <canvas ref={canvasRef} height="220"></canvas>;
+      };
+
+      const SyncTable = ({ logs }) => {
+        if (!logs?.length) {
+          return <div className="empty-state">No sync activity logged yet.</div>;
+        }
+
+        const formatNumber = (value) => {
+          if (value === null || value === undefined) return '—';
+          const parsed = Number(value);
+          return Number.isNaN(parsed) ? value : parsed.toLocaleString();
+        };
+
+        return (
+          <div className="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Store</th>
+                  <th>Status</th>
+                  <th>Started</th>
+                  <th>Finished</th>
+                  <th>Records</th>
+                  <th>Message</th>
+                </tr>
+              </thead>
+              <tbody>
+                {logs.map((log) => (
+                  <tr key={`${log.id}-${log.started_at}`}> 
+                    <td>{log.store_name || log.store_db || '—'}</td>
+                    <td>
+                      <span className="status-pill" data-status={(log.status || '').toLowerCase()}>
+                        {log.status || '—'}
+                      </span>
+                    </td>
+                    <td>{log.started_at ? new Date(log.started_at).toLocaleString() : '—'}</td>
+                    <td>{log.finished_at ? new Date(log.finished_at).toLocaleString() : '—'}</td>
+                    <td>{formatNumber(log.records_processed)}</td>
+                    <td>{log.message || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      };
+
+      const UserList = ({ users, selectedUserId, onSelectUser }) => {
+        if (!users?.length) {
+          return <div className="empty-state">No users found yet.</div>;
+        }
+
+        return (
+          <ul className="user-list">
+            {users.map((user) => (
+              <li key={user.id}>
+                <button
+                  type="button"
+                  data-active={selectedUserId === user.id}
+                  onClick={() => onSelectUser(user.id)}
+                >
+                  <span className="user-email">{user.email}</span>
+                  <span className="user-meta">{formatRole(user.user_role)}</span>
+                  <span className="user-meta">{user.full_name || '—'}</span>
+                  <span className="user-meta">
+                    {(user.stores?.length || 0).toString()} store{user.stores?.length === 1 ? '' : 's'}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        );
+      };
+
+
+const CreateUserForm = ({ onSubmit, isSubmitting }) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [role, setRole] = useState('owner');
+  const [storeDb, setStoreDb] = useState('');
+  const [storeUser, setStoreUser] = useState('');
+  const [storePass, setStorePass] = useState('');
+  const [storeName, setStoreName] = useState('');
+  const [formError, setFormError] = useState('');
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setFormError('');
+
+    if (!email.trim() || !password.trim()) {
+      setFormError('Email and password are required');
+      return;
+    }
+
+    const stores = [];
+    if (storeDb.trim() || storeUser.trim() || storePass.trim() || storeName.trim()) {
+      if (!storeDb.trim() || !storeUser.trim() || !storePass.trim()) {
+        setFormError('Store database, user, and password are required for the first assignment');
         return;
       }
-    
-      const token = loginData.token;
-    
-      const insightsRes = await fetch('https://store-insights.onrender.com/insights/sales', {
-        headers: { Authorization: `Bearer ${token}` }
+      stores.push({
+        store_db: storeDb.trim(),
+        db_user: storeUser.trim(),
+        db_pass: storePass,
+        store_name: storeName.trim() || undefined,
       });
-    
-      const insightsData = await insightsRes.json();
-    
-      if (!insightsRes.ok) {
-        alert(insightsData.detail || 'Failed to get sales data');
-        return;
-      }
-    
-      const salesList = insightsData.sales.map(sale =>
-        `<li>${sale.date}: ${sale.total_items_sold} items - $${sale.total_sales}</li>`
-      ).join('');
-    
-      document.body.innerHTML += `<ul>${salesList}</ul>`;
-});
+    }
 
-</script>
+    const payload = {
+      email: email.trim(),
+      password: password.trim(),
+      full_name: fullName.trim() || undefined,
+      user_role: role,
+      stores,
+    };
 
-  
-    
-</body>
+    const success = await onSubmit(payload);
+    if (success) {
+      setEmail('');
+      setPassword('');
+      setFullName('');
+      setRole('owner');
+      setStoreDb('');
+      setStoreUser('');
+      setStorePass('');
+      setStoreName('');
+    }
+  };
+
+  return (
+    <form className="admin-card" onSubmit={handleSubmit}>
+      <h2 className="panel-title">Create user</h2>
+      {formError ? <div className="admin-error">{formError}</div> : null}
+      <div className="form-grid">
+        <label>
+          Email
+          <input
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="manager@example.com"
+            disabled={isSubmitting}
+            required
+          />
+        </label>
+        <label>
+          Password
+          <input
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="Minimum 8 characters"
+            disabled={isSubmitting}
+            required
+          />
+        </label>
+        <label>
+          Full name (optional)
+          <input
+            type="text"
+            value={fullName}
+            onChange={(event) => setFullName(event.target.value)}
+            disabled={isSubmitting}
+          />
+        </label>
+        <label>
+          Role
+          <select value={role} onChange={(event) => setRole(event.target.value)} disabled={isSubmitting}>
+            <option value="owner">Owner</option>
+            <option value="user">User</option>
+            <option value="admin">Admin</option>
+          </select>
+        </label>
+      </div>
+      <div className="form-grid">
+        <label>
+          Store database
+          <input
+            type="text"
+            value={storeDb}
+            onChange={(event) => setStoreDb(event.target.value)}
+            placeholder="spirits_6885"
+            disabled={isSubmitting}
+          />
+        </label>
+        <label>
+          DB user
+          <input
+            type="text"
+            value={storeUser}
+            onChange={(event) => setStoreUser(event.target.value)}
+            placeholder="store_reader"
+            disabled={isSubmitting}
+          />
+        </label>
+        <label>
+          DB password
+          <input
+            type="password"
+            value={storePass}
+            onChange={(event) => setStorePass(event.target.value)}
+            placeholder="secret"
+            disabled={isSubmitting}
+          />
+        </label>
+        <label>
+          Store name
+          <input
+            type="text"
+            value={storeName}
+            onChange={(event) => setStoreName(event.target.value)}
+            placeholder="Downtown Spirits"
+            disabled={isSubmitting}
+          />
+        </label>
+      </div>
+      <div className="inline-actions">
+        <button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? 'Creating…' : 'Create user'}
+        </button>
+      </div>
+    </form>
+  );
+};
+
+const AddStoreForm = ({ user, onSubmit, isSubmitting }) => {
+  const [storeDb, setStoreDb] = useState('');
+  const [storeUser, setStoreUser] = useState('');
+  const [storePass, setStorePass] = useState('');
+  const [storeName, setStoreName] = useState('');
+  const [formError, setFormError] = useState('');
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setFormError('');
+
+    if (!storeDb.trim() || !storeUser.trim() || !storePass.trim()) {
+      setFormError('Database, user, and password are required');
+      return;
+    }
+
+    const success = await onSubmit({
+      store_db: storeDb.trim(),
+      db_user: storeUser.trim(),
+      db_pass: storePass,
+      store_name: storeName.trim() || undefined,
+    });
+
+    if (success) {
+      setStoreDb('');
+      setStoreUser('');
+      setStorePass('');
+      setStoreName('');
+    }
+  };
+
+  return (
+    <form className="admin-card" onSubmit={handleSubmit}>
+      <h2 className="panel-title">Add store to {user?.email || 'user'}</h2>
+      {formError ? <div className="admin-error">{formError}</div> : null}
+      <div className="form-grid">
+        <label>
+          Store database
+          <input
+            type="text"
+            value={storeDb}
+            onChange={(event) => setStoreDb(event.target.value)}
+            placeholder="spirits_6885"
+            disabled={isSubmitting}
+          />
+        </label>
+        <label>
+          DB user
+          <input
+            type="text"
+            value={storeUser}
+            onChange={(event) => setStoreUser(event.target.value)}
+            placeholder="store_reader"
+            disabled={isSubmitting}
+          />
+        </label>
+        <label>
+          DB password
+          <input
+            type="password"
+            value={storePass}
+            onChange={(event) => setStorePass(event.target.value)}
+            placeholder="secret"
+            disabled={isSubmitting}
+          />
+        </label>
+        <label>
+          Store name
+          <input
+            type="text"
+            value={storeName}
+            onChange={(event) => setStoreName(event.target.value)}
+            placeholder="Downtown Spirits"
+            disabled={isSubmitting}
+          />
+        </label>
+      </div>
+      <div className="inline-actions">
+        <button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? 'Adding…' : 'Add store'}
+        </button>
+      </div>
+    </form>
+  );
+};
+
+const StoreAssignments = ({ user, onRemoveStore, isProcessing }) => {
+  if (!user?.stores?.length) {
+    return <div className="empty-state">No store assignments yet.</div>;
+  }
+
+  return (
+    <div className="store-list">
+      {user.stores.map((store) => {
+        const identifier = getStoreIdentifier(store) || store.id || store.store_db;
+        return (
+          <div className="store-item" key={`${user.id}-${identifier}`}>
+            <strong>{store.store_name || store.store_db || 'Store'}</strong>
+            <span>{store.store_db || '—'}</span>
+            <div className="inline-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => onRemoveStore(user.id, identifier)}
+                disabled={isProcessing}
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const UserList = ({ users, selectedUserId, onSelectUser }) => {
+  if (!users?.length) {
+    return <div className="empty-state">No users found yet.</div>;
+  }
+
+  return (
+    <div className="admin-list">
+      {users.map((user) => (
+        <div
+          key={user.id}
+          className={`admin-user ${selectedUserId === user.id ? 'active' : ''}`}
+          onClick={() => onSelectUser(user.id)}
+        >
+          <strong>{user.email}</strong>
+          <span>{user.full_name || '—'}</span>
+          <span>Role: {formatRole(user.user_role)}</span>
+          <span>{(user.stores?.length || 0).toString()} store{user.stores?.length === 1 ? '' : 's'}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const AdminPanel = ({
+  users,
+  selectedUserId,
+  onSelectUser,
+  onRefresh,
+  onCreateUser,
+  onAddStore,
+  onRemoveStore,
+  isLoading,
+  isProcessing,
+  error,
+  message,
+}) => {
+  const selectedUser = users.find((user) => user.id === selectedUserId) || users[0] || null;
+
+  useEffect(() => {
+    if (!selectedUser && users.length) {
+      onSelectUser(users[0].id);
+    }
+  }, [users, selectedUser, onSelectUser]);
+
+  return (
+    <div className="admin-grid">
+      <section className="admin-card">
+        <div className="panel-header">
+          <div>
+            <h2 className="panel-title">Users</h2>
+            <p className="session-subtext">Manage dashboard accounts and their store access.</p>
+          </div>
+          <button
+            type="button"
+            className="sign-out"
+            onClick={onRefresh}
+            disabled={isLoading || isProcessing}
+          >
+            Refresh
+          </button>
+        </div>
+        {error ? <div className="admin-error">{error}</div> : null}
+        {message ? <div className="admin-message">{message}</div> : null}
+        {isLoading ? (
+          <div className="empty-state">Loading users…</div>
+        ) : (
+          <UserList users={users} selectedUserId={selectedUser?.id} onSelectUser={onSelectUser} />
+        )}
+        <CreateUserForm onSubmit={onCreateUser} isSubmitting={isProcessing} />
+      </section>
+      <section className="admin-card">
+        <h2 className="panel-title">Store assignments</h2>
+        {selectedUser ? (
+          <>
+            <div className="summary-grid">
+              <div className="summary-card">
+                <h3>User</h3>
+                <strong>{selectedUser.email}</strong>
+                <span>{selectedUser.full_name || '—'}</span>
+              </div>
+              <div className="summary-card">
+                <h3>Role</h3>
+                <strong>{formatRole(selectedUser.user_role)}</strong>
+                <span>{(selectedUser.stores?.length || 0).toString()} store(s)</span>
+              </div>
+            </div>
+            <StoreAssignments
+              user={selectedUser}
+              onRemoveStore={onRemoveStore}
+              isProcessing={isProcessing}
+            />
+            <AddStoreForm user={selectedUser} onSubmit={onAddStore} isSubmitting={isProcessing} />
+          </>
+        ) : (
+          <div className="empty-state">Select a user to manage their stores.</div>
+        )}
+      </section>
+    </div>
+  );
+};
+
+const AdminView = ({
+  hasKey,
+  users,
+  selectedUserId,
+  onSelectUser,
+  onRefresh,
+  onCreateUser,
+  onAddStore,
+  onRemoveStore,
+  isLoading,
+  isProcessing,
+  error,
+  message,
+}) => {
+  if (!hasKey) {
+    return (
+      <section className="admin-card">
+        <h2 className="panel-title">Admin access unavailable</h2>
+        {error ? <div className="admin-error">{error}</div> : null}
+        <p className="session-subtext">
+          Configure the <code>ADMIN_API_KEY</code> environment variable on the server to enable admin tools.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <AdminPanel
+      users={users}
+      selectedUserId={selectedUserId}
+      onSelectUser={onSelectUser}
+      onRefresh={onRefresh}
+      onCreateUser={onCreateUser}
+      onAddStore={onAddStore}
+      onRemoveStore={onRemoveStore}
+      isLoading={isLoading}
+      isProcessing={isProcessing}
+      error={error}
+      message={message}
+    />
+  );
+};
+      const LoginForm = ({ onSubmit, isLoading, error }) => {
+        const [email, setEmail] = useState('');
+        const [password, setPassword] = useState('');
+
+        const submit = (event) => {
+          event.preventDefault();
+          onSubmit({ email, password });
+        };
+
+        return (
+          <form onSubmit={submit}>
+            <label htmlFor="email">
+              Email
+              <input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+              />
+            </label>
+            <label htmlFor="password">
+              Password
+              <input
+                id="password"
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+              />
+            </label>
+            {error ? <div className="error-message">{error}</div> : null}
+            <button type="submit" disabled={isLoading}>
+              {isLoading ? 'Signing in…' : 'Sign in'}
+            </button>
+          </form>
+        );
+      };
+
+
+const SalesModule = ({
+  summary,
+  sales,
+  topItems,
+  breakdowns,
+  syncLogs,
+  storeLabel,
+  onRefresh,
+  isLoading,
+}) => {
+  const derivedSummary = useMemo(() => {
+    const fallback = sales.reduce(
+      (acc, day) => {
+        acc.sales += toNumber(day.total_sales, 0);
+        acc.items += toNumber(day.total_items_sold, 0);
+        return acc;
+      },
+      { sales: 0, items: 0 }
+    );
+    const fallbackDays = sales.length;
+    const base = summary || {};
+    const grossSales = toNumber(base.gross_sales, fallback.sales);
+    const totalItems = toNumber(base.total_items, fallback.items);
+    const rawDays =
+      base.days_captured !== undefined && base.days_captured !== null
+        ? toNumber(base.days_captured, fallbackDays)
+        : fallbackDays;
+    const safeDays = rawDays > 0 ? rawDays : fallbackDays;
+    const averageDailySales =
+      base.average_daily_sales !== undefined && base.average_daily_sales !== null
+        ? toNumber(base.average_daily_sales, safeDays ? grossSales / (safeDays || 1) : 0)
+        : safeDays
+        ? fallback.sales / (safeDays || 1)
+        : 0;
+
+    return {
+      grossSales,
+      totalItems,
+      daysCaptured: rawDays,
+      averageDailySales,
+    };
+  }, [sales, summary]);
+
+  const topDay = useMemo(() => {
+    if (!sales?.length) return null;
+    const ranked = [...sales].sort(
+      (a, b) => toNumber(b.total_sales, 0) - toNumber(a.total_sales, 0)
+    );
+    const winner = ranked[0];
+    if (!winner) return null;
+    return {
+      date: winner.date,
+      totalSales: toNumber(winner.total_sales, 0),
+      items: toNumber(winner.total_items_sold, 0),
+    };
+  }, [sales]);
+
+  const dateRange = useMemo(() => {
+    if (!sales?.length) return null;
+    const range = sales.reduce(
+      (acc, entry) => {
+        const value = entry.date;
+        if (!value) {
+          return acc;
+        }
+        const isoLike = typeof value === 'string' && !value.includes('T') ? `${value}T00:00:00` : value;
+        const parsed = new Date(isoLike);
+        if (Number.isNaN(parsed.getTime())) {
+          return acc;
+        }
+        if (!acc.start || parsed < acc.start) {
+          acc.start = parsed;
+        }
+        if (!acc.end || parsed > acc.end) {
+          acc.end = parsed;
+        }
+        return acc;
+      },
+      { start: null, end: null }
+    );
+    if (!range.start || !range.end) {
+      return null;
+    }
+    return range;
+  }, [sales]);
+
+  const [view, setView] = useState('hourly');
+  const hourly = breakdowns?.hourly || [];
+  const payment = breakdowns?.payment || breakdowns?.payment_methods || [];
+  const categories = breakdowns?.categories || [];
+
+  const viewMeta = {
+    hourly: {
+      label: 'Hour',
+      title: 'Sales by Hour',
+      chart: <HourlySalesChart data={hourly} />,
+      legend: null,
+      hasLegend: false,
+    },
+    payment: {
+      label: 'Payment',
+      title: 'Sales by Payment Type',
+      chart: <BreakdownPieChart data={payment} labelKey="method" />,
+      legend: payment.length ? <BreakdownLegend items={payment} labelKey="method" /> : null,
+      hasLegend: payment.length > 0,
+    },
+    category: {
+      label: 'Category',
+      title: 'Sales by Category',
+      chart: <BreakdownPieChart data={categories} labelKey="category" />,
+      legend: categories.length ? <BreakdownLegend items={categories} labelKey="category" /> : null,
+      hasLegend: categories.length > 0,
+    },
+  };
+
+  const viewOrder = ['hourly', 'payment', 'category'];
+  const activeMeta = viewMeta[view] || viewMeta.hourly;
+
+  const displayedTopItems = useMemo(() => {
+    if (!topItems?.length) return [];
+    return topItems.slice(0, 8);
+  }, [topItems]);
+
+  return (
+    <div className="panel sales-panel">
+      <div className="sales-hero">
+        <div className="sales-hero-left">
+          <div className="hero-icon">📈</div>
+          <div className="hero-copy">
+            <span className="hero-eyebrow">{`Sales · ${activeMeta.label}`}</span>
+            <h2 className="hero-title">{storeLabel || 'Store Insights'}</h2>
+            <div className="hero-dates">
+              {dateRange ? (
+                <>
+                  <span>{formatDate(dateRange.start)}</span>
+                  <span className="hero-divider">to</span>
+                  <span>{formatDate(dateRange.end)}</span>
+                </>
+              ) : (
+                <span className="hero-subtitle">Waiting for recent activity</span>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="sales-hero-metric">
+          <span>Total Net Amount</span>
+          <strong>{formatCurrency(derivedSummary.grossSales)}</strong>
+          <span>
+            {derivedSummary.daysCaptured
+              ? `${derivedSummary.daysCaptured} day window`
+              : 'No sales recorded'}
+          </span>
+        </div>
+      </div>
+
+      <div className="sales-chart-card">
+        <div className="sales-chart-header">
+          <div>
+            <h3>{activeMeta.title}</h3>
+            <p className="chart-subtitle">Last 7 days</p>
+          </div>
+          <div className="inline-actions">
+            <button type="button" className="secondary" onClick={onRefresh} disabled={isLoading}>
+              {isLoading ? 'Refreshing…' : 'Refresh'}
+            </button>
+          </div>
+        </div>
+        <div className={`sales-chart-grid${activeMeta.hasLegend ? ' with-legend' : ''}`}>
+          <div className="chart-area">{activeMeta.chart}</div>
+          {activeMeta.hasLegend ? activeMeta.legend : null}
+        </div>
+        <div className="sales-view-tabs">
+          {viewOrder.map((key) => {
+            const meta = viewMeta[key];
+            return (
+              <button
+                key={key}
+                type="button"
+                className={view === key ? 'active' : ''}
+                onClick={() => setView(key)}
+              >
+                {meta.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="summary-grid">
+        <div className="summary-card">
+          <h3>Average Daily Sales</h3>
+          <strong>{formatCurrency(derivedSummary.averageDailySales)}</strong>
+          <span>
+            {derivedSummary.daysCaptured
+              ? `${derivedSummary.daysCaptured} day window`
+              : 'No days captured'}
+          </span>
+        </div>
+        <div className="summary-card">
+          <h3>Total Items Sold</h3>
+          <strong>{formatQuantity(derivedSummary.totalItems)}</strong>
+          <span>Across all recorded sales</span>
+        </div>
+        <div className="summary-card">
+          <h3>Strongest Day</h3>
+          <strong>{topDay ? formatDate(topDay.date) : '—'}</strong>
+          <span>
+            {topDay ? `${formatCurrency(topDay.totalSales)} in sales` : 'Waiting for activity'}
+          </span>
+        </div>
+      </div>
+
+      <div className="insight-grid two-column">
+        <div className="table-card">
+          <h3>Top Products (7 Days)</h3>
+          {displayedTopItems.length ? (
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>SKU</th>
+                    <th>Product</th>
+                    <th>Items</th>
+                    <th>Sales</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayedTopItems.map((item, index) => (
+                    <tr key={`${item.sku}-${index}`}>
+                      <td>{index + 1}</td>
+                      <td>{item.sku || '—'}</td>
+                      <td>{item.description || '—'}</td>
+                      <td>{formatQuantity(item.total_items_sold)}</td>
+                      <td>{formatCurrency(item.total_sales)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="empty-state">No product performance available for this window.</div>
+          )}
+        </div>
+
+        <div className="chart-card">
+          <div className="chart-header">
+            <h3>Seven-Day Trend</h3>
+          </div>
+          <div className="chart-area">
+            <SalesChart sales={sales} />
+          </div>
+          {topDay ? (
+            <div className="metric-note">
+              <strong>{formatDate(topDay.date)}</strong> was the strongest day with {formatCurrency(topDay.totalSales)}{' '}
+              across {formatQuantity(topDay.items)} items.
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="insight-grid two-column">
+        <div className="table-card">
+          <h3>Daily Sales</h3>
+          {sales.length ? (
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Items Sold</th>
+                    <th>Total Sales</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sales.map((sale) => (
+                    <tr key={sale.date}>
+                      <td>{formatDate(sale.date)}</td>
+                      <td>{formatQuantity(sale.total_items_sold)}</td>
+                      <td>{formatCurrency(sale.total_sales)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="empty-state">No sales recorded in the last 7 days.</div>
+          )}
+        </div>
+
+        <div className="sync-card">
+          <h3>DBF Sync Activity</h3>
+          <SyncTable logs={syncLogs} />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const PurchaseOrdersModule = ({ orders }) => (
+  <div className="panel">
+    <div className="panel-header">
+      <h2 className="panel-title">Purchase Orders</h2>
+    </div>
+    {orders?.length ? (
+      <div className="purchase-list">
+        {orders.map((order) => (
+          <div className="purchase-row" key={`${order.vendor_name}-${order.order_count}`}>
+            <strong>{order.vendor_name || 'Unknown vendor'}</strong>
+            <span>{order.order_count || 0}</span>
+          </div>
+        ))}
+      </div>
+    ) : (
+      <div className="empty-state">No purchase orders captured for this period.</div>
+    )}
+  </div>
+);
+
+const InventoryModule = ({ snapshot }) => {
+  const segments = snapshot?.segments || [];
+  return (
+    <div className="panel">
+      <div className="panel-header">
+        <h2 className="panel-title">Inventory Value</h2>
+      </div>
+      <div className="summary-grid">
+        <div className="summary-card">
+          <h3>Total Value</h3>
+          <strong>{formatCurrency(snapshot?.total_value || 0)}</strong>
+          <span>{segments.length ? 'Breakdown by category' : 'Connect inventory feeds to populate this view'}</span>
+        </div>
+      </div>
+      <div className="chart-card">
+        <div className="chart-header">
+          <h3>Inventory Segments</h3>
+        </div>
+        <div className="chart-area">
+          {segments.length ? (
+            <BreakdownPieChart data={segments} labelKey="label" />
+          ) : (
+            <div className="empty-state">No inventory data available.</div>
+          )}
+        </div>
+        {segments.length ? <BreakdownLegend items={segments} labelKey="label" /> : null}
+      </div>
+    </div>
+  );
+};
+
+const HistoryModule = ({ history }) => {
+  const [query, setQuery] = useState('');
+
+  const filteredHistory = useMemo(() => {
+    if (!history?.length) return [];
+    if (!query) return history;
+    const lowered = query.toLowerCase();
+    return history.filter((entry) =>
+      [entry.product_name, entry.sku, entry.upc]
+        .filter(Boolean)
+        .some((value) => value.toLowerCase().includes(lowered))
+    );
+  }, [history, query]);
+
+  return (
+    <div className="panel">
+      <div className="panel-header">
+        <h2 className="panel-title">Sales History</h2>
+      </div>
+      <div className="search-bar">
+        <input
+          type="text"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search product by UPC / SKU / Name"
+        />
+      </div>
+      {filteredHistory.length ? (
+        <div className="history-table">
+          <div className="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>SKU</th>
+                  <th>Year</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredHistory.map((entry) => (
+                  <tr key={`${entry.sku}-${entry.year}`}>
+                    <td>{entry.product_name || '—'}</td>
+                    <td>{entry.sku || '—'}</td>
+                    <td>{entry.year || '—'}</td>
+                    <td>{formatCurrency(entry.total || 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <div className="empty-state">Historical sales will appear once the feed is connected.</div>
+      )}
+    </div>
+  );
+};
+
+const ModuleNav = ({ active, onChange }) => {
+  const modules = [
+    { id: 'sales', label: 'Sales' },
+    { id: 'purchase', label: 'Purchase Orders' },
+    { id: 'inventory', label: 'Inventory' },
+    { id: 'history', label: 'Sales History' },
+  ];
+
+  return (
+    <nav className="module-nav">
+      {modules.map((module) => (
+        <button
+          key={module.id}
+          type="button"
+          className={active === module.id ? 'active' : ''}
+          onClick={() => onChange(module.id)}
+        >
+          {module.label}
+        </button>
+      ))}
+    </nav>
+  );
+};
+
+      const HeaderBar = ({ profile, stores, selectedStore, onStoreChange, onLogout }) => {
+        const storeOptions = stores || [];
+        const activeStore = selectedStore || storeOptions[0] || null;
+        const greetingName = profile?.full_name || profile?.email || 'there';
+        const storeLabel = activeStore
+          ? activeStore.store_name || activeStore.store_db || `Store ${getStoreIdentifier(activeStore)}`
+          : 'No store selected';
+
+        return (
+          <header>
+            <div className="header-bar">
+              <div className="header-top">
+                <div className="brand">
+                  <div className="brand-icon">SI</div>
+                  <h1>Store Insights</h1>
+                </div>
+                <div className="session-meta">
+                  <span className="session-greeting">Hello, {greetingName}</span>
+                  <span className="session-subtext">{storeLabel}</span>
+                </div>
+              </div>
+              <div className="header-controls">
+                <div className="store-controls">
+                  {storeOptions.length > 1 ? (
+                    <label>
+                      Select a store
+                      <select
+                        value={getStoreIdentifier(activeStore)}
+                        onChange={(event) => {
+                          const next = storeOptions.find(
+                            (store) => getStoreIdentifier(store) === event.target.value
+                          );
+                          onStoreChange(next || storeOptions[0]);
+                        }}
+                      >
+                        {storeOptions.map((store) => {
+                          const identifier = getStoreIdentifier(store);
+                          const label = store.store_name || store.store_db || `Store ${identifier}`;
+                          return (
+                            <option key={identifier} value={identifier}>
+                              {label}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </label>
+                  ) : (
+                    <div>
+                      <span className="session-subtext">Store</span>
+                      <div>{storeLabel}</div>
+                    </div>
+                  )}
+                </div>
+                <button type="button" className="sign-out" onClick={onLogout}>
+                  Sign out
+                </button>
+              </div>
+            </div>
+          </header>
+        );
+      };
+
+      const Dashboard = ({
+        stores,
+        selectedStore,
+        storeInfo,
+        sales,
+  summary,
+  topItems,
+  breakdowns,
+  syncLogs,
+  purchaseOrders,
+  inventory,
+  history,
+  onStoreChange,
+  onRefresh,
+  activeModule,
+  onModuleChange,
+  loading,
+  error,
+}) => {
+  const storeLabel = useMemo(() => {
+    if (storeInfo?.store_name) return storeInfo.store_name;
+    if (storeInfo?.store_db) return storeInfo.store_db;
+    if (selectedStore?.store_name) return selectedStore.store_name;
+    if (selectedStore?.store_db) return selectedStore.store_db;
+    if (selectedStore?.store_id !== undefined && selectedStore?.store_id !== null) {
+      return `Store #${selectedStore.store_id}`;
+    }
+    return '';
+  }, [storeInfo, selectedStore]);
+
+  return (
+    <div className="app-main">
+      <div className="app-main-inner">
+              {stores?.length > 1 ? (
+                <div className="panel">
+                  <div className="panel-header">
+                    <h2 className="panel-title">Store Controls</h2>
+                    <div className="inline-actions">
+                      <button type="button" className="secondary" onClick={() => onRefresh()} disabled={loading}>
+                        {loading ? 'Refreshing…' : 'Refresh'}
+                      </button>
+                    </div>
+                  </div>
+            <StoreSelector stores={stores} selectedStore={selectedStore} onChange={onStoreChange} />
+          </div>
+        ) : null}
+
+        {error ? (
+          <div className="panel">
+            <div className="panel-header">
+              <h2 className="panel-title">Heads up</h2>
+            </div>
+            <div className="empty-state">{error}</div>
+          </div>
+        ) : null}
+
+        <ModuleNav active={activeModule} onChange={onModuleChange} />
+
+        {activeModule === 'sales' ? (
+          <SalesModule
+            summary={summary}
+            sales={sales}
+            topItems={topItems}
+            breakdowns={breakdowns}
+            syncLogs={syncLogs}
+            storeLabel={storeLabel}
+            onRefresh={onRefresh}
+            isLoading={loading}
+          />
+        ) : null}
+
+        {activeModule === 'purchase' ? <PurchaseOrdersModule orders={purchaseOrders} /> : null}
+
+        {activeModule === 'inventory' ? <InventoryModule snapshot={inventory} /> : null}
+
+        {activeModule === 'history' ? <HistoryModule history={history} /> : null}
+      </div>
+    </div>
+  );
+};
+      const App = () => {
+        const [activeModule, setActiveModule] = useState('sales');
+        const [token, setToken] = useState(() => storage.get(STORAGE_KEYS.token, null));
+        const [userRole, setUserRole] = useState(() => storage.get(STORAGE_KEYS.role, ''));
+        const [profile, setProfile] = useState(() => storage.get(STORAGE_KEYS.profile, null));
+        const [stores, setStores] = useState(() => storage.get(STORAGE_KEYS.stores, []));
+        const [selectedStore, setSelectedStore] = useState(() =>
+          storage.get(STORAGE_KEYS.selectedStore, null)
+        );
+        const [sales, setSales] = useState([]);
+        const [salesSummary, setSalesSummary] = useState(null);
+        const [topItems, setTopItems] = useState([]);
+        const [storeMeta, setStoreMeta] = useState(null);
+        const [salesBreakdowns, setSalesBreakdowns] = useState({
+          hourly: [],
+          payment: [],
+          payment_methods: [],
+          categories: [],
+        });
+        const [purchaseOrders, setPurchaseOrders] = useState([]);
+        const [inventorySnapshot, setInventorySnapshot] = useState(null);
+        const [salesHistory, setSalesHistory] = useState([]);
+        const [syncLogs, setSyncLogs] = useState([]);
+        const [authError, setAuthError] = useState('');
+        const [isAuthenticating, setIsAuthenticating] = useState(false);
+        const [isLoadingData, setIsLoadingData] = useState(false);
+
+        const [adminKey, setAdminKey] = useState(() => storage.get(STORAGE_KEYS.adminKey, ''));
+        const [adminUsers, setAdminUsers] = useState([]);
+        const [selectedAdminUserId, setSelectedAdminUserId] = useState(null);
+        const [adminError, setAdminError] = useState('');
+        const [adminMessage, setAdminMessage] = useState('');
+        const [isAdminLoading, setIsAdminLoading] = useState(false);
+        const [isAdminProcessing, setIsAdminProcessing] = useState(false);
+
+        const tokenRef = useRef(token);
+
+        const storeQueryValue = useMemo(() => {
+          const identifier = getStoreIdentifier(selectedStore);
+          return identifier ? `?store=${encodeURIComponent(identifier)}` : '';
+        }, [selectedStore]);
+
+        const handleAdminLogout = useCallback(
+          (message = '') => {
+            setAdminKey('');
+            storage.remove(STORAGE_KEYS.adminKey);
+            setAdminUsers([]);
+            setSelectedAdminUserId(null);
+            setIsAdminLoading(false);
+            setIsAdminProcessing(false);
+            setAdminMessage('');
+            setAdminError(message);
+          },
+          []
+        );
+
+        const handleLogout = useCallback(
+          (message = '') => {
+            storage.clearSession();
+            setToken(null);
+            setUserRole('');
+            setProfile(null);
+            setStores([]);
+            setSelectedStore(null);
+            setSales([]);
+            setSalesSummary(null);
+            setTopItems([]);
+            setStoreMeta(null);
+            setSalesBreakdowns({ hourly: [], payment: [], payment_methods: [], categories: [] });
+            setPurchaseOrders([]);
+            setInventorySnapshot(null);
+            setSalesHistory([]);
+            setSyncLogs([]);
+            tokenRef.current = null;
+            setAuthError(message);
+            setIsAuthenticating(false);
+            setIsLoadingData(false);
+            setActiveModule('sales');
+            handleAdminLogout('');
+          },
+          [handleAdminLogout]
+        );
+
+        useEffect(() => {
+          tokenRef.current = token;
+          if (token) {
+            storage.set(STORAGE_KEYS.token, token);
+          } else {
+            storage.remove(STORAGE_KEYS.token);
+          }
+        }, [token]);
+
+        useEffect(() => {
+          if (profile && (profile.email || profile.full_name)) {
+            storage.set(STORAGE_KEYS.profile, profile);
+          } else {
+            storage.remove(STORAGE_KEYS.profile);
+          }
+        }, [profile]);
+
+        useEffect(() => {
+          if (!token) {
+            return;
+          }
+
+          const payload = decodeTokenPayload(token);
+          if (!payload) {
+            return;
+          }
+
+          if (!userRole && payload.role) {
+            setUserRole(payload.role);
+          }
+
+          if (!profile?.email || (!profile?.full_name && payload.full_name)) {
+            setProfile((prev) => {
+              const next = prev ? { ...prev } : {};
+              let changed = false;
+              if (!next.email && payload.email) {
+                next.email = payload.email;
+                changed = true;
+              }
+              if (!next.full_name && payload.full_name) {
+                next.full_name = payload.full_name;
+                changed = true;
+              }
+              return changed ? next : prev;
+            });
+          }
+        }, [token, userRole, profile]);
+
+        useEffect(() => {
+          if (userRole) {
+            storage.set(STORAGE_KEYS.role, userRole);
+          } else {
+            storage.remove(STORAGE_KEYS.role);
+          }
+        }, [userRole]);
+
+        useEffect(() => {
+          if (stores?.length) {
+            storage.set(STORAGE_KEYS.stores, stores);
+          } else {
+            storage.remove(STORAGE_KEYS.stores);
+          }
+        }, [stores]);
+
+        useEffect(() => {
+          if (!stores?.length) return;
+          if (!selectedStore) {
+            setSelectedStore(stores[0]);
+            return;
+          }
+
+          const identifier = getStoreIdentifier(selectedStore);
+          const match = stores.find((store) => getStoreIdentifier(store) === identifier);
+
+          if (!match) {
+            setSelectedStore(stores[0]);
+            return;
+          }
+
+          if (match !== selectedStore) {
+            setSelectedStore(match);
+          }
+        }, [stores, selectedStore]);
+
+        useEffect(() => {
+          if (selectedStore) {
+            storage.set(STORAGE_KEYS.selectedStore, selectedStore);
+          } else {
+            storage.remove(STORAGE_KEYS.selectedStore);
+          }
+        }, [selectedStore]);
+
+        useEffect(() => {
+          if (adminKey && userRole === 'admin') {
+            storage.set(STORAGE_KEYS.adminKey, adminKey);
+          } else {
+            storage.remove(STORAGE_KEYS.adminKey);
+          }
+        }, [adminKey, userRole]);
+
+        useEffect(() => {
+          if (userRole !== 'admin' && adminKey) {
+            handleAdminLogout();
+          }
+        }, [userRole, adminKey, handleAdminLogout]);
+
+        useEffect(() => {
+          if (!stores?.length) {
+            if (selectedStore) {
+              setSelectedStore(null);
+            }
+            return;
+          }
+
+          if (!selectedStore) {
+            setSelectedStore(stores[0]);
+            return;
+          }
+
+          const identifier = getStoreIdentifier(selectedStore);
+          const match = stores.find((store) => getStoreIdentifier(store) === identifier);
+          if (!match) {
+            setSelectedStore(stores[0]);
+          } else if (match !== selectedStore) {
+            setSelectedStore(match);
+          }
+        }, [stores, selectedStore]);
+
+        const fetchSales = async (authToken, query) => {
+          const response = await fetch(`${API_BASE}/insights/sales${query}`, {
+            headers: { Authorization: `Bearer ${authToken}` },
+          });
+          let payload = {};
+          try {
+            payload = await response.json();
+          } catch (error) {
+            payload = {};
+          }
+          if (!response.ok) {
+            const requestError = new Error(payload.detail || 'Unable to load sales data');
+            requestError.status = response.status;
+            throw requestError;
+          }
+          return {
+            sales: payload.sales || [],
+            summary: payload.summary || null,
+            topItems: payload.top_items || [],
+            store: payload.store || null,
+            breakdowns: payload.breakdowns || {},
+            purchaseOrders: payload.purchase_orders || [],
+            inventory: payload.inventory || null,
+            history: payload.sales_history || [],
+          };
+        };
+
+        const fetchSyncLogs = async (authToken, query) => {
+          const response = await fetch(`${API_BASE}/sync/status${query}`, {
+            headers: { Authorization: `Bearer ${authToken}` },
+          });
+          let payload = {};
+          try {
+            payload = await response.json();
+          } catch (error) {
+            payload = {};
+          }
+          if (!response.ok) {
+            const requestError = new Error(payload.detail || 'Unable to load sync data');
+            requestError.status = response.status;
+            throw requestError;
+          }
+          return payload.logs || [];
+        };
+
+        const loadInsights = async (authToken, query) => {
+          if (!authToken) return;
+          setIsLoadingData(true);
+          try {
+            const [salesPayload, syncData] = await Promise.all([
+              fetchSales(authToken, query),
+              fetchSyncLogs(authToken, query),
+            ]);
+            if (authToken !== tokenRef.current) {
+              return;
+            }
+            setSales(salesPayload.sales || []);
+            setSalesSummary(salesPayload.summary || null);
+            setTopItems(salesPayload.topItems || []);
+            setStoreMeta(salesPayload.store || null);
+            setSalesBreakdowns({
+              hourly: salesPayload.breakdowns?.hourly || [],
+              payment: salesPayload.breakdowns?.payment_methods || [],
+              payment_methods: salesPayload.breakdowns?.payment_methods || [],
+              categories: salesPayload.breakdowns?.categories || [],
+            });
+            setPurchaseOrders(salesPayload.purchaseOrders || []);
+            setInventorySnapshot(salesPayload.inventory || null);
+            setSalesHistory(salesPayload.history || []);
+            setSyncLogs(syncData);
+            setAuthError('');
+          } catch (error) {
+            console.error(error);
+            setSales([]);
+            setSalesSummary(null);
+            setTopItems([]);
+            setStoreMeta(null);
+            if (error.status === 401) {
+              handleLogout('Session expired. Please sign in again.');
+              return;
+            }
+            setAuthError(error.message || 'Unable to load dashboard data');
+          } finally {
+            setIsLoadingData(false);
+          }
+        };
+
+        useEffect(() => {
+          if (!token || userRole === 'admin') return;
+          if (stores.length > 1 && !selectedStore) return;
+          loadInsights(token, storeQueryValue);
+        }, [token, storeQueryValue, stores, selectedStore, userRole]);
+
+        const loadAdminUsers = useCallback(
+          async (key) => {
+            if (!key) {
+              setAdminUsers([]);
+              setSelectedAdminUserId(null);
+              return [];
+            }
+            setIsAdminLoading(true);
+            try {
+              const response = await fetch(`${API_BASE}/admin/users`, {
+                headers: { 'X-Admin-Key': key },
+              });
+              let data = {};
+              try {
+                data = await response.json();
+              } catch (error) {
+                data = {};
+              }
+              if (!response.ok) {
+                const requestError = new Error(data.detail || 'Unable to load admin data');
+                requestError.status = response.status;
+                throw requestError;
+              }
+              const users = data.users || [];
+              setAdminUsers(users);
+              if (!users.length) {
+                setSelectedAdminUserId(null);
+              } else if (
+                !selectedAdminUserId ||
+                !users.some((user) => user.id === selectedAdminUserId)
+              ) {
+                setSelectedAdminUserId(users[0].id);
+              }
+              return users;
+            } catch (error) {
+              setAdminUsers([]);
+              setSelectedAdminUserId(null);
+              throw error;
+            } finally {
+              setIsAdminLoading(false);
+            }
+          },
+          [selectedAdminUserId]
+        );
+
+        const handleAdminRefresh = useCallback(() => {
+          if (!adminKey || userRole !== 'admin') return;
+          setAdminError('');
+          loadAdminUsers(adminKey).catch((error) => {
+            if (error.status === 401) {
+              handleAdminLogout('Admin key rejected. Please sign in again.');
+            } else {
+              setAdminError(error.message || 'Unable to refresh admin data');
+            }
+          });
+        }, [adminKey, loadAdminUsers, handleAdminLogout, userRole]);
+
+        useEffect(() => {
+          if (!adminKey || userRole !== 'admin') return;
+          setAdminError('');
+          loadAdminUsers(adminKey).catch((error) => {
+            if (error.status === 401) {
+              handleAdminLogout('Admin key rejected. Please sign in again.');
+            } else {
+              setAdminError(error.message || 'Unable to load admin data');
+            }
+          });
+        }, [adminKey, userRole, loadAdminUsers, handleAdminLogout]);
+
+        const handleAdminCreateUser = useCallback(
+          async (payload) => {
+            if (!adminKey) {
+              setAdminError('Admin session not active');
+              return false;
+            }
+            setIsAdminProcessing(true);
+            setAdminError('');
+            setAdminMessage('');
+            try {
+              const response = await fetch(`${API_BASE}/admin/users`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-Admin-Key': adminKey,
+                },
+                body: JSON.stringify(payload),
+              });
+              let data = {};
+              try {
+                data = await response.json();
+              } catch (error) {
+                data = {};
+              }
+              if (!response.ok) {
+                const requestError = new Error(data.detail || 'Failed to create user');
+                requestError.status = response.status;
+                throw requestError;
+              }
+              const users = await loadAdminUsers(adminKey);
+              const newUser = users.find((user) => user.id === data.id);
+              if (newUser) {
+                setSelectedAdminUserId(newUser.id);
+              }
+              setAdminMessage('User created successfully');
+              return true;
+            } catch (error) {
+              if (error.status === 401) {
+                handleAdminLogout('Admin session expired. Please sign in again.');
+              } else {
+                setAdminError(error.message || 'Failed to create user');
+              }
+              return false;
+            } finally {
+              setIsAdminProcessing(false);
+            }
+          },
+          [adminKey, loadAdminUsers, handleAdminLogout]
+        );
+
+        const handleAdminAddStore = useCallback(
+          async (userId, payload) => {
+            if (!adminKey) {
+              setAdminError('Admin session not active');
+              return false;
+            }
+            setIsAdminProcessing(true);
+            setAdminError('');
+            setAdminMessage('');
+            try {
+              const response = await fetch(`${API_BASE}/admin/users/${userId}/stores`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-Admin-Key': adminKey,
+                },
+                body: JSON.stringify(payload),
+              });
+              let data = {};
+              try {
+                data = await response.json();
+              } catch (error) {
+                data = {};
+              }
+              if (!response.ok) {
+                const requestError = new Error(data.detail || 'Failed to add store');
+                requestError.status = response.status;
+                throw requestError;
+              }
+              await loadAdminUsers(adminKey);
+              setSelectedAdminUserId(userId);
+              setAdminMessage('Store added successfully');
+              return true;
+            } catch (error) {
+              if (error.status === 401) {
+                handleAdminLogout('Admin session expired. Please sign in again.');
+              } else {
+                setAdminError(error.message || 'Failed to add store');
+              }
+              return false;
+            } finally {
+              setIsAdminProcessing(false);
+            }
+          },
+          [adminKey, loadAdminUsers, handleAdminLogout]
+        );
+
+        const handleAdminRemoveStore = useCallback(
+          async (userId, identifier) => {
+            if (!adminKey) {
+              setAdminError('Admin session not active');
+              return;
+            }
+            setIsAdminProcessing(true);
+            setAdminError('');
+            setAdminMessage('');
+            try {
+              const response = await fetch(
+                `${API_BASE}/admin/users/${userId}/stores/${encodeURIComponent(identifier)}`,
+                {
+                  method: 'DELETE',
+                  headers: {
+                    'X-Admin-Key': adminKey,
+                  },
+                }
+              );
+              let data = {};
+              try {
+                data = await response.json();
+              } catch (error) {
+                data = {};
+              }
+              if (!response.ok) {
+                const requestError = new Error(data.detail || 'Failed to remove store');
+                requestError.status = response.status;
+                throw requestError;
+              }
+              await loadAdminUsers(adminKey);
+              setSelectedAdminUserId(userId);
+              setAdminMessage('Store removed successfully');
+            } catch (error) {
+              if (error.status === 401) {
+                handleAdminLogout('Admin session expired. Please sign in again.');
+              } else {
+                setAdminError(error.message || 'Failed to remove store');
+              }
+            } finally {
+              setIsAdminProcessing(false);
+            }
+          },
+          [adminKey, loadAdminUsers, handleAdminLogout]
+        );
+
+        const handleLogin = async ({ email, password }) => {
+          setIsAuthenticating(true);
+          setAuthError('');
+          setAdminError('');
+          setAdminMessage('');
+          try {
+            const response = await fetch(`${API_BASE}/auth/login`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, password }),
+            });
+
+            let data = {};
+            try {
+              data = await response.json();
+            } catch (error) {
+              data = {};
+            }
+            if (!response.ok) {
+              throw new Error(data.detail || 'Login failed');
+            }
+
+            const nextRole = data.role || 'owner';
+            const isAdminAccount = nextRole === 'admin';
+            const nextStores = Array.isArray(data.stores) ? data.stores : [];
+            const receivedKey = data.admin_key || '';
+
+            setToken(data.token);
+            setUserRole(nextRole);
+            setProfile((prev) => ({
+              email: data.email || prev?.email || email,
+              full_name: data.full_name || prev?.full_name || '',
+            }));
+
+            if (isAdminAccount) {
+              setStores([]);
+              setSelectedStore(null);
+              setSales([]);
+              setSalesSummary(null);
+              setTopItems([]);
+              setStoreMeta(null);
+            setSalesBreakdowns({ hourly: [], payment: [], payment_methods: [], categories: [] });
+              setPurchaseOrders([]);
+              setInventorySnapshot(null);
+              setSalesHistory([]);
+              setSyncLogs([]);
+              setAdminUsers([]);
+              setSelectedAdminUserId(null);
+              setAdminMessage('');
+              setAdminKey(receivedKey);
+              if (!receivedKey) {
+                setAdminError('Admin tools are unavailable because ADMIN_API_KEY is not configured on the server.');
+              } else {
+                setAdminError('');
+              }
+              setActiveModule('sales');
+            } else {
+              setStores(nextStores);
+              setSelectedStore(nextStores[0] || null);
+              setAdminKey('');
+              setAdminUsers([]);
+              setSelectedAdminUserId(null);
+              setSales([]);
+              setSalesSummary(null);
+              setTopItems([]);
+              setStoreMeta(null);
+              setSalesBreakdowns({ hourly: [], payment: [], payment_methods: [], categories: [] });
+              setPurchaseOrders([]);
+              setInventorySnapshot(null);
+              setSalesHistory([]);
+              setSyncLogs([]);
+              setActiveModule('sales');
+            }
+
+            setIsLoadingData(false);
+            setAuthError('');
+          } catch (error) {
+            setAuthError(error.message);
+          } finally {
+            setIsAuthenticating(false);
+          }
+        };
+
+        const refresh = () => {
+          if (token && userRole !== 'admin') {
+            loadInsights(token, storeQueryValue);
+          }
+        };
+
+        if (!token) {
+          return (
+            <div className="login-layout">
+              <div className="login-card">
+                <h1>Store Insights</h1>
+                <p>Sign in to view your performance dashboard.</p>
+                <LoginForm onSubmit={handleLogin} isLoading={isAuthenticating} error={authError} />
+              </div>
+            </div>
+          );
+        }
+
+        const handleStoreChange = (nextStore) => {
+          setSelectedStore(nextStore || null);
+        };
+
+        const mainContent = userRole === 'admin'
+          ? (
+              <div className="admin-layout">
+                <AdminView
+                  hasKey={Boolean(adminKey)}
+                  users={adminUsers}
+                  selectedUserId={selectedAdminUserId}
+                  onSelectUser={setSelectedAdminUserId}
+                  onRefresh={handleAdminRefresh}
+                  onCreateUser={handleAdminCreateUser}
+                  onAddStore={handleAdminAddStore}
+                  onRemoveStore={handleAdminRemoveStore}
+                  isLoading={isAdminLoading}
+                  isProcessing={isAdminProcessing}
+                  error={adminError}
+                  message={adminMessage}
+                />
+              </div>
+            )
+          : (
+              <Dashboard
+                stores={stores}
+                selectedStore={selectedStore}
+                storeInfo={storeMeta}
+                sales={sales}
+                summary={salesSummary}
+                topItems={topItems}
+                breakdowns={salesBreakdowns}
+                syncLogs={syncLogs}
+                purchaseOrders={purchaseOrders}
+                inventory={inventorySnapshot}
+                history={salesHistory}
+                onStoreChange={handleStoreChange}
+                onRefresh={refresh}
+                activeModule={activeModule}
+                onModuleChange={setActiveModule}
+                loading={isLoadingData}
+                error={authError}
+              />
+            );
+
+        return (
+          <div className="app-shell">
+            <HeaderBar
+              profile={profile}
+              stores={userRole === 'admin' ? [] : stores}
+              selectedStore={userRole === 'admin' ? null : selectedStore}
+              onStoreChange={handleStoreChange}
+              onLogout={() => handleLogout('')}
+            />
+            {mainContent}
+          </div>
+        );
+      };
+
+      ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+  </body>
 </html>

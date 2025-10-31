@@ -57,30 +57,76 @@ def get_sales_insights(
         print(f"📅 Filtering from: {seven_days_ago}")
 
         with engine.connect() as conn:
-            result = conn.execute(text("""
-                SELECT SALE
-                FROM jnl
-                WHERE RFLAG = 0 AND DATE >= :seven_days_ago
-                GROUP BY SALE                
-            """), {"seven_days_ago": seven_days_ago}).mappings()
+            columns = _resolve_jnl_columns(conn, db_name)
 
-            valid_sales = [row["SALE"] for row in result]
+            sale_column = _quote_identifier(columns["sale"])
+            date_column = _quote_identifier(columns["date"])
+            sku_column = _quote_identifier(columns["sku"])
+            qty_column = _quote_identifier(columns["qty"])
+            price_column = _quote_identifier(columns["price"])
+            rflag_column = _quote_identifier(columns["rflag"]) if columns.get("rflag") else None
+            description_column = (
+                _quote_identifier(columns["description"]) if columns.get("description") else "''"
+            )
+            pack_column = _quote_identifier(columns["pack"]) if columns.get("pack") else None
+            time_column = _quote_identifier(columns["time"]) if columns.get("time") else None
+            payment_column = (
+                _quote_identifier(columns["payment_type"]) if columns.get("payment_type") else None
+            )
+            category_column = (
+                _quote_identifier(columns["category"]) if columns.get("category") else None
+            )
+
+            where_clauses = [f"{date_column} >= :seven_days_ago"]
+            if rflag_column:
+                where_clauses.append(f"{rflag_column} = 0")
+
+            sales_sql = f"""
+                SELECT {sale_column} AS sale_id
+                FROM jnl
+                WHERE {' AND '.join(where_clauses)}
+                GROUP BY {sale_column}
+            """
+
+            result = conn.execute(text(sales_sql), {"seven_days_ago": seven_days_ago}).mappings()
+
+            valid_sales = [row["sale_id"] for row in result]
             print(f"✅ Valid sales with tender lines: {len(valid_sales)} found")
 
             if not valid_sales:
                 return {"store": {"store_db": db_name, "store_id": selected_store.get("store_id")}, "sales": []}
 
-            items = conn.execute(text("""
-                SELECT DATE, SKU, DESCRIPTION, PACK, QTY, PRICE
+            items_sql = text(
+                f"""
+                SELECT {', '.join(select_fields)}
                 FROM jnl
-                WHERE SALE IN :sales AND SKU > 0
-            """), {"sales": tuple(valid_sales)}).mappings()
+                WHERE {sale_column} IN :sales AND {sku_column} > 0
+                """
+            ).bindparams(bindparam("sales", expanding=True))
 
-            sales_summary = {}
+            items = conn.execute(items_sql, {"sales": tuple(valid_sales)}).mappings()
+
+            sales_summary: Dict[str, Dict[str, float]] = {}
+            sku_summary: Dict[str, Dict[str, Any]] = {}
+            hourly_totals: Dict[int, float] = defaultdict(float)
+            payment_totals: Dict[str, float] = defaultdict(float)
+            category_totals: Dict[str, float] = defaultdict(float)
+            total_sales_value = 0.0
+            total_items_value = 0.0
 
             for row in items:
-                date_str = row["DATE"].strftime('%Y-%m-%d')
-                qty = row["PACK"] * row["QTY"]
+                date_value = row.get("sale_date")
+                if isinstance(date_value, datetime):
+                    date_str = date_value.strftime('%Y-%m-%d')
+                elif isinstance(date_value, date_type):
+                    date_str = date_value.strftime('%Y-%m-%d')
+                else:
+                    date_str = str(date_value)
+
+                pack_value = _coerce_number(row.get("pack"), default=1.0)
+                qty_value = _coerce_number(row.get("quantity"), default=0.0)
+                price_value = _coerce_number(row.get("price"), default=0.0)
+                qty = pack_value * qty_value
 
                 if date_str not in sales_summary:
                     sales_summary[date_str] = {
@@ -89,11 +135,104 @@ def get_sales_insights(
                     }
 
                 sales_summary[date_str]["total_items_sold"] += qty
-                sales_summary[date_str]["total_sales"] += row["PRICE"]
+                sales_summary[date_str]["total_sales"] += price_value
 
-                print(f"🧾 {date_str} | SKU: {row['SKU']} | {row['DESCRIPTION']} | Qty: {qty} | Price: {row['PRICE']}")
+                total_items_value += qty
+                total_sales_value += price_value
+
+                sale_time_value = row.get("sale_time")
+                hour_from_time = _extract_hour(sale_time_value)
+                if hour_from_time is None:
+                    hour_from_time = _extract_hour(date_value)
+                if hour_from_time is not None:
+                    hourly_totals[hour_from_time] += price_value
+
+                payment_label = row.get("payment_method")
+                if payment_label is not None:
+                    method_key = str(payment_label).strip() or "Unspecified"
+                    payment_totals[method_key] += price_value
+
+                category_label = row.get("category_label")
+                if category_label is not None:
+                    category_key = str(category_label).strip() or "Uncategorized"
+                    category_totals[category_key] += price_value
+
+                sku_key_raw = row.get("sku")
+                sku_key = str(sku_key_raw) if sku_key_raw is not None else ""
+                if sku_key:
+                    sku_entry = sku_summary.setdefault(
+                        sku_key,
+                        {
+                            "sku": sku_key,
+                            "description": "",
+                            "total_items_sold": 0.0,
+                            "total_sales": 0.0,
+                        },
+                    )
+                    sku_entry["total_items_sold"] += qty
+                    sku_entry["total_sales"] += price_value
+
+                    if not sku_entry["description"]:
+                        description_value = row.get("description")
+                        if description_value is not None:
+                            sku_entry["description"] = str(description_value)
+
+                description_value = row.get("description")
+                print(
+                    "🧾 "
+                    f"{date_str} | SKU: {row.get('sku')} | "
+                    f"{description_value if description_value is not None else ''} | "
+                    f"Qty: {qty} | Price: {price_value}"
+                )
 
             # Format response
+            days_captured = len(sales_summary)
+            average_daily_sales = round(total_sales_value / days_captured, 2) if days_captured else 0.0
+
+            top_items = sorted(
+                (
+                    {
+                        "sku": item["sku"],
+                        "description": item["description"],
+                        "total_items_sold": round(item["total_items_sold"], 2),
+                        "total_sales": round(item["total_sales"], 2),
+                    }
+                    for item in sku_summary.values()
+                ),
+                key=lambda item: item["total_sales"],
+                reverse=True,
+            )[:10]
+
+            hourly_breakdown = [
+                {
+                    "hour": f"{hour:02d}:00",
+                    "total_sales": round(amount, 2),
+                }
+                for hour, amount in sorted(hourly_totals.items())
+            ]
+
+            payment_breakdown = []
+            if total_sales_value and payment_totals:
+                payment_breakdown = [
+                    {
+                        "method": label,
+                        "total_sales": round(amount, 2),
+                        "percentage": round((amount / total_sales_value) * 100, 2),
+                    }
+                    for label, amount in sorted(payment_totals.items(), key=lambda item: item[1], reverse=True)
+                ]
+
+            category_breakdown = []
+            if total_sales_value and category_totals:
+                category_breakdown = [
+                    {
+                        "category": label,
+                        "total_sales": round(amount, 2),
+                        "percentage": round((amount / total_sales_value) * 100, 2),
+                    }
+                    for label, amount in sorted(category_totals.items(), key=lambda item: item[1], reverse=True)
+                ]
+
             return {
                 "store": {
                     "store_db": db_name,
@@ -104,10 +243,25 @@ def get_sales_insights(
                     {
                         "date": date,
                         "total_items_sold": summary["total_items_sold"],
-                        "total_sales": round(summary["total_sales"], 2)
+                        "total_sales": round(summary["total_sales"], 2),
                     }
                     for date, summary in sorted(sales_summary.items(), reverse=True)
-                ]
+                ],
+                "summary": {
+                    "gross_sales": round(total_sales_value, 2),
+                    "total_items": round(total_items_value, 2),
+                    "days_captured": days_captured,
+                    "average_daily_sales": average_daily_sales,
+                },
+                "top_items": top_items,
+                "breakdowns": {
+                    "hourly": hourly_breakdown,
+                    "payment_methods": payment_breakdown,
+                    "categories": category_breakdown,
+                },
+                "purchase_orders": [],
+                "inventory": None,
+                "sales_history": [],
             }
 
     except Exception as e:

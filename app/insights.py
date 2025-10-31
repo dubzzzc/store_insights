@@ -3,7 +3,11 @@ from app.auth import get_auth_user
 from sqlalchemy import create_engine, text
 from typing import Optional, Dict, Any, List
 
-router = APIRouter()
+This module re-exports the sales insights router that dynamically adapts to
+Visual FoxPro schema differences (for example, DESCRIPTION vs DESCRIPT).  The
+main application continues to import the router from ``app.insights`` so we keep
+that import path stable.
+"""
 
 def _select_store(user: dict, requested_store: Optional[str]) -> Dict[str, Any]:
     stores: List[Dict[str, Any]] = user.get("stores") or []
