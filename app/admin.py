@@ -97,6 +97,107 @@ class RotateApiKeyResponse(BaseModel):
     api_key: str
 
 
+class ProvisionStoreRequest(BaseModel):
+    store_db: str = Field(..., description="New or existing DB name to ensure")
+    db_user: str = Field(..., description="Database user to (create and) grant access")
+    db_pass: str = Field(..., description="Password for the database user")
+    store_name: Optional[str] = Field(None, description="Optional label; not persisted here")
+
+
+class ProvisionStoreResponse(BaseModel):
+    success: bool
+    created_database: bool
+    ensured_user: bool
+    granted_privileges: bool
+    message: Optional[str] = None
+
+
+def _validate_identifier(value: str, kind: str) -> None:
+    import re
+    if not value or not re.fullmatch(r"[A-Za-z0-9_]+", value):
+        raise HTTPException(status_code=400, detail=f"Invalid {kind}. Use letters, numbers, underscore only.")
+
+
+@router.post("/stores/provision", response_model=ProvisionStoreResponse)
+def provision_store(payload: ProvisionStoreRequest, _: None = Depends(_require_admin)):
+    """Create the tenant database if missing, ensure user exists, and grant SELECT privileges.
+
+    Requires env: STORE_RDS_HOST, STORE_RDS_ADMIN_USER, STORE_RDS_ADMIN_PASS, optional STORE_RDS_PORT.
+    """
+    host = os.getenv("STORE_RDS_HOST")
+    admin_user = os.getenv("STORE_RDS_ADMIN_USER")
+    admin_pass = os.getenv("STORE_RDS_ADMIN_PASS")
+    port = int(os.getenv("STORE_RDS_PORT", "3306"))
+    if not host or not admin_user or not admin_pass:
+        raise HTTPException(status_code=500, detail="Server missing STORE_RDS_* admin configuration")
+
+    # Basic validation to avoid SQL injection on identifiers
+    _validate_identifier(payload.store_db, "store_db")
+    _validate_identifier(payload.db_user, "db_user")
+
+    created_db = False
+    ensured_user = False
+    granted = False
+
+    try:
+        admin_conn = mysql.connector.connect(host=host, port=port, user=admin_user, password=admin_pass)
+        admin_cur = admin_conn.cursor()
+        try:
+            # Create DB if missing
+            admin_cur.execute(f"CREATE DATABASE IF NOT EXISTS `{payload.store_db}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
+            admin_conn.commit()
+            # Detect if it was created: query information_schema
+            admin_cur.execute(
+                """
+                SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME = %s
+                """,
+                (payload.store_db,),
+            )
+            if admin_cur.fetchone():
+                created_db = True  # indicates now exists; not strictly new vs existing
+
+            # Ensure user exists
+            try:
+                admin_cur.execute("CREATE USER IF NOT EXISTS %s@'%%' IDENTIFIED BY %s", (payload.db_user, payload.db_pass))
+                ensured_user = True
+            except mysql.connector.Error as err:
+                # Older MySQL may not support IF NOT EXISTS; try create and ignore duplicate
+                if err.errno == errorcode.ER_PARSE_ERROR:
+                    try:
+                        admin_cur.execute("CREATE USER %s@'%%' IDENTIFIED BY %s", (payload.db_user, payload.db_pass))
+                        ensured_user = True
+                    except mysql.connector.Error as err2:
+                        if err2.errno == errorcode.ER_CANNOT_USER:  # e.g., user exists
+                            ensured_user = True
+                        else:
+                            raise
+                elif err.errno == errorcode.ER_CANNOT_USER:
+                    ensured_user = True
+                else:
+                    raise
+
+            # Grant privileges
+            # Use two-step to avoid IDENTIFIED BY in GRANT (deprecated)
+            admin_cur.execute(f"GRANT SELECT ON `{payload.store_db}`.* TO %s@'%'", (payload.db_user,))
+            admin_cur.execute("FLUSH PRIVILEGES")
+            admin_conn.commit()
+            granted = True
+        finally:
+            try:
+                admin_cur.close(); admin_conn.close()
+            except Exception:
+                pass
+    except mysql.connector.Error as err:
+        raise HTTPException(status_code=500, detail=f"Provisioning failed: {err}")
+
+    return ProvisionStoreResponse(
+        success=True,
+        created_database=created_db,
+        ensured_user=ensured_user,
+        granted_privileges=granted,
+        message="Provisioned successfully",
+    )
+
 @router.post("/users", response_model=CreateUserResponse, status_code=status.HTTP_201_CREATED)
 def create_user(payload: CreateUserRequest, _: None = Depends(_require_admin)):
     conn = get_core_connection()
