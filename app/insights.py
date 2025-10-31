@@ -241,7 +241,7 @@ def get_sales_insights(
             where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
             sql = f"""
-                SELECT
+                SELECT 
                     DATE(`{date_col}`) AS date,
                     {qty_expr} AS total_items_sold,
                     {amount_expr} AS total_sales
@@ -469,33 +469,48 @@ def get_sales_insights(
                     for r in rows
                 ]
 
-            # Purchase orders status counts from poh (fallback pod)
+            # Purchase orders: count by status with date filters
+            # Status 4 and 6 filter on rcvdate; status 8 filters on orddate. Sum counts across poh/pod if both exist.
             purchase_orders: List[Dict[str, Any]] = []
-            if _table_exists(conn, db_name, "poh"):
-                poh_cols = _get_columns(conn, db_name, "poh")
-                poh_status = _pick_column(poh_cols, ["status", "stat"]) or "status"
-                poh_date = _pick_column(poh_cols, ["date", "pdate", "created_at"]) or "date"
-                where_parts = ["1=1"]
-                params6: Dict[str, Any] = {}
-                if start:
-                    where_parts.append(f"DATE(`{poh_date}`) >= :po_start")
-                    params6["po_start"] = start
-                if end:
-                    where_parts.append(f"DATE(`{poh_date}`) <= :po_end")
-                    params6["po_end"] = end
-                count_sql = f"""
-                    SELECT `{poh_status}` AS status, COUNT(*) AS count
-                    FROM poh
-                    WHERE {' AND '.join(where_parts)} AND `{poh_status}` IN (4,6,8)
-                    GROUP BY `{poh_status}`
-                """
-                rows = conn.execute(text(count_sql), params6).mappings()
-                status_map = {4: "posted", 6: "received", 8: "open"}
-                for r in rows:
-                    purchase_orders.append({
-                        "status": status_map.get(int(r["status"]), str(r["status"])),
-                        "order_count": int(r["count"] or 0),
-                    })
+            def _po_counts_for_table(table: str) -> Dict[int, int]:
+                if not _table_exists(conn, db_name, table):
+                    return {}
+                cols = _get_columns(conn, db_name, table)
+                status_col = _pick_column(cols, ["status", "stat"]) or "status"
+                rcv_col = _pick_column(cols, ["rcvdate", "received_date", "rcv_date"]) or None
+                ord_col = _pick_column(cols, ["orddate", "order_date"]) or None
+                counts: Dict[int, int] = {}
+                # Helper to run count with optional date column
+                def run_count(status_val: int, date_col: Optional[str]) -> int:
+                    where_parts = [f"`{status_col}` = :s"]
+                    params: Dict[str, Any] = {"s": status_val}
+                    if date_col and start:
+                        where_parts.append(f"DATE(`{date_col}`) >= :ds")
+                        params["ds"] = start
+                    if date_col and end:
+                        where_parts.append(f"DATE(`{date_col}`) <= :de")
+                        params["de"] = end
+                    sql = f"SELECT COUNT(*) AS c FROM {table} WHERE {' AND '.join(where_parts)}"
+                    row = conn.execute(text(sql), params).mappings().first()
+                    return int((row or {}).get("c", 0) or 0)
+                # 4=posted, 6=received use rcvdate
+                counts[4] = run_count(4, rcv_col)
+                counts[6] = run_count(6, rcv_col)
+                # 8=open uses orddate
+                counts[8] = run_count(8, ord_col)
+                return counts
+
+            total_counts: Dict[int, int] = {4: 0, 6: 0, 8: 0}
+            for table in ("poh", "pod"):
+                for k, v in _po_counts_for_table(table).items():
+                    total_counts[k] = total_counts.get(k, 0) + v
+
+            status_map = {4: "posted", 6: "received", 8: "open"}
+            for code in (4, 6, 8):
+                purchase_orders.append({
+                    "status": status_map[code],
+                    "order_count": int(total_counts.get(code, 0)),
+                })
 
             # Inventory value via inv lcost/acost * onhand
             inventory = None
