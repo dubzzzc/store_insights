@@ -1589,7 +1589,7 @@
 
 
 
-const CreateUserForm = ({ onSubmit, isSubmitting }) => {
+const CreateUserForm = ({ onSubmit, isSubmitting, knownStores = [], onEnsureStore }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -1599,6 +1599,24 @@ const CreateUserForm = ({ onSubmit, isSubmitting }) => {
   const [storePass, setStorePass] = useState('');
   const [storeName, setStoreName] = useState('');
   const [formError, setFormError] = useState('');
+  const [storeSearch, setStoreSearch] = useState('');
+  const suggestions = useMemo(() => {
+    const q = (storeSearch || '').toLowerCase();
+    if (!q) return knownStores;
+    return knownStores.filter((s) =>
+      (s.label || '').toLowerCase().includes(q) || (s.store_db || '').toLowerCase().includes(q)
+    );
+  }, [storeSearch, knownStores]);
+
+  const applySuggestion = (value) => {
+    const choice = knownStores.find(
+      (s) => s.store_db === value || s.label === value
+    );
+    if (choice) {
+      setStoreDb(choice.store_db || '');
+      setStoreName(choice.store_name || choice.label || '');
+    }
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -1648,6 +1666,28 @@ const CreateUserForm = ({ onSubmit, isSubmitting }) => {
     <form className="admin-card" onSubmit={handleSubmit}>
       <h2 className="panel-title">Create user</h2>
       {formError ? <div className="admin-error">{formError}</div> : null}
+      <div className="form-grid">
+        <label>
+          Search stores
+          <input
+            type="text"
+            value={storeSearch}
+            onChange={(e) => setStoreSearch(e.target.value)}
+            list="known-stores-datalist"
+            placeholder="Start typing to search known stores"
+            disabled={isSubmitting}
+            onBlur={(e) => applySuggestion(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') applySuggestion(storeSearch);
+            }}
+          />
+          <datalist id="known-stores-datalist">
+            {suggestions.map((s) => (
+              <option key={s.store_db} value={s.store_db}>{s.label}</option>
+            ))}
+          </datalist>
+        </label>
+      </div>
       <div className="form-grid">
         <label>
           Email
@@ -1732,6 +1772,17 @@ const CreateUserForm = ({ onSubmit, isSubmitting }) => {
         </label>
       </div>
       <div className="inline-actions">
+        <button
+          type="button"
+          className="secondary"
+          disabled={isSubmitting || !storeDb || !storeUser || !storePass}
+          onClick={async () => {
+            if (!onEnsureStore) return;
+            await onEnsureStore({ store_db: storeDb.trim(), db_user: storeUser.trim(), db_pass: storePass });
+          }}
+        >
+          Ensure database exists
+        </button>
         <button type="submit" disabled={isSubmitting}>
           {isSubmitting ? 'Creating…' : 'Create user'}
         </button>
@@ -1875,18 +1926,24 @@ const AdminStoreAccess = ({ users, onRemoveStore, isProcessing }) => {
     return Array.from(unique.values()).sort((a, b) => a.label.localeCompare(b.label));
   }, [users]);
 
-  const stores = collectStores();
+  const allStores = collectStores();
+  const [storeQuery, setStoreQuery] = React.useState('');
+  const stores = React.useMemo(() => {
+    if (!storeQuery) return allStores;
+    const q = storeQuery.toLowerCase();
+    return allStores.filter((s) => s.label.toLowerCase().includes(q) || String(s.id).toLowerCase().includes(q));
+  }, [allStores, storeQuery]);
   const [selectedStoreId, setSelectedStoreId] = React.useState(() => stores[0]?.id || '');
 
   React.useEffect(() => {
-    if (!stores.length) {
+    if (!allStores.length) {
       setSelectedStoreId('');
       return;
     }
-    if (!selectedStoreId || !stores.some((s) => s.id === selectedStoreId)) {
-      setSelectedStoreId(stores[0].id);
+    if (!selectedStoreId || !allStores.some((s) => s.id === selectedStoreId)) {
+      setSelectedStoreId(allStores[0].id);
     }
-  }, [stores, selectedStoreId]);
+  }, [allStores, selectedStoreId]);
 
   const filteredUsers = React.useMemo(() => {
     if (!selectedStoreId) return [];
@@ -1898,11 +1955,20 @@ const AdminStoreAccess = ({ users, onRemoveStore, isProcessing }) => {
   return (
     <section className="admin-card">
       <h2 className="panel-title">Manage access by store</h2>
-      {!stores.length ? (
+      {!allStores.length ? (
         <div className="empty-state">No stores found across users.</div>
       ) : (
         <>
           <div className="form-grid">
+            <label>
+              Search stores
+              <input
+                type="text"
+                value={storeQuery}
+                onChange={(e) => setStoreQuery(e.target.value)}
+                placeholder="Type to filter stores"
+              />
+            </label>
             <label>
               Store
               <select value={selectedStoreId} onChange={(e) => setSelectedStoreId(e.target.value)}>
@@ -1973,12 +2039,32 @@ const AdminPanel = ({
   onCreateUser,
   onAddStore,
   onRemoveStore,
+  onEnsureStore,
   isLoading,
   isProcessing,
   error,
   message,
 }) => {
   const selectedUser = users.find((user) => user.id === selectedUserId) || users[0] || null;
+
+  const knownStores = useMemo(() => {
+    const map = new Map();
+    (users || []).forEach((u) => {
+      (u.stores || []).forEach((s) => {
+        const id = getStoreIdentifier(s) || s.id || s.store_db;
+        if (!id) return;
+        if (!map.has(id)) {
+          map.set(id, {
+            id,
+            label: s.store_name || s.store_db || String(id),
+            store_db: s.store_db || String(id),
+            store_name: s.store_name || undefined,
+          });
+        }
+      });
+    });
+    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [users]);
 
   useEffect(() => {
     if (!selectedUser && users.length) {
@@ -2011,7 +2097,12 @@ const AdminPanel = ({
         ) : (
           <UserList users={users} selectedUserId={selectedUser?.id} onSelectUser={onSelectUser} />
         )}
-        <CreateUserForm onSubmit={onCreateUser} isSubmitting={isProcessing} />
+        <CreateUserForm
+          onSubmit={onCreateUser}
+          isSubmitting={isProcessing}
+          knownStores={knownStores}
+          onEnsureStore={onEnsureStore}
+        />
       </section>
       <section className="admin-card">
         <h2 className="panel-title">Store assignments</h2>
@@ -2053,6 +2144,7 @@ const AdminView = ({
   onCreateUser,
   onAddStore,
   onRemoveStore,
+  onEnsureStore,
   isLoading,
   isProcessing,
   error,
@@ -2079,6 +2171,7 @@ const AdminView = ({
       onCreateUser={onCreateUser}
       onAddStore={onAddStore}
       onRemoveStore={onRemoveStore}
+      onEnsureStore={onEnsureStore}
       isLoading={isLoading}
       isProcessing={isProcessing}
       error={error}
@@ -3235,6 +3328,51 @@ const ModuleNav = ({ active, onChange }) => {
           [adminKey, loadAdminUsers, handleAdminLogout]
         );
 
+        const handleAdminEnsureStore = useCallback(
+          async ({ store_db, db_user, db_pass }) => {
+            if (!adminKey) {
+              setAdminError('Admin session not active');
+              return false;
+            }
+            setIsAdminProcessing(true);
+            setAdminError('');
+            setAdminMessage('');
+            try {
+              const response = await fetch(`${API_BASE}/admin/stores/provision`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-Admin-Key': adminKey,
+                },
+                body: JSON.stringify({ store_db, db_user, db_pass }),
+              });
+              let data = {};
+              try {
+                data = await response.json();
+              } catch (error) {
+                data = {};
+              }
+              if (!response.ok) {
+                const requestError = new Error(data.detail || 'Failed to provision database');
+                requestError.status = response.status;
+                throw requestError;
+              }
+              setAdminMessage('Database ensured successfully');
+              return true;
+            } catch (error) {
+              if (error.status === 401) {
+                handleAdminLogout('Admin session expired. Please sign in again.');
+              } else {
+                setAdminError(error.message || 'Failed to provision database');
+              }
+              return false;
+            } finally {
+              setIsAdminProcessing(false);
+            }
+          },
+          [adminKey, handleAdminLogout]
+        );
+
         const handleAdminAddStore = useCallback(
           async (userId, payload) => {
             if (!adminKey) {
@@ -3445,6 +3583,7 @@ const ModuleNav = ({ active, onChange }) => {
                   onCreateUser={handleAdminCreateUser}
                   onAddStore={handleAdminAddStore}
                   onRemoveStore={handleAdminRemoveStore}
+                  onEnsureStore={handleAdminEnsureStore}
                   isLoading={isAdminLoading}
                   isProcessing={isAdminProcessing}
                   error={adminError}
