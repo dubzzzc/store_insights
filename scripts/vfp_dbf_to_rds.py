@@ -185,7 +185,7 @@ def ensure_password(cfg: dict) -> str:
 
 # --- Only scan these DBFs ---
 ALLOWED_BASES = {
-    "cat","emp","glb","inv","pod","poh","prc","sll","stk","upc","vnd","timeclock","hst"
+    "cat","cus","emp","glb","inv","jnh","jnl","pod","poh","prc","sll","stk","upc","vnd","timeclock","hst"
 }
 
 def is_allowed_dbf(path: str) -> bool:

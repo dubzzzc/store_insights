@@ -485,7 +485,6 @@ def get_sales_insights(
                 poh_id_col = _pick_column(poh_cols, ["id", "po_id", "poh_id", "invno"]) or None
 
                 # Use today's date from the selected date range (or default to today)
-                from datetime import datetime
                 today_str = end if end else datetime.now().strftime('%Y-%m-%d')
 
                 # Group by vendor for today's POs

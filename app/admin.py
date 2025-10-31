@@ -79,6 +79,19 @@ class AdminUsersResponse(BaseModel):
     users: List[AdminUser]
 
 
+# --- New admin helpers for uploader creds management ---
+class UpdateStoreCredsRequest(BaseModel):
+    store_db: Optional[str] = None
+    db_user: Optional[str] = None
+    db_pass: Optional[str] = None
+    store_name: Optional[str] = None
+
+
+class RotateApiKeyResponse(BaseModel):
+    store_db: str
+    api_key: str
+
+
 @router.post("/users", response_model=CreateUserResponse, status_code=status.HTTP_201_CREATED)
 def create_user(payload: CreateUserRequest, _: None = Depends(_require_admin)):
     conn = get_core_connection()
@@ -174,6 +187,98 @@ def create_user(payload: CreateUserRequest, _: None = Depends(_require_admin)):
         cursor.close()
         conn.close()
 
+
+# --- New endpoints: rotate API key and update creds ---
+def _ensure_api_key_column(cursor) -> None:
+    if not _has_column(cursor, "user_stores", "api_key"):
+        # Best-effort: add column if missing
+        try:
+            cursor.execute("ALTER TABLE user_stores ADD COLUMN api_key VARCHAR(255) NULL")
+        except mysql.connector.Error:
+            pass
+
+
+def _random_key(length: int = 48) -> str:
+    import secrets, string
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+@router.post("/stores/{store_db}/api-key/rotate", response_model=RotateApiKeyResponse)
+def rotate_store_api_key(store_db: str, _: None = Depends(_require_admin)):
+    conn = get_core_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        _ensure_api_key_column(cursor)
+        new_key = _random_key()
+        cursor.execute(
+            "UPDATE user_stores SET api_key = %s WHERE store_db = %s",
+            (new_key, store_db),
+        )
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Store not found in user_stores")
+        conn.commit()
+        return RotateApiKeyResponse(store_db=store_db, api_key=new_key)
+    except HTTPException:
+        conn.rollback(); raise
+    except mysql.connector.Error as err:
+        conn.rollback(); raise HTTPException(status_code=500, detail=f"Failed to rotate api key: {err}")
+    finally:
+        cursor.close(); conn.close()
+
+
+@router.put("/stores/{store_db}/creds", response_model=StoreAssignmentResponse)
+def update_store_creds(store_db: str, payload: UpdateStoreCredsRequest, _: None = Depends(_require_admin)):
+    conn = get_core_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT id, store_db, db_user, db_pass, store_name FROM user_stores WHERE store_db = %s",
+            (store_db,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Store not found in user_stores")
+
+        update_cols = []
+        update_vals = []
+        if payload.store_db:
+            update_cols.append("store_db = %s"); update_vals.append(payload.store_db)
+        if payload.db_user:
+            update_cols.append("db_user = %s"); update_vals.append(payload.db_user)
+        if payload.db_pass:
+            update_cols.append("db_pass = %s"); update_vals.append(payload.db_pass)
+        if payload.store_name is not None:
+            update_cols.append("store_name = %s"); update_vals.append(payload.store_name)
+
+        if update_cols:
+            update_vals.append(store_db)
+            cursor.execute(
+                f"UPDATE user_stores SET {', '.join(update_cols)} WHERE store_db = %s",
+                tuple(update_vals),
+            )
+            conn.commit()
+
+        cursor.execute(
+            "SELECT id, store_db, db_user, db_pass, store_name FROM user_stores WHERE store_db = %s",
+            (payload.store_db or store_db,),
+        )
+        out = cursor.fetchone()
+        return StoreAssignmentResponse(
+            store=StoreAssignmentRecord(
+                id=out["id"],
+                store_db=out["store_db"],
+                db_user=out["db_user"],
+                db_pass=out["db_pass"],
+                store_name=out.get("store_name"),
+            )
+        )
+    except HTTPException:
+        conn.rollback(); raise
+    except mysql.connector.Error as err:
+        conn.rollback(); raise HTTPException(status_code=500, detail=f"Failed to update creds: {err}")
+    finally:
+        cursor.close(); conn.close()
 
 def _ensure_user_exists(cursor, user_id: int) -> None:
     cursor.execute("SELECT id FROM users WHERE id = %s", (user_id,))
