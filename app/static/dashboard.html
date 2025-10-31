@@ -2350,13 +2350,27 @@ const PurchaseOrdersModule = ({ orders }) => (
       <h2 className="panel-title">Purchase Orders</h2>
     </div>
     {orders?.length ? (
-      <div className="purchase-list">
-        {orders.map((order) => (
-          <div className="purchase-row" key={`${order.vendor_name}-${order.order_count}`}>
-            <strong>{order.vendor_name || 'Unknown vendor'}</strong>
-            <span>{order.order_count || 0}</span>
-          </div>
-        ))}
+      <div className="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Vendor</th>
+              <th>Status</th>
+              <th>Orders</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {orders.map((order, idx) => (
+              <tr key={`${order.vendor_name || order.vendor_num || idx}-${order.status}-${order.order_count}`}>
+                <td>{order.vendor_name || `Vendor #${order.vendor_num || '—'}`}</td>
+                <td>{order.status || '—'}</td>
+                <td>{order.order_count || 0}</td>
+                <td>{formatCurrency(order.po_total || 0)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     ) : (
       <div className="empty-state">No purchase orders captured for this period.</div>

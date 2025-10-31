@@ -471,48 +471,84 @@ def get_sales_insights(
                     for r in rows
                 ]
 
-            # Purchase orders: count by status with date filters
-            # Status 4 and 6 filter on rcvdate; status 8 filters on orddate. Sum counts across poh/pod if both exist.
+            # Purchase orders: group by vendor with status, total, and vendor name from vnd
+            # Status 4 and 6 filter on rcvdate; status 8 filters on orddate. Aggregate across poh/pod.
             purchase_orders: List[Dict[str, Any]] = []
-            def _po_counts_for_table(table: str) -> Dict[int, int]:
+            for table in ("poh", "pod"):
                 if not _table_exists(conn, db_name, table):
-                    return {}
+                    continue
                 cols = _get_columns(conn, db_name, table)
                 status_col = _pick_column(cols, ["status", "stat"]) or "status"
+                vendor_col = _pick_column(cols, ["vendor", "vcode"]) or "vendor"
+                total_col = _pick_column(cols, ["total"]) or None
                 rcv_col = _pick_column(cols, ["rcvdate", "received_date", "rcv_date"]) or None
                 ord_col = _pick_column(cols, ["orddate", "order_date"]) or None
-                counts: Dict[int, int] = {}
-                # Helper to run count with optional date column
-                def run_count(status_val: int, date_col: Optional[str]) -> int:
-                    where_parts = [f"`{status_col}` = :s"]
-                    params: Dict[str, Any] = {"s": status_val}
-                    if date_col and start:
-                        where_parts.append(f"DATE(`{date_col}`) >= :ds")
-                        params["ds"] = start
-                    if date_col and end:
-                        where_parts.append(f"DATE(`{date_col}`) <= :de")
-                        params["de"] = end
-                    sql = f"SELECT COUNT(*) AS c FROM {table} WHERE {' AND '.join(where_parts)}"
-                    row = conn.execute(text(sql), params).mappings().first()
-                    return int((row or {}).get("c", 0) or 0)
-                # 4=posted, 6=received use rcvdate
-                counts[4] = run_count(4, rcv_col)
-                counts[6] = run_count(6, rcv_col)
-                # 8=open uses orddate
-                counts[8] = run_count(8, ord_col)
-                return counts
 
-            total_counts: Dict[int, int] = {4: 0, 6: 0, 8: 0}
-            for table in ("poh", "pod"):
-                for k, v in _po_counts_for_table(table).items():
-                    total_counts[k] = total_counts.get(k, 0) + v
+                # Build where clause: status in (4,6,8) with date filters
+                where_parts = [f"`{status_col}` IN (4, 6, 8)"]
+                params: Dict[str, Any] = {}
 
-            status_map = {4: "posted", 6: "received", 8: "open"}
-            for code in (4, 6, 8):
-                purchase_orders.append({
-                    "status": status_map[code],
-                    "order_count": int(total_counts.get(code, 0)),
-                })
+                # Date filters: status 4,6 use rcvdate; status 8 uses orddate
+                if start or end:
+                    date_filters = []
+                    if rcv_col and start:
+                        date_filters.append(f"(`{status_col}` IN (4, 6) AND DATE(`{rcv_col}`) >= :rcv_start)")
+                        params["rcv_start"] = start
+                    if rcv_col and end:
+                        date_filters.append(f"(`{status_col}` IN (4, 6) AND DATE(`{rcv_col}`) <= :rcv_end)")
+                        params["rcv_end"] = end
+                    if ord_col and start:
+                        date_filters.append(f"(`{status_col}` = 8 AND DATE(`{ord_col}`) >= :ord_start)")
+                        params["ord_start"] = start
+                    if ord_col and end:
+                        date_filters.append(f"(`{status_col}` = 8 AND DATE(`{ord_col}`) <= :ord_end)")
+                        params["ord_end"] = end
+                    if date_filters:
+                        where_parts.append(f"({' OR '.join(date_filters)})")
+
+                # Join vnd for vendor name
+                vnd_cols = _get_columns(conn, db_name, "vnd") if _table_exists(conn, db_name, "vnd") else []
+                vnd_join_col = _pick_column(vnd_cols, ["vendor", "vcode", "code", "id"]) or "vendor"
+                vnd_name_col = _pick_column(vnd_cols, ["name", "desc", "description", "vname"]) or "name"
+
+                select_parts = [f"`{status_col}` AS status", f"`{vendor_col}` AS vendor_num"]
+                join_part = ""
+                if vnd_cols:
+                    select_parts.append(f"COALESCE(vnd.`{vnd_name_col}`, CONCAT('{table}.', `{vendor_col}`)) AS vendor_name")
+                    join_part = f"LEFT JOIN vnd ON vnd.`{vnd_join_col}` = {table}.`{vendor_col}`"
+                else:
+                    select_parts.append(f"CONCAT('{table}.', `{vendor_col}`) AS vendor_name")
+
+                if total_col:
+                    select_parts.append(f"SUM(`{total_col}`) AS po_total")
+                else:
+                    select_parts.append("0 AS po_total")
+
+                select_parts.append("COUNT(*) AS order_count")
+
+                group_by_cols = f"`{status_col}`, `{vendor_col}`"
+                if vnd_cols:
+                    group_by_cols += f", vnd.`{vnd_name_col}`"
+
+                sql = f"""
+                    SELECT {', '.join(select_parts)}
+                    FROM {table}
+                    {join_part}
+                    WHERE {' AND '.join(where_parts)}
+                    GROUP BY {group_by_cols}
+                    ORDER BY `{status_col}`, order_count DESC
+                """
+
+                rows = conn.execute(text(sql), params).mappings()
+                status_map = {4: "posted", 6: "received", 8: "open"}
+                for r in rows:
+                    purchase_orders.append({
+                        "vendor_name": str(r.get("vendor_name", "")),
+                        "vendor_num": str(r.get("vendor_num", "")),
+                        "status": status_map.get(int(r.get("status", 0)), str(r.get("status", ""))),
+                        "order_count": int(r.get("order_count", 0) or 0),
+                        "po_total": float(r.get("po_total", 0) or 0),
+                    })
 
             # Inventory value via inv lcost/acost * onhand
             inventory = None
