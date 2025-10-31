@@ -1856,6 +1856,92 @@ const StoreAssignments = ({ user, onRemoveStore, isProcessing }) => {
   );
 };
 
+// Admin: manage users by store selection
+const AdminStoreAccess = ({ users, onRemoveStore, isProcessing }) => {
+  const collectStores = useCallback(() => {
+    const unique = new Map();
+    (users || []).forEach((user) => {
+      (user.stores || []).forEach((store) => {
+        const id = getStoreIdentifier(store) || store.id || store.store_db;
+        if (!id) return;
+        if (!unique.has(id)) {
+          unique.set(id, {
+            id,
+            label: store.store_name || store.store_db || String(id),
+          });
+        }
+      });
+    });
+    return Array.from(unique.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [users]);
+
+  const stores = collectStores();
+  const [selectedStoreId, setSelectedStoreId] = React.useState(() => stores[0]?.id || '');
+
+  React.useEffect(() => {
+    if (!stores.length) {
+      setSelectedStoreId('');
+      return;
+    }
+    if (!selectedStoreId || !stores.some((s) => s.id === selectedStoreId)) {
+      setSelectedStoreId(stores[0].id);
+    }
+  }, [stores, selectedStoreId]);
+
+  const filteredUsers = React.useMemo(() => {
+    if (!selectedStoreId) return [];
+    return (users || []).filter((u) =>
+      (u.stores || []).some((s) => (getStoreIdentifier(s) || s.id || s.store_db) === selectedStoreId)
+    );
+  }, [users, selectedStoreId]);
+
+  return (
+    <section className="admin-card">
+      <h2 className="panel-title">Manage access by store</h2>
+      {!stores.length ? (
+        <div className="empty-state">No stores found across users.</div>
+      ) : (
+        <>
+          <div className="form-grid">
+            <label>
+              Store
+              <select value={selectedStoreId} onChange={(e) => setSelectedStoreId(e.target.value)}>
+                {stores.map((s) => (
+                  <option key={s.id} value={s.id}>{s.label}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {!filteredUsers.length ? (
+            <div className="empty-state">No users currently assigned to this store.</div>
+          ) : (
+            <div className="admin-list">
+              {filteredUsers.map((u) => (
+                <div key={`${selectedStoreId}-${u.id}`} className="admin-user">
+                  <strong>{u.email}</strong>
+                  <span>{u.full_name || '—'}</span>
+                  <span>Role: {formatRole(u.user_role)}</span>
+                  <div className="inline-actions">
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => onRemoveStore(u.id, selectedStoreId)}
+                      disabled={isProcessing}
+                    >
+                      Remove from store
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+};
+
 const UserList = ({ users, selectedUserId, onSelectUser }) => {
   if (!users?.length) {
     return <div className="empty-state">No users found yet.</div>;
@@ -1902,6 +1988,7 @@ const AdminPanel = ({
 
   return (
     <div className="admin-grid">
+      <AdminStoreAccess users={users} onRemoveStore={onRemoveStore} isProcessing={isProcessing} />
       <section className="admin-card">
         <div className="panel-header">
           <div>
