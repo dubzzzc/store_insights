@@ -79,6 +79,10 @@ class AdminUsersResponse(BaseModel):
     users: List[AdminUser]
 
 
+# Response container for store assignment actions
+## (moved up) class StoreAssignmentResponse(BaseModel): store: StoreAssignmentRecord
+
+
 # --- New admin helpers for uploader creds management ---
 class UpdateStoreCredsRequest(BaseModel):
     store_db: Optional[str] = None
