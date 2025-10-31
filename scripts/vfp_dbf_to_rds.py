@@ -663,7 +663,19 @@ def run_gui():
 
     def save_cfg():
         engine = dpg.get_value("engine_combo")
-                # Persist current settings (including password) to config for automated runs
+        server = dpg.get_value("server_input")
+        port = int(dpg.get_value("port_input") or (1433 if engine=='mssql' else 3306))
+        database = dpg.get_value("db_input")
+        username = dpg.get_value("user_input")
+        password = dpg.get_value("pwd_input") or ''
+        schema = dpg.get_value("schema_input") if engine=='mssql' else None
+        recreate = bool(dpg.get_value("recreate_chk"))
+        trunc = bool(dpg.get_value("trunc_chk"))
+        batch = int(dpg.get_value("batch_input") or 1000)
+        tpref = dpg.get_value("tpref_input") or ''
+        tsuff = dpg.get_value("tsuff_input") or ''
+
+        # Persist current settings (including password) to config for automated runs
         cfg = {
             'rds': {
                 'engine': engine,
@@ -684,13 +696,14 @@ def run_gui():
                 'coerce_lowercase_names': True,
             }
         }
-        save_config(cfg, default_config_path())
-        pw = dpg.get_value("pwd_input") or ''
-        if pw:
+
+        # Optionally seed keyring, but keep plaintext in YAML
+        if password:
             try:
-                put_password(cfg['rds']['server'], cfg['rds']['database'], cfg['rds']['username'], pw)
+                put_password(cfg['rds']['server'], cfg['rds']['database'], cfg['rds']['username'], password)
             except Exception as e:
                 log(f"Warning: could not store password in keyring: {e}")
+
         path = save_config(cfg, default_config_path())
         log(f"Saved config to {path} (password stored in system keyring).")
 
@@ -718,6 +731,29 @@ def run_gui():
                 put_password(server, database, username, password)
             except Exception as e:
                 log(f"Warning: could not store password in keyring: {e}")
+
+        # Persist current settings (including password) to config for automated runs
+        cfg = {
+            'rds': {
+                'engine': engine,
+                'server': server,
+                'port': port,
+                'database': database,
+                'username': username,
+                'password': password,
+                'schema': schema,
+            },
+            'source': {'folder': state.get('folder','')},
+            'load': {
+                'drop_recreate': recreate,
+                'truncate_before_load': trunc,
+                'batch_size': batch,
+                'table_prefix': tpref,
+                'table_suffix': tsuff,
+                'coerce_lowercase_names': True,
+            }
+        }
+        save_config(cfg, default_config_path())
 
         try:
             if engine == 'mssql':
@@ -927,6 +963,33 @@ def run_gui_tk():
             except Exception as e:
                 log(f"Warning: could not store password in keyring: {e}")
 
+        # Persist current settings (including password) to config for automated runs
+        try:
+            cfg_persist = {
+                "rds": {
+                    "engine": engine,
+                    "server": server,
+                    "port": port,
+                    "database": database,
+                    "username": username,
+                    "password": password,
+                    "schema": schema,
+                },
+                "source": {"folder": folder_var.get().strip() or os.path.join(ksv, "data")},
+                "load": {
+                    "drop_recreate": bool(recreate),
+                    "truncate_before_load": bool(trunc),
+                    "batch_size": int(batch),
+                    "table_prefix": tpref,
+                    "table_suffix": tsuff,
+                    "coerce_lowercase_names": True,
+                },
+            }
+            save_config(cfg_persist, default_config_path())
+        except Exception:
+            # Non-fatal if persisting fails
+            pass
+
         try:
             if engine == 'mssql':
                 conn = connect_mssql(server, database, username, password, port)
@@ -988,11 +1051,11 @@ def run_gui_tk():
                 messagebox.showwarning("Folder", "Select your ksv\\data folder first.")
                 return
         ffiles = list_allowed_dbfs(state["folder"])
-        if not files:
+        if not ffiles:
             messagebox.showinfo("Run (Easy)", "No DBF files found in selected folder.")
             return
         files_list.selection_clear(0, "end")
-        for i in range(len(files)):
+        for i in range(len(ffiles)):
             files_list.selection_set(i)
         recreate_var.set(1)
         trunc_var.set(0)

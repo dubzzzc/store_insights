@@ -1339,6 +1339,55 @@
         return <canvas ref={canvasRef}></canvas>;
       };
 
+      const WeatherCard = () => {
+        const [weather, setWeather] = useState({ temp: null, desc: '', place: '' });
+        const [error, setError] = useState('');
+
+        useEffect(() => {
+          const fetchWeather = async (lat, lon) => {
+            try {
+              const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=auto`;
+              const res = await fetch(url);
+              const data = await res.json();
+              const code = (data && data.current && data.current.weather_code) || null;
+              const temp = (data && data.current && data.current.temperature_2m) || null;
+              const labels = {
+                0: 'Clear', 1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast', 45: 'Fog', 48: 'Rime fog',
+                51: 'Drizzle', 53: 'Drizzle', 55: 'Drizzle', 56: 'Freezing drizzle', 57: 'Freezing drizzle',
+                61: 'Rain', 63: 'Rain', 65: 'Rain', 66: 'Freezing rain', 67: 'Freezing rain',
+                71: 'Snow', 73: 'Snow', 75: 'Snow', 77: 'Snow grains',
+                80: 'Rain showers', 81: 'Rain showers', 82: 'Rain showers',
+                85: 'Snow showers', 86: 'Snow showers',
+                95: 'Thunderstorm', 96: 'Thunderstorm', 99: 'Thunderstorm',
+              };
+              setWeather({ temp, desc: labels[code] || '—', place: '' });
+            } catch (e) {
+              setError('Unable to load weather');
+            }
+          };
+
+          if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+              (pos) => fetchWeather(pos.coords.latitude, pos.coords.longitude),
+              () => fetchWeather(47.6062, -122.3321) // fallback: Seattle
+            );
+          } else {
+            fetchWeather(47.6062, -122.3321);
+          }
+        }, []);
+
+        if (error) return <div className="empty-state">{error}</div>;
+        return (
+          <div className="summary-grid">
+            <div className="summary-card">
+              <h3>Current</h3>
+              <strong>{weather.temp !== null ? `${weather.temp}°C` : '—'}</strong>
+              <span>{weather.desc}</span>
+            </div>
+          </div>
+        );
+      };
+
       const BreakdownLegend = ({ items, labelKey }) => {
         if (!items?.length) return null;
         const palette = [
@@ -2204,7 +2253,10 @@ const AdminView = ({
 
       <div className="insight-grid two-column">
         <div className="table-card">
-          <h3>Top Products (7 Days)</h3>
+          <h3>Top Products</h3>
+          <p className="chart-subtitle">
+            {displayRange ? `${formatDate(displayRange.start)} to ${formatDate(displayRange.end)}` : ''}
+          </p>
           {displayedTopItems.length ? (
             <div className="table-wrapper">
               <table>
@@ -2237,7 +2289,10 @@ const AdminView = ({
 
         <div className="chart-card">
           <div className="chart-header">
-            <h3>Seven-Day Trend</h3>
+            <h3>Trend</h3>
+            <p className="chart-subtitle">
+              {displayRange ? `${formatDate(displayRange.start)} to ${formatDate(displayRange.end)}` : ''}
+            </p>
           </div>
           <div className="chart-area">
             <SalesChart sales={sales} />
@@ -2281,8 +2336,8 @@ const AdminView = ({
         </div>
 
         <div className="sync-card">
-          <h3>DBF Sync Activity</h3>
-          <SyncTable logs={syncLogs} />
+          <h3>Today’s Weather</h3>
+          <WeatherCard />
         </div>
       </div>
     </div>
