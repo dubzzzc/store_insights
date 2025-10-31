@@ -1,5 +1,7 @@
+from collections import defaultdict
 from decimal import Decimal
-from datetime import date as date_type, datetime, timedelta
+from datetime import date as date_type, datetime, time as time_type, timedelta
+import re
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -28,6 +30,40 @@ _COLUMN_SPECS: Dict[str, Dict[str, Any]] = {
         "required": False,
     },
     "pack": {"candidates": ["pack", "package", "packsize", "pack_size"], "required": False},
+    "time": {
+        "candidates": [
+            "time",
+            "sale_time",
+            "trandate_time",
+            "trans_time",
+            "timestamp",
+            "tran_time",
+        ],
+        "required": False,
+    },
+    "payment_type": {
+        "candidates": [
+            "tender",
+            "paytype",
+            "pay_type",
+            "payment_type",
+            "paymentmethod",
+            "tender_type",
+            "paycode",
+        ],
+        "required": False,
+    },
+    "category": {
+        "candidates": [
+            "category",
+            "dept",
+            "department",
+            "class",
+            "major",
+            "family",
+        ],
+        "required": False,
+    },
     "qty": {"candidates": ["qty", "quantity", "qtysold", "qty_sold"], "required": True},
     "price": {"candidates": ["price", "amount", "total", "extended", "extprice", "extendedprice"], "required": True},
 }
@@ -87,6 +123,33 @@ def _coerce_number(value: Any, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _extract_hour(value: Any, fallback: Optional[int] = None) -> Optional[int]:
+    if value is None:
+        return fallback
+    if isinstance(value, datetime):
+        return value.hour
+    if isinstance(value, time_type):
+        return value.hour
+    if isinstance(value, date_type):
+        return fallback
+    if isinstance(value, (int, float)):
+        int_value = int(value)
+        if 0 <= int_value <= 23:
+            return int_value
+        return fallback
+    if isinstance(value, str):
+        match = re.search(r"(\d{1,2}):(\d{2})", value)
+        if match:
+            hour_value = int(match.group(1))
+            return hour_value % 24
+        digit_match = re.match(r"^(\d{1,2})$", value.strip())
+        if digit_match:
+            hour_value = int(digit_match.group(1))
+            if 0 <= hour_value <= 23:
+                return hour_value
+    return fallback
 
 
 def _select_store(user: dict, requested_store: Optional[str]) -> Dict[str, Any]:
@@ -152,6 +215,13 @@ def get_sales_insights(
                 _quote_identifier(columns["description"]) if columns.get("description") else "''"
             )
             pack_column = _quote_identifier(columns["pack"]) if columns.get("pack") else None
+            time_column = _quote_identifier(columns["time"]) if columns.get("time") else None
+            payment_column = (
+                _quote_identifier(columns["payment_type"]) if columns.get("payment_type") else None
+            )
+            category_column = (
+                _quote_identifier(columns["category"]) if columns.get("category") else None
+            )
 
             where_clauses = [f"{date_column} >= :seven_days_ago"]
             if rflag_column:
@@ -184,6 +254,14 @@ def get_sales_insights(
                         "average_daily_sales": 0.0,
                     },
                     "top_items": [],
+                    "breakdowns": {
+                        "hourly": [],
+                        "payment_methods": [],
+                        "categories": [],
+                    },
+                    "purchase_orders": [],
+                    "inventory": None,
+                    "sales_history": [],
                 }
 
             select_fields = [
@@ -203,6 +281,21 @@ def get_sales_insights(
             else:
                 select_fields.append("1 AS pack")
 
+            if time_column:
+                select_fields.append(f"{time_column} AS sale_time")
+            else:
+                select_fields.append("NULL AS sale_time")
+
+            if payment_column:
+                select_fields.append(f"{payment_column} AS payment_method")
+            else:
+                select_fields.append("NULL AS payment_method")
+
+            if category_column:
+                select_fields.append(f"{category_column} AS category_label")
+            else:
+                select_fields.append("NULL AS category_label")
+
             items_sql = text(
                 f"""
                 SELECT {', '.join(select_fields)}
@@ -215,6 +308,9 @@ def get_sales_insights(
 
             sales_summary: Dict[str, Dict[str, float]] = {}
             sku_summary: Dict[str, Dict[str, Any]] = {}
+            hourly_totals: Dict[int, float] = defaultdict(float)
+            payment_totals: Dict[str, float] = defaultdict(float)
+            category_totals: Dict[str, float] = defaultdict(float)
             total_sales_value = 0.0
             total_items_value = 0.0
 
@@ -243,6 +339,23 @@ def get_sales_insights(
 
                 total_items_value += qty
                 total_sales_value += price_value
+
+                sale_time_value = row.get("sale_time")
+                hour_from_time = _extract_hour(sale_time_value)
+                if hour_from_time is None:
+                    hour_from_time = _extract_hour(date_value)
+                if hour_from_time is not None:
+                    hourly_totals[hour_from_time] += price_value
+
+                payment_label = row.get("payment_method")
+                if payment_label is not None:
+                    method_key = str(payment_label).strip() or "Unspecified"
+                    payment_totals[method_key] += price_value
+
+                category_label = row.get("category_label")
+                if category_label is not None:
+                    category_key = str(category_label).strip() or "Uncategorized"
+                    category_totals[category_key] += price_value
 
                 sku_key_raw = row.get("sku")
                 sku_key = str(sku_key_raw) if sku_key_raw is not None else ""
@@ -290,6 +403,36 @@ def get_sales_insights(
                 reverse=True,
             )[:10]
 
+            hourly_breakdown = [
+                {
+                    "hour": f"{hour:02d}:00",
+                    "total_sales": round(amount, 2),
+                }
+                for hour, amount in sorted(hourly_totals.items())
+            ]
+
+            payment_breakdown = []
+            if total_sales_value and payment_totals:
+                payment_breakdown = [
+                    {
+                        "method": label,
+                        "total_sales": round(amount, 2),
+                        "percentage": round((amount / total_sales_value) * 100, 2),
+                    }
+                    for label, amount in sorted(payment_totals.items(), key=lambda item: item[1], reverse=True)
+                ]
+
+            category_breakdown = []
+            if total_sales_value and category_totals:
+                category_breakdown = [
+                    {
+                        "category": label,
+                        "total_sales": round(amount, 2),
+                        "percentage": round((amount / total_sales_value) * 100, 2),
+                    }
+                    for label, amount in sorted(category_totals.items(), key=lambda item: item[1], reverse=True)
+                ]
+
             return {
                 "store": {
                     "store_db": db_name,
@@ -311,6 +454,14 @@ def get_sales_insights(
                     "average_daily_sales": average_daily_sales,
                 },
                 "top_items": top_items,
+                "breakdowns": {
+                    "hourly": hourly_breakdown,
+                    "payment_methods": payment_breakdown,
+                    "categories": category_breakdown,
+                },
+                "purchase_orders": [],
+                "inventory": None,
+                "sales_history": [],
             }
 
     except Exception as e:

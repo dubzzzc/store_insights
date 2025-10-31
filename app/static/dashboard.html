@@ -10,488 +10,958 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <style>
-      :root {
-        color-scheme: light dark;
-        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        --surface: #ffffff;
-        --surface-alt: #f6f8fb;
-        --border: #d0d7e2;
-        --primary: #2563eb;
-        --primary-dark: #1e3a8a;
-        --text: #111827;
-        --muted: #6b7280;
-        --danger: #dc2626;
-      }
-
-      body {
-        margin: 0;
-        background: var(--surface-alt);
-        color: var(--text);
-      }
-
-      .app-shell {
-        min-height: 100vh;
-        display: flex;
-        flex-direction: column;
-      }
-
-      header {
-        padding: 1.5rem clamp(1.5rem, 4vw, 3rem);
-        background: var(--surface);
-        border-bottom: 1px solid var(--border);
-      }
-
-      .header-inner {
-        margin: 0 auto;
-        width: min(1200px, 100%);
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 1.5rem;
-      }
-
-      .header-brand {
-        display: flex;
-        flex-direction: column;
-        gap: 0.35rem;
-      }
-
-      .header-brand h1 {
-        margin: 0;
-        font-size: clamp(1.25rem, 2.5vw, 1.75rem);
-      }
-
-      .header-meta {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        gap: 0.5rem;
-        text-align: right;
-        min-width: 200px;
-      }
-
-      .header-greeting {
-        font-weight: 600;
-        font-size: 1rem;
-      }
-
-      .header-status {
-        color: var(--muted);
-        font-size: 0.95rem;
-      }
-
-      .header-actions {
-        display: flex;
-        justify-content: flex-end;
-      }
-
-      .header-actions button {
-        min-width: 120px;
-      }
-
-      main {
-        flex: 1;
-        padding: clamp(1.5rem, 4vw, 3rem);
-        display: grid;
-        gap: clamp(1.5rem, 3vw, 2.5rem);
-        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-        align-content: start;
-        width: min(1200px, 100%);
-        margin: 0 auto;
-      }
-
-      .card {
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: 1rem;
-        padding: clamp(1.5rem, 3vw, 2rem);
-        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-      }
-
-      .card h2 {
-        margin: 0;
-        font-size: 1.1rem;
-      }
-
-      .card.error-card {
-        border-color: #fecaca;
-        background: #fef2f2;
-        color: #7f1d1d;
-      }
-
-      form,
-      .controls {
-        display: grid;
-        gap: 1rem;
-      }
-
-      .controls {
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        align-items: end;
-      }
-
-      .control-actions {
-        display: flex;
-        gap: 0.75rem;
-        flex-wrap: wrap;
-        justify-content: flex-start;
-        align-items: center;
-      }
-
-      @media (min-width: 768px) {
-        .control-actions {
-          justify-content: flex-end;
-        }
-      }
-
-      label {
-        display: flex;
-        flex-direction: column;
-        gap: 0.35rem;
-        font-weight: 500;
-      }
-
-      input,
-      select,
-      button {
-        font: inherit;
-        border-radius: 0.75rem;
-        border: 1px solid var(--border);
-        padding: 0.75rem 1rem;
-        background: #fff;
-        transition: border-color 0.2s ease, box-shadow 0.2s ease;
-      }
-
-      input,
-      select {
-        color: var(--text);
-      }
-
-      input::placeholder {
-        color: var(--muted);
-      }
-
-      input:focus,
-      select:focus,
-      button:focus {
-        outline: none;
-        border-color: var(--primary);
-        box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
-      }
-
-      button {
-        background: var(--primary);
-        color: #fff;
-        font-weight: 600;
-        cursor: pointer;
-        border: none;
-      }
-
-      .secondary-button {
-        background: transparent;
-        color: var(--muted);
-        border: 1px solid var(--border);
-      }
-
-      .secondary-button:hover {
-        color: var(--primary-dark);
-        border-color: var(--primary);
-        background: rgba(37, 99, 235, 0.08);
-      }
-
-      button:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
-
-      .error-message {
-        color: var(--danger);
-        font-size: 0.95rem;
-      }
-
-      table {
-        width: 100%;
-        border-collapse: collapse;
-      }
-
-      thead {
-        background: var(--surface-alt);
-      }
-
-      th,
-      td {
-        padding: 0.75rem;
-        border-bottom: 1px solid var(--border);
-        text-align: left;
-        font-size: 0.95rem;
-      }
-
-      tr:last-child td {
-        border-bottom: none;
-      }
-
-      .status-pill {
-        display: inline-flex;
-        align-items: center;
-        padding: 0.25rem 0.75rem;
-        border-radius: 999px;
-        font-size: 0.85rem;
-        font-weight: 600;
-        background: #e5edff;
-        color: var(--primary-dark);
-        text-transform: capitalize;
-      }
-
-      .status-pill[data-status="failed"] {
-        background: #fee2e2;
-        color: #991b1b;
-      }
-
-      .status-pill[data-status="success"] {
-        background: #dcfce7;
-        color: #166534;
-      }
-
-      .empty-state {
-        color: var(--muted);
-        text-align: center;
-        padding: 2rem 1rem;
-      }
-
-      .metrics {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-        gap: 1rem;
-      }
-
-      .metrics div {
-        display: flex;
-        flex-direction: column;
-        gap: 0.35rem;
-      }
-
-      .metric-note {
-        margin-top: 0.75rem;
-        padding-top: 0.75rem;
-        border-top: 1px dashed var(--border);
-        color: var(--muted);
-        font-size: 0.9rem;
-      }
-
-      .metric-note strong {
-        color: var(--text);
-      }
-
-      .tab-group {
-        display: inline-flex;
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: 999px;
-        padding: 0.25rem;
-        gap: 0.25rem;
-      }
-
-      .tab-container {
-        display: flex;
-        justify-content: center;
-        width: 100%;
-        margin-bottom: clamp(1rem, 3vw, 1.5rem);
-        grid-column: 1 / -1;
-      }
-
-      .tab-button {
-        border: none;
-        background: transparent;
-        color: var(--muted);
-        font-weight: 500;
-        padding: 0.35rem 1rem;
-        border-radius: 999px;
-        cursor: pointer;
-        transition: background-color 0.2s ease, color 0.2s ease;
-      }
-
-      .tab-button[data-active="true"] {
-        background: var(--primary);
-        color: #fff;
-        box-shadow: 0 6px 14px rgba(37, 99, 235, 0.18);
-      }
-
-      .success-message {
-        color: #166534;
-        background: #dcfce7;
-        border: 1px solid #bbf7d0;
-        padding: 0.75rem 1rem;
-        border-radius: 0.75rem;
-      }
-
-      .admin-toolbar {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 1rem;
-        flex-wrap: wrap;
-      }
-
-      .admin-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-        gap: clamp(1.5rem, 3vw, 2.5rem);
-      }
-
-      .user-list {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: grid;
-        gap: 0.75rem;
-      }
-
-      .user-list button {
-        width: 100%;
-        text-align: left;
-        border: 1px solid var(--border);
-        background: var(--surface-alt);
-        border-radius: 0.75rem;
-        padding: 0.75rem 1rem;
-        display: grid;
-        gap: 0.35rem;
-        transition: border-color 0.2s ease, transform 0.2s ease;
-        cursor: pointer;
-      }
-
-      .user-list button:hover {
-        border-color: var(--primary);
-        transform: translateY(-1px);
-      }
-
-      .user-list button[data-active="true"] {
-        border-color: var(--primary);
-        background: rgba(37, 99, 235, 0.08);
-      }
-
-      .user-email {
-        font-weight: 600;
-      }
-
-      .user-meta {
-        color: var(--muted);
-        font-size: 0.85rem;
-      }
-
-      .admin-form {
-        display: grid;
-        gap: 1rem;
-        margin-top: 1.5rem;
-      }
-
-      .store-list {
-        display: grid;
-        gap: 0.75rem;
-      }
-
-      .store-card {
-        border: 1px solid var(--border);
-        border-radius: 0.75rem;
-        padding: 0.75rem 1rem;
-        background: var(--surface-alt);
-        display: grid;
-        gap: 0.5rem;
-      }
-
-      .store-card-heading {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 0.5rem;
-      }
-
-      .store-card-heading h4 {
-        margin: 0;
-        font-size: 1rem;
-      }
-
-      .store-card-details {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-        gap: 0.5rem 1rem;
-        margin: 0;
-      }
-
-      .store-card-detail {
-        display: flex;
-        flex-direction: column;
-        gap: 0.25rem;
-      }
-
-      .store-card-details dt {
-        font-size: 0.8rem;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: var(--muted);
-      }
-
-      .store-card-details dd {
-        margin: 0;
-        font-weight: 500;
-        font-size: 0.95rem;
-        word-break: break-word;
-      }
-
-      .metric-label {
-        color: var(--muted);
-        font-size: 0.85rem;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-      }
-
-      .metric-value {
-        font-size: 1.4rem;
-        font-weight: 600;
-      }
-
-      canvas {
-        max-width: 100%;
-      }
-
-      .chart-wrapper {
-        min-height: 260px;
-      }
-
-      .chart-wrapper canvas {
-        height: 100% !important;
-        width: 100% !important;
-      }
-
-      .table-wrapper {
-        width: 100%;
-        overflow-x: auto;
-      }
-
-      @media (max-width: 768px) {
-        .header-inner {
-          flex-direction: column;
-          align-items: flex-start;
-        }
-
-        .header-meta {
-          align-items: flex-start;
-          text-align: left;
-          width: 100%;
-        }
-
-        .header-actions {
-          width: 100%;
-        }
-
-        main {
-          grid-template-columns: 1fr;
-        }
-      }
-    </style>
+    
+<style>
+  :root {
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --page-bg: #0b3d5c;
+    --page-bg-accent: #0fa8b8;
+    --panel-bg: #ffffff;
+    --panel-border: rgba(15, 23, 42, 0.12);
+    --panel-soft: rgba(255, 255, 255, 0.1);
+    --primary: #0ea5e9;
+    --primary-strong: #0284c7;
+    --primary-soft: rgba(14, 165, 233, 0.12);
+    --neutral: #f1f5f9;
+    --neutral-soft: rgba(148, 163, 184, 0.18);
+    --text: #0f172a;
+    --text-muted: #475569;
+    --danger: #dc2626;
+    color-scheme: light dark;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: linear-gradient(135deg, var(--page-bg), var(--page-bg-accent));
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+  }
+
+  .app-shell {
+    width: 100%;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    color: #fff;
+    padding: clamp(1.5rem, 4vw, 2.75rem) clamp(1.5rem, 6vw, 3.5rem) clamp(1.25rem, 3vw, 2.25rem);
+  }
+
+  .header-bar {
+    margin: 0 auto;
+    width: min(1200px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .brand-icon {
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 1rem;
+    background: rgba(255, 255, 255, 0.12);
+    display: grid;
+    place-items: center;
+    font-weight: 700;
+    font-size: 1.15rem;
+  }
+
+  .brand h1 {
+    margin: 0;
+    font-size: clamp(1.5rem, 4vw, 2.1rem);
+    letter-spacing: 0.02em;
+  }
+
+  .session-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    text-align: right;
+  }
+
+  .session-greeting {
+    font-size: clamp(1rem, 2.4vw, 1.25rem);
+    font-weight: 600;
+  }
+
+  .session-subtext {
+    color: rgba(226, 232, 240, 0.75);
+    font-size: 0.95rem;
+  }
+
+  .header-controls {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    background: rgba(15, 23, 42, 0.24);
+    border-radius: 1rem;
+    padding: 1rem 1.25rem;
+  }
+
+  .store-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .store-controls label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.72);
+  }
+
+  .store-controls select {
+    padding: 0.65rem 1rem;
+    border-radius: 0.75rem;
+    border: none;
+    background: rgba(15, 23, 42, 0.45);
+    color: #fff;
+    min-width: 200px;
+  }
+
+  .store-controls select:focus {
+    outline: 2px solid rgba(255, 255, 255, 0.6);
+  }
+
+  .sign-out {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.65rem 1.15rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    background: rgba(15, 23, 42, 0.4);
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease;
+  }
+
+  .sign-out:hover,
+  .sign-out:focus {
+    transform: translateY(-1px);
+    background: rgba(255, 255, 255, 0.18);
+    outline: none;
+  }
+
+  .app-main {
+    flex: 1;
+    background: #f8fafc;
+    border-top-left-radius: 2.25rem;
+    border-top-right-radius: 2.25rem;
+    margin-top: clamp(1.25rem, 3vw, 2.25rem);
+    padding: clamp(1.75rem, 4vw, 3rem) clamp(1.25rem, 5vw, 3rem) clamp(3rem, 6vw, 4rem);
+  }
+
+  .app-main-inner {
+    margin: 0 auto;
+    width: min(1200px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: clamp(1.5rem, 3vw, 2.25rem);
+  }
+
+  .module-nav {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(14px);
+    padding: 0.85rem;
+    border-radius: 1.1rem;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+  }
+
+  .module-nav button {
+    border: none;
+    border-radius: 0.85rem;
+    padding: 0.65rem 1.4rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: transparent;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+  }
+
+  .module-nav button:hover,
+  .module-nav button:focus {
+    color: var(--text);
+    background: var(--neutral);
+    outline: none;
+    transform: translateY(-1px);
+  }
+
+  .module-nav button.active {
+    background: var(--primary);
+    color: #fff;
+    box-shadow: 0 12px 30px rgba(14, 165, 233, 0.25);
+  }
+
+  .panel {
+    background: var(--panel-bg);
+    border-radius: 1.5rem;
+    padding: clamp(1.5rem, 3vw, 2.25rem);
+    box-shadow: 0 24px 55px rgba(15, 23, 42, 0.06);
+    display: grid;
+    gap: clamp(1.5rem, 3vw, 2rem);
+    border: 1px solid var(--panel-border);
+  }
+
+  .panel.sales-panel {
+    gap: clamp(1.75rem, 3.5vw, 2.5rem);
+    background: linear-gradient(165deg, rgba(14, 165, 233, 0.12), rgba(14, 165, 233, 0.02));
+    border: 1px solid rgba(14, 165, 233, 0.18);
+  }
+
+  .sales-hero {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    justify-content: space-between;
+    align-items: stretch;
+    background: rgba(255, 255, 255, 0.65);
+    border-radius: 1.25rem;
+    padding: clamp(1rem, 3vw, 1.75rem);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  }
+
+  .sales-hero-left {
+    display: flex;
+    flex: 1 1 260px;
+    gap: 1.1rem;
+    align-items: center;
+  }
+
+  .hero-icon {
+    width: 3.25rem;
+    height: 3.25rem;
+    border-radius: 1.1rem;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.3), rgba(14, 165, 233, 0.05));
+    color: var(--primary-strong);
+    font-weight: 700;
+    font-size: 1.1rem;
+  }
+
+  .hero-copy {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .hero-eyebrow {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--primary-strong);
+    font-weight: 700;
+  }
+
+  .hero-title {
+    margin: 0;
+    font-size: clamp(1.45rem, 3vw, 1.85rem);
+  }
+
+  .hero-subtitle {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+  }
+
+  .hero-dates {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.65rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    align-items: center;
+  }
+
+  .hero-dates span {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .hero-divider {
+    padding: 0 0.35rem;
+    opacity: 0.65;
+  }
+
+  .sales-hero-metric {
+    flex: 0 0 auto;
+    min-width: 200px;
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.35), rgba(14, 165, 233, 0.05));
+    border-radius: 1rem;
+    padding: 1.1rem 1.4rem;
+    display: grid;
+    gap: 0.4rem;
+    align-content: center;
+    border: 1px solid rgba(14, 165, 233, 0.25);
+  }
+
+  .sales-hero-metric span {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  .sales-hero-metric strong {
+    font-size: clamp(1.8rem, 4vw, 2.2rem);
+    line-height: 1.1;
+  }
+
+  @media (max-width: 640px) {
+    .sales-hero {
+      align-items: stretch;
+    }
+
+    .sales-hero-metric {
+      width: 100%;
+    }
+  }
+
+  .sales-chart-card {
+    border-radius: 1.25rem;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    background: rgba(255, 255, 255, 0.92);
+    padding: clamp(1rem, 2.5vw, 1.6rem);
+    display: grid;
+    gap: 1.25rem;
+  }
+
+  .sales-chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .sales-chart-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+  }
+
+  .chart-subtitle {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  .sales-chart-grid {
+    display: grid;
+    gap: 1.5rem;
+  }
+
+  @media (min-width: 960px) {
+    .sales-chart-grid.with-legend {
+      grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+      align-items: stretch;
+    }
+  }
+
+  .sales-chart-grid .chart-legend {
+    border-radius: 1rem;
+    background: rgba(255, 255, 255, 0.75);
+    padding: 1rem 1.25rem;
+    box-shadow: 0 16px 32px rgba(15, 23, 42, 0.08);
+    border: 1px solid rgba(14, 165, 233, 0.15);
+  }
+
+  .sales-view-tabs {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .sales-view-tabs button {
+    border: none;
+    border-radius: 0.9rem;
+    padding: 0.85rem 1.1rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    background: rgba(255, 255, 255, 0.7);
+    color: var(--text-muted);
+    cursor: pointer;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, color 0.2s ease;
+  }
+
+  .sales-view-tabs button:hover,
+  .sales-view-tabs button:focus {
+    transform: translateY(-1px);
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.9);
+    outline: none;
+  }
+
+  .sales-view-tabs button.active {
+    background: linear-gradient(135deg, var(--primary), var(--primary-strong));
+    color: #fff;
+    box-shadow: 0 16px 32px rgba(14, 165, 233, 0.35);
+  }
+
+  .panel-header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .panel-title {
+    margin: 0;
+    font-size: clamp(1.25rem, 2.8vw, 1.55rem);
+    letter-spacing: 0.01em;
+  }
+
+  .summary-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+
+  .summary-card {
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.18), rgba(14, 165, 233, 0.04));
+    border-radius: 1rem;
+    padding: 1rem 1.25rem;
+    display: grid;
+    gap: 0.3rem;
+    border: 1px solid rgba(14, 165, 233, 0.15);
+  }
+
+  .summary-card h3 {
+    margin: 0;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+  }
+
+  .summary-card strong {
+    font-size: clamp(1.3rem, 3vw, 1.6rem);
+  }
+
+  .summary-card span {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  .chart-card {
+    border-radius: 1.25rem;
+    border: 1px solid var(--panel-border);
+    padding: 1.25rem;
+    display: grid;
+    gap: 0.75rem;
+    background: #fff;
+  }
+
+  .insight-grid {
+    display: grid;
+    gap: 1.5rem;
+  }
+
+  .insight-grid.two-column {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+
+  .insight-grid.two-column > .sync-card,
+  .insight-grid.two-column > .table-card,
+  .insight-grid.two-column > .chart-card {
+    height: 100%;
+  }
+
+  .chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .chart-header h3 {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .chart-area {
+    position: relative;
+    width: 100%;
+    min-height: clamp(220px, 40vh, 360px);
+  }
+
+  .chart-legend {
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .legend-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .legend-label {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .legend-color {
+    width: 0.85rem;
+    height: 0.85rem;
+    border-radius: 0.35rem;
+  }
+
+  .legend-value {
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .table-card {
+    border-radius: 1.25rem;
+    border: 1px solid var(--panel-border);
+    overflow: hidden;
+    background: #fff;
+  }
+
+  .table-card h3 {
+    margin: 0;
+    padding: 1.1rem 1.4rem 0;
+    font-size: 1rem;
+  }
+
+  .table-wrapper {
+    overflow-x: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  th,
+  td {
+    padding: 0.85rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+    font-size: 0.95rem;
+  }
+
+  th {
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+  }
+
+  tr:last-child td {
+    border-bottom: none;
+  }
+
+  .empty-state {
+    background: var(--neutral);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    text-align: center;
+    color: var(--text-muted);
+  }
+
+  .purchase-list,
+  .history-table {
+    border-radius: 1.25rem;
+    border: 1px solid var(--panel-border);
+    overflow: hidden;
+    background: #fff;
+  }
+
+  .purchase-row {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: 2fr auto;
+    padding: 0.9rem 1.25rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  }
+
+  .purchase-row:last-child {
+    border-bottom: none;
+  }
+
+  .purchase-row strong {
+    font-size: 1rem;
+  }
+
+  .search-bar {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .search-bar input {
+    flex: 1;
+    min-width: 200px;
+    padding: 0.75rem 1rem;
+    border-radius: 0.9rem;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+  }
+
+  .search-bar button {
+    border: none;
+    padding: 0.75rem 1.4rem;
+    border-radius: 0.9rem;
+    background: var(--primary);
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .sync-card {
+    border-radius: 1.25rem;
+    border: 1px solid var(--panel-border);
+    padding: 1.25rem;
+    background: #fff;
+    display: grid;
+    gap: 1rem;
+  }
+
+  .sync-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .sync-table th,
+  .sync-table td {
+    padding: 0.75rem 0.5rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+    text-align: left;
+    font-size: 0.9rem;
+  }
+
+  .sync-status {
+    text-transform: capitalize;
+    font-weight: 600;
+  }
+
+  .sync-status.success {
+    color: #0f766e;
+  }
+
+  .sync-status.failed {
+    color: #dc2626;
+  }
+
+  .sync-status.pending {
+    color: #92400e;
+  }
+
+  .sync-status.running {
+    color: #2563eb;
+  }
+
+  button:disabled,
+  .sign-out:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .admin-layout {
+    padding: clamp(1.5rem, 4vw, 3rem);
+    width: min(1100px, 100%);
+    margin: 0 auto;
+    display: grid;
+    gap: clamp(1.5rem, 3vw, 2.5rem);
+  }
+
+  .admin-card {
+    background: #fff;
+    border-radius: 1.25rem;
+    border: 1px solid var(--panel-border);
+    padding: clamp(1.5rem, 3vw, 2.25rem);
+    box-shadow: 0 24px 55px rgba(15, 23, 42, 0.06);
+    display: grid;
+    gap: 1.25rem;
+  }
+
+  .admin-card h2 {
+    margin: 0;
+    font-size: clamp(1.25rem, 3vw, 1.5rem);
+  }
+
+  .admin-grid {
+    display: grid;
+    gap: 1.25rem;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  }
+
+  .admin-list {
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 1rem;
+    overflow: hidden auto;
+    max-height: 360px;
+  }
+
+  .admin-user {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    display: grid;
+    gap: 0.35rem;
+    cursor: pointer;
+  }
+
+  .admin-user:last-child {
+    border-bottom: none;
+  }
+
+  .admin-user.active {
+    background: var(--primary-soft);
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.3rem 0.6rem;
+    border-radius: 999px;
+    background: rgba(14, 165, 233, 0.18);
+    color: var(--primary-strong);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+  }
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  input,
+  select,
+  button {
+    font: inherit;
+  }
+
+  input,
+  select {
+    background: #fff;
+    color: inherit;
+  }
+
+  input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .form-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+
+  .inline-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .inline-actions button {
+    padding: 0.75rem 1.25rem;
+    border-radius: 0.9rem;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--primary);
+    color: #fff;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .inline-actions button.secondary {
+    background: rgba(148, 163, 184, 0.2);
+    color: var(--text);
+  }
+
+  .inline-actions button:hover,
+  .inline-actions button:focus {
+    outline: none;
+    transform: translateY(-1px);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.18);
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .login-layout {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: clamp(1.5rem, 6vw, 3rem);
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(19, 78, 110, 0.92));
+  }
+
+  .login-card {
+    width: min(420px, 100%);
+    background: rgba(15, 23, 42, 0.82);
+    backdrop-filter: blur(12px);
+    color: #fff;
+    border-radius: 1.5rem;
+    padding: clamp(1.75rem, 4vw, 2.5rem);
+    display: grid;
+    gap: 1.5rem;
+    box-shadow: 0 30px 60px rgba(15, 23, 42, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .login-card h1 {
+    margin: 0;
+    text-align: center;
+    font-size: clamp(1.7rem, 4vw, 2.2rem);
+  }
+
+  .login-card p {
+    margin: 0;
+    text-align: center;
+    color: rgba(226, 232, 240, 0.7);
+  }
+
+  .login-card label {
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .login-card input {
+    background: rgba(15, 23, 42, 0.65);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    color: #fff;
+    padding: 0.8rem 1rem;
+    border-radius: 0.9rem;
+  }
+
+  .login-card input::placeholder {
+    color: rgba(226, 232, 240, 0.6);
+  }
+
+  .login-card button {
+    padding: 0.85rem 1.25rem;
+    border-radius: 0.95rem;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--primary);
+    color: #fff;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .login-card button:hover,
+  .login-card button:focus {
+    outline: none;
+    transform: translateY(-1px);
+    box-shadow: 0 12px 28px rgba(14, 165, 233, 0.35);
+  }
+
+  .login-card button.secondary {
+    background: rgba(15, 23, 42, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+  }
+
+  .login-error,
+  .admin-error {
+    padding: 0.9rem 1.1rem;
+    border-radius: 0.95rem;
+    background: rgba(220, 38, 38, 0.18);
+    color: #fecaca;
+    font-weight: 600;
+  }
+
+  .login-message,
+  .admin-message {
+    padding: 0.9rem 1.1rem;
+    border-radius: 0.95rem;
+    background: rgba(16, 185, 129, 0.2);
+    color: #d1fae5;
+    font-weight: 600;
+  }
+
+  @media (max-width: 768px) {
+    header {
+      padding: clamp(1.25rem, 5vw, 2rem);
+    }
+
+    .header-controls {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .store-controls {
+      width: 100%;
+    }
+
+    .store-controls select {
+      width: 100%;
+    }
+
+    .module-nav {
+      overflow-x: auto;
+    }
+
+    .chart-area {
+      height: 260px;
+    }
+
+    .panel {
+      padding: clamp(1.25rem, 4vw, 2rem);
+    }
+
+    .chart-card,
+    .table-card,
+    .sync-card,
+    .purchase-list,
+    .history-table {
+      border-radius: 1rem;
+    }
+  }
+</style>
+
   </head>
   <body>
     <div id="root"></div>
@@ -710,6 +1180,200 @@
         );
       };
 
+      const HourlySalesChart = ({ data }) => {
+        const canvasRef = useRef(null);
+        const chartRef = useRef(null);
+
+        useEffect(() => {
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+
+          if (!data?.length) {
+            if (chartRef.current) {
+              chartRef.current.destroy();
+              chartRef.current = null;
+            }
+            return;
+          }
+
+          const labels = data.map((entry) => entry.hour);
+          const totals = data.map((entry) => Number(entry.total_sales) || 0);
+
+          if (chartRef.current) {
+            chartRef.current.data.labels = labels;
+            chartRef.current.data.datasets[0].data = totals;
+            chartRef.current.update();
+          } else {
+            chartRef.current = new Chart(canvas, {
+              type: 'bar',
+              data: {
+                labels,
+                datasets: [
+                  {
+                    data: totals,
+                    backgroundColor: '#0ea5e9',
+                    borderRadius: 6,
+                    maxBarThickness: 32,
+                  },
+                ],
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                  x: { grid: { display: false } },
+                  y: {
+                    ticks: {
+                      callback: (value) => formatCurrency(value),
+                    },
+                    grid: { color: 'rgba(148, 163, 184, 0.2)' },
+                  },
+                },
+                plugins: {
+                  legend: { display: false },
+                  tooltip: {
+                    callbacks: {
+                      label: (context) => formatCurrency(context.raw),
+                    },
+                  },
+                },
+              },
+            });
+          }
+
+          return () => {
+            if (chartRef.current) {
+              chartRef.current.destroy();
+              chartRef.current = null;
+            }
+          };
+        }, [data]);
+
+        if (!data?.length) {
+          return <div className="empty-state">No hourly sales recorded.</div>;
+        }
+
+        return <canvas ref={canvasRef}></canvas>;
+      };
+
+      const BreakdownPieChart = ({ data, labelKey }) => {
+        const canvasRef = useRef(null);
+        const chartRef = useRef(null);
+
+        useEffect(() => {
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+
+          if (!data?.length) {
+            if (chartRef.current) {
+              chartRef.current.destroy();
+              chartRef.current = null;
+            }
+            return;
+          }
+
+          const labels = data.map((entry) => entry[labelKey] || '—');
+          const totals = data.map((entry) => Number(entry.total_sales) || 0);
+          const colors = totals.map((_, index) => {
+            const palette = [
+              '#0ea5e9',
+              '#6366f1',
+              '#f97316',
+              '#22d3ee',
+              '#14b8a6',
+              '#facc15',
+              '#fb7185',
+              '#8b5cf6',
+              '#ec4899',
+              '#f43f5e',
+            ];
+            return palette[index % palette.length];
+          });
+
+          if (chartRef.current) {
+            chartRef.current.data.labels = labels;
+            chartRef.current.data.datasets[0].data = totals;
+            chartRef.current.data.datasets[0].backgroundColor = colors;
+            chartRef.current.update();
+          } else {
+            chartRef.current = new Chart(canvas, {
+              type: 'doughnut',
+              data: {
+                labels,
+                datasets: [
+                  {
+                    data: totals,
+                    backgroundColor: colors,
+                    borderWidth: 0,
+                  },
+                ],
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '60%',
+                plugins: {
+                  legend: { display: false },
+                  tooltip: {
+                    callbacks: {
+                      label: (context) => formatCurrency(context.raw),
+                    },
+                  },
+                },
+              },
+            });
+          }
+
+          return () => {
+            if (chartRef.current) {
+              chartRef.current.destroy();
+              chartRef.current = null;
+            }
+          };
+        }, [data, labelKey]);
+
+        if (!data?.length) {
+          return <div className="empty-state">No data for this view.</div>;
+        }
+
+        return <canvas ref={canvasRef}></canvas>;
+      };
+
+      const BreakdownLegend = ({ items, labelKey }) => {
+        if (!items?.length) return null;
+        const palette = [
+          '#0ea5e9',
+          '#6366f1',
+          '#f97316',
+          '#22d3ee',
+          '#14b8a6',
+          '#facc15',
+          '#fb7185',
+          '#8b5cf6',
+          '#ec4899',
+          '#f43f5e',
+        ];
+        return (
+          <div className="chart-legend">
+            {items.map((entry, index) => (
+              <div className="legend-row" key={`${entry[labelKey]}-${index}`}>
+                <div className="legend-label">
+                  <span
+                    className="legend-color"
+                    style={{ background: palette[index % palette.length] }}
+                  ></span>
+                  {entry[labelKey] || '—'}
+                </div>
+                <div className="legend-value">
+                  {formatCurrency(entry.total_sales)}
+                  {entry.percentage !== undefined ? ` · ${entry.percentage}%` : ''}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      };
+
       const SalesChart = ({ sales }) => {
         const canvasRef = useRef(null);
         const chartRef = useRef(null);
@@ -844,33 +1508,6 @@
         );
       };
 
-      const TabSwitcher = ({ activeTab, onChange, showAdmin }) => {
-        return (
-          <div className="tab-container">
-            <div className="tab-group">
-              <button
-                type="button"
-                className="tab-button"
-                data-active={activeTab === 'dashboard'}
-                onClick={() => onChange('dashboard')}
-              >
-                Dashboard
-              </button>
-              {showAdmin ? (
-                <button
-                  type="button"
-                  className="tab-button"
-                  data-active={activeTab === 'admin'}
-                  onClick={() => onChange('admin')}
-                >
-                  Admin
-                </button>
-              ) : null}
-            </div>
-          </div>
-        );
-      };
-
       const UserList = ({ users, selectedUserId, onSelectUser }) => {
         if (!users?.length) {
           return <div className="empty-state">No users found yet.</div>;
@@ -898,435 +1535,417 @@
         );
       };
 
-      const CreateUserForm = ({ onSubmit, isSubmitting }) => {
-        const [email, setEmail] = useState('');
-        const [password, setPassword] = useState('');
-        const [fullName, setFullName] = useState('');
-        const [role, setRole] = useState('owner');
-        const [storeDb, setStoreDb] = useState('');
-        const [storeUser, setStoreUser] = useState('');
-        const [storePass, setStorePass] = useState('');
-        const [storeName, setStoreName] = useState('');
-        const [formError, setFormError] = useState('');
 
-        const handleSubmit = async (event) => {
-          event.preventDefault();
-          setFormError('');
+const CreateUserForm = ({ onSubmit, isSubmitting }) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [role, setRole] = useState('owner');
+  const [storeDb, setStoreDb] = useState('');
+  const [storeUser, setStoreUser] = useState('');
+  const [storePass, setStorePass] = useState('');
+  const [storeName, setStoreName] = useState('');
+  const [formError, setFormError] = useState('');
 
-          const trimmedEmail = email.trim();
-          const trimmedPassword = password.trim();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setFormError('');
 
-          if (!trimmedEmail || !trimmedPassword) {
-            setFormError('Email and password are required');
-            return;
-          }
+    if (!email.trim() || !password.trim()) {
+      setFormError('Email and password are required');
+      return;
+    }
 
-          const trimmedStoreDb = storeDb.trim();
-          const trimmedStoreUser = storeUser.trim();
-          const storeFieldsFilled =
-            trimmedStoreDb.length || trimmedStoreUser.length || storePass.trim().length || storeName.trim().length;
+    const stores = [];
+    if (storeDb.trim() || storeUser.trim() || storePass.trim() || storeName.trim()) {
+      if (!storeDb.trim() || !storeUser.trim() || !storePass.trim()) {
+        setFormError('Store database, user, and password are required for the first assignment');
+        return;
+      }
+      stores.push({
+        store_db: storeDb.trim(),
+        db_user: storeUser.trim(),
+        db_pass: storePass,
+        store_name: storeName.trim() || undefined,
+      });
+    }
 
-          if (storeFieldsFilled && (!trimmedStoreDb || !trimmedStoreUser || !storePass.trim())) {
-            setFormError('Store database, user, and password are required to create an initial store assignment');
-            return;
-          }
+    const payload = {
+      email: email.trim(),
+      password: password.trim(),
+      full_name: fullName.trim() || undefined,
+      user_role: role,
+      stores,
+    };
 
-          const stores = [];
-          if (storeFieldsFilled) {
-            stores.push({
-              store_db: trimmedStoreDb,
-              db_user: trimmedStoreUser,
-              db_pass: storePass,
-              store_name: storeName.trim() || undefined,
-            });
-          }
+    const success = await onSubmit(payload);
+    if (success) {
+      setEmail('');
+      setPassword('');
+      setFullName('');
+      setRole('owner');
+      setStoreDb('');
+      setStoreUser('');
+      setStorePass('');
+      setStoreName('');
+    }
+  };
 
-          const payload = {
-            email: trimmedEmail,
-            password: trimmedPassword,
-            full_name: fullName.trim() || undefined,
-            user_role: role,
-            stores,
-          };
+  return (
+    <form className="admin-card" onSubmit={handleSubmit}>
+      <h2 className="panel-title">Create user</h2>
+      {formError ? <div className="admin-error">{formError}</div> : null}
+      <div className="form-grid">
+        <label>
+          Email
+          <input
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="manager@example.com"
+            disabled={isSubmitting}
+            required
+          />
+        </label>
+        <label>
+          Password
+          <input
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="Minimum 8 characters"
+            disabled={isSubmitting}
+            required
+          />
+        </label>
+        <label>
+          Full name (optional)
+          <input
+            type="text"
+            value={fullName}
+            onChange={(event) => setFullName(event.target.value)}
+            disabled={isSubmitting}
+          />
+        </label>
+        <label>
+          Role
+          <select value={role} onChange={(event) => setRole(event.target.value)} disabled={isSubmitting}>
+            <option value="owner">Owner</option>
+            <option value="user">User</option>
+            <option value="admin">Admin</option>
+          </select>
+        </label>
+      </div>
+      <div className="form-grid">
+        <label>
+          Store database
+          <input
+            type="text"
+            value={storeDb}
+            onChange={(event) => setStoreDb(event.target.value)}
+            placeholder="spirits_6885"
+            disabled={isSubmitting}
+          />
+        </label>
+        <label>
+          DB user
+          <input
+            type="text"
+            value={storeUser}
+            onChange={(event) => setStoreUser(event.target.value)}
+            placeholder="store_reader"
+            disabled={isSubmitting}
+          />
+        </label>
+        <label>
+          DB password
+          <input
+            type="password"
+            value={storePass}
+            onChange={(event) => setStorePass(event.target.value)}
+            placeholder="secret"
+            disabled={isSubmitting}
+          />
+        </label>
+        <label>
+          Store name
+          <input
+            type="text"
+            value={storeName}
+            onChange={(event) => setStoreName(event.target.value)}
+            placeholder="Downtown Spirits"
+            disabled={isSubmitting}
+          />
+        </label>
+      </div>
+      <div className="inline-actions">
+        <button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? 'Creating…' : 'Create user'}
+        </button>
+      </div>
+    </form>
+  );
+};
 
-          const success = await onSubmit(payload);
-          if (success) {
-            setEmail('');
-            setPassword('');
-            setFullName('');
-            setRole('owner');
-            setStoreDb('');
-            setStoreUser('');
-            setStorePass('');
-            setStoreName('');
-          }
-        };
+const AddStoreForm = ({ user, onSubmit, isSubmitting }) => {
+  const [storeDb, setStoreDb] = useState('');
+  const [storeUser, setStoreUser] = useState('');
+  const [storePass, setStorePass] = useState('');
+  const [storeName, setStoreName] = useState('');
+  const [formError, setFormError] = useState('');
 
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setFormError('');
+
+    if (!storeDb.trim() || !storeUser.trim() || !storePass.trim()) {
+      setFormError('Database, user, and password are required');
+      return;
+    }
+
+    const success = await onSubmit({
+      store_db: storeDb.trim(),
+      db_user: storeUser.trim(),
+      db_pass: storePass,
+      store_name: storeName.trim() || undefined,
+    });
+
+    if (success) {
+      setStoreDb('');
+      setStoreUser('');
+      setStorePass('');
+      setStoreName('');
+    }
+  };
+
+  return (
+    <form className="admin-card" onSubmit={handleSubmit}>
+      <h2 className="panel-title">Add store to {user?.email || 'user'}</h2>
+      {formError ? <div className="admin-error">{formError}</div> : null}
+      <div className="form-grid">
+        <label>
+          Store database
+          <input
+            type="text"
+            value={storeDb}
+            onChange={(event) => setStoreDb(event.target.value)}
+            placeholder="spirits_6885"
+            disabled={isSubmitting}
+          />
+        </label>
+        <label>
+          DB user
+          <input
+            type="text"
+            value={storeUser}
+            onChange={(event) => setStoreUser(event.target.value)}
+            placeholder="store_reader"
+            disabled={isSubmitting}
+          />
+        </label>
+        <label>
+          DB password
+          <input
+            type="password"
+            value={storePass}
+            onChange={(event) => setStorePass(event.target.value)}
+            placeholder="secret"
+            disabled={isSubmitting}
+          />
+        </label>
+        <label>
+          Store name
+          <input
+            type="text"
+            value={storeName}
+            onChange={(event) => setStoreName(event.target.value)}
+            placeholder="Downtown Spirits"
+            disabled={isSubmitting}
+          />
+        </label>
+      </div>
+      <div className="inline-actions">
+        <button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? 'Adding…' : 'Add store'}
+        </button>
+      </div>
+    </form>
+  );
+};
+
+const StoreAssignments = ({ user, onRemoveStore, isProcessing }) => {
+  if (!user?.stores?.length) {
+    return <div className="empty-state">No store assignments yet.</div>;
+  }
+
+  return (
+    <div className="store-list">
+      {user.stores.map((store) => {
+        const identifier = getStoreIdentifier(store) || store.id || store.store_db;
         return (
-          <form className="admin-form" onSubmit={handleSubmit}>
-            <h3>Create user</h3>
-            <label>
-              Email
-              <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="manager@example.com"
-                disabled={isSubmitting}
-              />
-            </label>
-            <label>
-              Password
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="Minimum 8 characters"
-                disabled={isSubmitting}
-              />
-            </label>
-            <label>
-              Full name (optional)
-              <input
-                type="text"
-                value={fullName}
-                onChange={(event) => setFullName(event.target.value)}
-                placeholder="Regional Manager"
-                disabled={isSubmitting}
-              />
-            </label>
-            <label>
-              Role
-              <select
-                value={role}
-                onChange={(event) => setRole(event.target.value)}
-                disabled={isSubmitting}
+          <div className="store-item" key={`${user.id}-${identifier}`}>
+            <strong>{store.store_name || store.store_db || 'Store'}</strong>
+            <span>{store.store_db || '—'}</span>
+            <div className="inline-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => onRemoveStore(user.id, identifier)}
+                disabled={isProcessing}
               >
-                <option value="owner">Owner</option>
-                <option value="user">User</option>
-                <option value="admin">Admin</option>
-              </select>
-            </label>
-            <div className="metrics">
-              <label>
-                Store database (optional)
-                <input
-                  type="text"
-                  value={storeDb}
-                  onChange={(event) => setStoreDb(event.target.value)}
-                  placeholder="spirits_6885"
-                  disabled={isSubmitting}
-                />
-              </label>
-              <label>
-                DB user
-                <input
-                  type="text"
-                  value={storeUser}
-                  onChange={(event) => setStoreUser(event.target.value)}
-                  placeholder="store_reader"
-                  disabled={isSubmitting}
-                />
-              </label>
-              <label>
-                DB password
-                <input
-                  type="password"
-                  value={storePass}
-                  onChange={(event) => setStorePass(event.target.value)}
-                  placeholder="secret"
-                  disabled={isSubmitting}
-                />
-              </label>
-              <label>
-                Store name
-                <input
-                  type="text"
-                  value={storeName}
-                  onChange={(event) => setStoreName(event.target.value)}
-                  placeholder="Downtown Spirits"
-                  disabled={isSubmitting}
-                />
-              </label>
+                Remove
+              </button>
             </div>
-            {formError && <div className="error-message">{formError}</div>}
-            <button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Creating user…' : 'Create user'}
-            </button>
-          </form>
-        );
-      };
-
-      const AddStoreForm = ({ onSubmit, isSubmitting, user }) => {
-        const [storeDb, setStoreDb] = useState('');
-        const [storeUser, setStoreUser] = useState('');
-        const [storePass, setStorePass] = useState('');
-        const [storeName, setStoreName] = useState('');
-        const [formError, setFormError] = useState('');
-
-        const handleSubmit = async (event) => {
-          event.preventDefault();
-          setFormError('');
-
-          const trimmedDb = storeDb.trim();
-          const trimmedUser = storeUser.trim();
-          const trimmedPass = storePass.trim();
-
-          if (!trimmedDb || !trimmedUser || !trimmedPass) {
-            setFormError('Database, user, and password are required');
-            return;
-          }
-
-          const payload = {
-            store_db: trimmedDb,
-            db_user: trimmedUser,
-            db_pass: storePass,
-            store_name: storeName.trim() || undefined,
-          };
-
-          const success = await onSubmit(payload);
-          if (success) {
-            setStoreDb('');
-            setStoreUser('');
-            setStorePass('');
-            setStoreName('');
-          }
-        };
-
-        return (
-          <form className="admin-form" onSubmit={handleSubmit}>
-            <h3>Add store to {user?.email || 'user'}</h3>
-            <div className="metrics">
-              <label>
-                Store database
-                <input
-                  type="text"
-                  value={storeDb}
-                  onChange={(event) => setStoreDb(event.target.value)}
-                  placeholder="spirits_6885"
-                  disabled={isSubmitting}
-                />
-              </label>
-              <label>
-                DB user
-                <input
-                  type="text"
-                  value={storeUser}
-                  onChange={(event) => setStoreUser(event.target.value)}
-                  placeholder="store_reader"
-                  disabled={isSubmitting}
-                />
-              </label>
-              <label>
-                DB password
-                <input
-                  type="password"
-                  value={storePass}
-                  onChange={(event) => setStorePass(event.target.value)}
-                  placeholder="secret"
-                  disabled={isSubmitting}
-                />
-              </label>
-              <label>
-                Store name (optional)
-                <input
-                  type="text"
-                  value={storeName}
-                  onChange={(event) => setStoreName(event.target.value)}
-                  placeholder="Downtown Spirits"
-                  disabled={isSubmitting}
-                />
-              </label>
-            </div>
-            {formError && <div className="error-message">{formError}</div>}
-            <button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Adding store…' : 'Add store'}
-            </button>
-          </form>
-        );
-      };
-
-      const StoreAssignments = ({ user, onRemoveStore, isProcessing }) => {
-        if (!user?.stores?.length) {
-          return <div className="empty-state">No store assignments yet.</div>;
-        }
-
-        return (
-          <div className="store-list">
-            {user.stores.map((store) => {
-              const identifier = store.id ?? store.store_db ?? 'legacy';
-              return (
-                <div className="store-card" key={`${user.id}-${identifier}`}>
-                  <div className="store-card-heading">
-                    <h4>{store.store_name || store.store_db || 'Store'}</h4>
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={() => onRemoveStore(user.id, identifier)}
-                      disabled={isProcessing}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                  <dl className="store-card-details">
-                    <div className="store-card-detail">
-                      <dt>Database</dt>
-                      <dd>{store.store_db || '—'}</dd>
-                    </div>
-                    <div className="store-card-detail">
-                      <dt>DB user</dt>
-                      <dd>{store.db_user || '—'}</dd>
-                    </div>
-                    <div className="store-card-detail">
-                      <dt>DB password</dt>
-                      <dd>{store.db_pass || '—'}</dd>
-                    </div>
-                    <div className="store-card-detail">
-                      <dt>Store name</dt>
-                      <dd>{store.store_name || '—'}</dd>
-                    </div>
-                  </dl>
-                </div>
-              );
-            })}
           </div>
         );
-      };
+      })}
+    </div>
+  );
+};
 
-      const AdminPanel = ({
-        users,
-        selectedUserId,
-        onSelectUser,
-        onRefresh,
-        onCreateUser,
-        onAddStore,
-        onRemoveStore,
-        isLoading,
-        isProcessing,
-        error,
-        message,
-      }) => {
-        const selectedUser = users.find((user) => user.id === selectedUserId) || users[0] || null;
+const UserList = ({ users, selectedUserId, onSelectUser }) => {
+  if (!users?.length) {
+    return <div className="empty-state">No users found yet.</div>;
+  }
 
-        useEffect(() => {
-          if (!selectedUser && users.length) {
-            onSelectUser(users[0].id);
-          }
-        }, [users, selectedUser, onSelectUser]);
+  return (
+    <div className="admin-list">
+      {users.map((user) => (
+        <div
+          key={user.id}
+          className={`admin-user ${selectedUserId === user.id ? 'active' : ''}`}
+          onClick={() => onSelectUser(user.id)}
+        >
+          <strong>{user.email}</strong>
+          <span>{user.full_name || '—'}</span>
+          <span>Role: {formatRole(user.user_role)}</span>
+          <span>{(user.stores?.length || 0).toString()} store{user.stores?.length === 1 ? '' : 's'}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
 
-        return (
-          <div className="admin-grid">
-            <section className="card">
-              <div className="admin-toolbar">
-                <div>
-                  <h2>Users</h2>
-                  <span className="user-meta">Manage dashboard accounts and their stores.</span>
-                </div>
-                <div className="control-actions">
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={onRefresh}
-                    disabled={isLoading || isProcessing}
-                  >
-                    Refresh
-                  </button>
-                </div>
+const AdminPanel = ({
+  users,
+  selectedUserId,
+  onSelectUser,
+  onRefresh,
+  onCreateUser,
+  onAddStore,
+  onRemoveStore,
+  isLoading,
+  isProcessing,
+  error,
+  message,
+}) => {
+  const selectedUser = users.find((user) => user.id === selectedUserId) || users[0] || null;
+
+  useEffect(() => {
+    if (!selectedUser && users.length) {
+      onSelectUser(users[0].id);
+    }
+  }, [users, selectedUser, onSelectUser]);
+
+  return (
+    <div className="admin-grid">
+      <section className="admin-card">
+        <div className="panel-header">
+          <div>
+            <h2 className="panel-title">Users</h2>
+            <p className="session-subtext">Manage dashboard accounts and their store access.</p>
+          </div>
+          <button
+            type="button"
+            className="sign-out"
+            onClick={onRefresh}
+            disabled={isLoading || isProcessing}
+          >
+            Refresh
+          </button>
+        </div>
+        {error ? <div className="admin-error">{error}</div> : null}
+        {message ? <div className="admin-message">{message}</div> : null}
+        {isLoading ? (
+          <div className="empty-state">Loading users…</div>
+        ) : (
+          <UserList users={users} selectedUserId={selectedUser?.id} onSelectUser={onSelectUser} />
+        )}
+        <CreateUserForm onSubmit={onCreateUser} isSubmitting={isProcessing} />
+      </section>
+      <section className="admin-card">
+        <h2 className="panel-title">Store assignments</h2>
+        {selectedUser ? (
+          <>
+            <div className="summary-grid">
+              <div className="summary-card">
+                <h3>User</h3>
+                <strong>{selectedUser.email}</strong>
+                <span>{selectedUser.full_name || '—'}</span>
               </div>
-              {error && <div className="error-message">{error}</div>}
-              {message && <div className="success-message">{message}</div>}
-              {isLoading ? (
-                <div className="empty-state">Loading users…</div>
-              ) : (
-                <UserList users={users} selectedUserId={selectedUser?.id} onSelectUser={onSelectUser} />
-              )}
-              <CreateUserForm onSubmit={onCreateUser} isSubmitting={isProcessing} />
-            </section>
-            <section className="card">
-              <h2>Store assignments</h2>
-              {selectedUser ? (
-                <>
-                  <div className="metrics">
-                    <div>
-                      <span className="metric-label">User</span>
-                      <span>{selectedUser.email}</span>
-                    </div>
-                    <div>
-                      <span className="metric-label">Name</span>
-                      <span>{selectedUser.full_name || '—'}</span>
-                    </div>
-                    <div>
-                      <span className="metric-label">Role</span>
-                      <span>{formatRole(selectedUser.user_role)}</span>
-                    </div>
-                    <div>
-                      <span className="metric-label">Stores</span>
-                      <span>{selectedUser.stores?.length || 0}</span>
-                    </div>
-                  </div>
-                  <StoreAssignments
-                    user={selectedUser}
-                    onRemoveStore={onRemoveStore}
-                    isProcessing={isProcessing}
-                  />
-                  <AddStoreForm
-                    user={selectedUser}
-                    onSubmit={(payload) => onAddStore(selectedUser.id, payload)}
-                    isSubmitting={isProcessing}
-                  />
-                </>
-              ) : (
-                <div className="empty-state">Select a user to manage their stores.</div>
-              )}
-            </section>
-          </div>
-        );
-      };
-
-      const AdminView = ({
-        hasKey,
-        users,
-        selectedUserId,
-        onSelectUser,
-        onRefresh,
-        onCreateUser,
-        onAddStore,
-        onRemoveStore,
-        isLoading,
-        isProcessing,
-        error,
-        message,
-        }) => {
-          if (!hasKey) {
-            return (
-              <section className="card">
-                <h2>Admin access unavailable</h2>
-                {error ? <div className="error-message">{error}</div> : null}
-                <p className="user-meta">
-                  Configure the <code>ADMIN_API_KEY</code> environment variable on the server to enable admin
-                  management tools for this account.
-                </p>
-              </section>
-            );
-          }
-
-          return (
-            <AdminPanel
-              users={users}
-              selectedUserId={selectedUserId}
-              onSelectUser={onSelectUser}
-              onRefresh={onRefresh}
-              onCreateUser={onCreateUser}
-              onAddStore={onAddStore}
+              <div className="summary-card">
+                <h3>Role</h3>
+                <strong>{formatRole(selectedUser.user_role)}</strong>
+                <span>{(selectedUser.stores?.length || 0).toString()} store(s)</span>
+              </div>
+            </div>
+            <StoreAssignments
+              user={selectedUser}
               onRemoveStore={onRemoveStore}
-              isLoading={isLoading}
               isProcessing={isProcessing}
-              error={error}
-              message={message}
             />
-          );
-        };
+            <AddStoreForm user={selectedUser} onSubmit={onAddStore} isSubmitting={isProcessing} />
+          </>
+        ) : (
+          <div className="empty-state">Select a user to manage their stores.</div>
+        )}
+      </section>
+    </div>
+  );
+};
 
+const AdminView = ({
+  hasKey,
+  users,
+  selectedUserId,
+  onSelectUser,
+  onRefresh,
+  onCreateUser,
+  onAddStore,
+  onRemoveStore,
+  isLoading,
+  isProcessing,
+  error,
+  message,
+}) => {
+  if (!hasKey) {
+    return (
+      <section className="admin-card">
+        <h2 className="panel-title">Admin access unavailable</h2>
+        {error ? <div className="admin-error">{error}</div> : null}
+        <p className="session-subtext">
+          Configure the <code>ADMIN_API_KEY</code> environment variable on the server to enable admin tools.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <AdminPanel
+      users={users}
+      selectedUserId={selectedUserId}
+      onSelectUser={onSelectUser}
+      onRefresh={onRefresh}
+      onCreateUser={onCreateUser}
+      onAddStore={onAddStore}
+      onRemoveStore={onRemoveStore}
+      isLoading={isLoading}
+      isProcessing={isProcessing}
+      error={error}
+      message={message}
+    />
+  );
+};
       const LoginForm = ({ onSubmit, isLoading, error }) => {
         const [email, setEmail] = useState('');
         const [password, setPassword] = useState('');
@@ -1368,231 +1987,584 @@
         );
       };
 
+
+const SalesModule = ({
+  summary,
+  sales,
+  topItems,
+  breakdowns,
+  syncLogs,
+  storeLabel,
+  onRefresh,
+  isLoading,
+}) => {
+  const derivedSummary = useMemo(() => {
+    const fallback = sales.reduce(
+      (acc, day) => {
+        acc.sales += toNumber(day.total_sales, 0);
+        acc.items += toNumber(day.total_items_sold, 0);
+        return acc;
+      },
+      { sales: 0, items: 0 }
+    );
+    const fallbackDays = sales.length;
+    const base = summary || {};
+    const grossSales = toNumber(base.gross_sales, fallback.sales);
+    const totalItems = toNumber(base.total_items, fallback.items);
+    const rawDays =
+      base.days_captured !== undefined && base.days_captured !== null
+        ? toNumber(base.days_captured, fallbackDays)
+        : fallbackDays;
+    const safeDays = rawDays > 0 ? rawDays : fallbackDays;
+    const averageDailySales =
+      base.average_daily_sales !== undefined && base.average_daily_sales !== null
+        ? toNumber(base.average_daily_sales, safeDays ? grossSales / (safeDays || 1) : 0)
+        : safeDays
+        ? fallback.sales / (safeDays || 1)
+        : 0;
+
+    return {
+      grossSales,
+      totalItems,
+      daysCaptured: rawDays,
+      averageDailySales,
+    };
+  }, [sales, summary]);
+
+  const topDay = useMemo(() => {
+    if (!sales?.length) return null;
+    const ranked = [...sales].sort(
+      (a, b) => toNumber(b.total_sales, 0) - toNumber(a.total_sales, 0)
+    );
+    const winner = ranked[0];
+    if (!winner) return null;
+    return {
+      date: winner.date,
+      totalSales: toNumber(winner.total_sales, 0),
+      items: toNumber(winner.total_items_sold, 0),
+    };
+  }, [sales]);
+
+  const dateRange = useMemo(() => {
+    if (!sales?.length) return null;
+    const range = sales.reduce(
+      (acc, entry) => {
+        const value = entry.date;
+        if (!value) {
+          return acc;
+        }
+        const isoLike = typeof value === 'string' && !value.includes('T') ? `${value}T00:00:00` : value;
+        const parsed = new Date(isoLike);
+        if (Number.isNaN(parsed.getTime())) {
+          return acc;
+        }
+        if (!acc.start || parsed < acc.start) {
+          acc.start = parsed;
+        }
+        if (!acc.end || parsed > acc.end) {
+          acc.end = parsed;
+        }
+        return acc;
+      },
+      { start: null, end: null }
+    );
+    if (!range.start || !range.end) {
+      return null;
+    }
+    return range;
+  }, [sales]);
+
+  const [view, setView] = useState('hourly');
+  const hourly = breakdowns?.hourly || [];
+  const payment = breakdowns?.payment || breakdowns?.payment_methods || [];
+  const categories = breakdowns?.categories || [];
+
+  const viewMeta = {
+    hourly: {
+      label: 'Hour',
+      title: 'Sales by Hour',
+      chart: <HourlySalesChart data={hourly} />,
+      legend: null,
+      hasLegend: false,
+    },
+    payment: {
+      label: 'Payment',
+      title: 'Sales by Payment Type',
+      chart: <BreakdownPieChart data={payment} labelKey="method" />,
+      legend: payment.length ? <BreakdownLegend items={payment} labelKey="method" /> : null,
+      hasLegend: payment.length > 0,
+    },
+    category: {
+      label: 'Category',
+      title: 'Sales by Category',
+      chart: <BreakdownPieChart data={categories} labelKey="category" />,
+      legend: categories.length ? <BreakdownLegend items={categories} labelKey="category" /> : null,
+      hasLegend: categories.length > 0,
+    },
+  };
+
+  const viewOrder = ['hourly', 'payment', 'category'];
+  const activeMeta = viewMeta[view] || viewMeta.hourly;
+
+  const displayedTopItems = useMemo(() => {
+    if (!topItems?.length) return [];
+    return topItems.slice(0, 8);
+  }, [topItems]);
+
+  return (
+    <div className="panel sales-panel">
+      <div className="sales-hero">
+        <div className="sales-hero-left">
+          <div className="hero-icon">📈</div>
+          <div className="hero-copy">
+            <span className="hero-eyebrow">{`Sales · ${activeMeta.label}`}</span>
+            <h2 className="hero-title">{storeLabel || 'Store Insights'}</h2>
+            <div className="hero-dates">
+              {dateRange ? (
+                <>
+                  <span>{formatDate(dateRange.start)}</span>
+                  <span className="hero-divider">to</span>
+                  <span>{formatDate(dateRange.end)}</span>
+                </>
+              ) : (
+                <span className="hero-subtitle">Waiting for recent activity</span>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="sales-hero-metric">
+          <span>Total Net Amount</span>
+          <strong>{formatCurrency(derivedSummary.grossSales)}</strong>
+          <span>
+            {derivedSummary.daysCaptured
+              ? `${derivedSummary.daysCaptured} day window`
+              : 'No sales recorded'}
+          </span>
+        </div>
+      </div>
+
+      <div className="sales-chart-card">
+        <div className="sales-chart-header">
+          <div>
+            <h3>{activeMeta.title}</h3>
+            <p className="chart-subtitle">Last 7 days</p>
+          </div>
+          <div className="inline-actions">
+            <button type="button" className="secondary" onClick={onRefresh} disabled={isLoading}>
+              {isLoading ? 'Refreshing…' : 'Refresh'}
+            </button>
+          </div>
+        </div>
+        <div className={`sales-chart-grid${activeMeta.hasLegend ? ' with-legend' : ''}`}>
+          <div className="chart-area">{activeMeta.chart}</div>
+          {activeMeta.hasLegend ? activeMeta.legend : null}
+        </div>
+        <div className="sales-view-tabs">
+          {viewOrder.map((key) => {
+            const meta = viewMeta[key];
+            return (
+              <button
+                key={key}
+                type="button"
+                className={view === key ? 'active' : ''}
+                onClick={() => setView(key)}
+              >
+                {meta.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="summary-grid">
+        <div className="summary-card">
+          <h3>Average Daily Sales</h3>
+          <strong>{formatCurrency(derivedSummary.averageDailySales)}</strong>
+          <span>
+            {derivedSummary.daysCaptured
+              ? `${derivedSummary.daysCaptured} day window`
+              : 'No days captured'}
+          </span>
+        </div>
+        <div className="summary-card">
+          <h3>Total Items Sold</h3>
+          <strong>{formatQuantity(derivedSummary.totalItems)}</strong>
+          <span>Across all recorded sales</span>
+        </div>
+        <div className="summary-card">
+          <h3>Strongest Day</h3>
+          <strong>{topDay ? formatDate(topDay.date) : '—'}</strong>
+          <span>
+            {topDay ? `${formatCurrency(topDay.totalSales)} in sales` : 'Waiting for activity'}
+          </span>
+        </div>
+      </div>
+
+      <div className="insight-grid two-column">
+        <div className="table-card">
+          <h3>Top Products (7 Days)</h3>
+          {displayedTopItems.length ? (
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>SKU</th>
+                    <th>Product</th>
+                    <th>Items</th>
+                    <th>Sales</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayedTopItems.map((item, index) => (
+                    <tr key={`${item.sku}-${index}`}>
+                      <td>{index + 1}</td>
+                      <td>{item.sku || '—'}</td>
+                      <td>{item.description || '—'}</td>
+                      <td>{formatQuantity(item.total_items_sold)}</td>
+                      <td>{formatCurrency(item.total_sales)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="empty-state">No product performance available for this window.</div>
+          )}
+        </div>
+
+        <div className="chart-card">
+          <div className="chart-header">
+            <h3>Seven-Day Trend</h3>
+          </div>
+          <div className="chart-area">
+            <SalesChart sales={sales} />
+          </div>
+          {topDay ? (
+            <div className="metric-note">
+              <strong>{formatDate(topDay.date)}</strong> was the strongest day with {formatCurrency(topDay.totalSales)}{' '}
+              across {formatQuantity(topDay.items)} items.
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="insight-grid two-column">
+        <div className="table-card">
+          <h3>Daily Sales</h3>
+          {sales.length ? (
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Items Sold</th>
+                    <th>Total Sales</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sales.map((sale) => (
+                    <tr key={sale.date}>
+                      <td>{formatDate(sale.date)}</td>
+                      <td>{formatQuantity(sale.total_items_sold)}</td>
+                      <td>{formatCurrency(sale.total_sales)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="empty-state">No sales recorded in the last 7 days.</div>
+          )}
+        </div>
+
+        <div className="sync-card">
+          <h3>DBF Sync Activity</h3>
+          <SyncTable logs={syncLogs} />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const PurchaseOrdersModule = ({ orders }) => (
+  <div className="panel">
+    <div className="panel-header">
+      <h2 className="panel-title">Purchase Orders</h2>
+    </div>
+    {orders?.length ? (
+      <div className="purchase-list">
+        {orders.map((order) => (
+          <div className="purchase-row" key={`${order.vendor_name}-${order.order_count}`}>
+            <strong>{order.vendor_name || 'Unknown vendor'}</strong>
+            <span>{order.order_count || 0}</span>
+          </div>
+        ))}
+      </div>
+    ) : (
+      <div className="empty-state">No purchase orders captured for this period.</div>
+    )}
+  </div>
+);
+
+const InventoryModule = ({ snapshot }) => {
+  const segments = snapshot?.segments || [];
+  return (
+    <div className="panel">
+      <div className="panel-header">
+        <h2 className="panel-title">Inventory Value</h2>
+      </div>
+      <div className="summary-grid">
+        <div className="summary-card">
+          <h3>Total Value</h3>
+          <strong>{formatCurrency(snapshot?.total_value || 0)}</strong>
+          <span>{segments.length ? 'Breakdown by category' : 'Connect inventory feeds to populate this view'}</span>
+        </div>
+      </div>
+      <div className="chart-card">
+        <div className="chart-header">
+          <h3>Inventory Segments</h3>
+        </div>
+        <div className="chart-area">
+          {segments.length ? (
+            <BreakdownPieChart data={segments} labelKey="label" />
+          ) : (
+            <div className="empty-state">No inventory data available.</div>
+          )}
+        </div>
+        {segments.length ? <BreakdownLegend items={segments} labelKey="label" /> : null}
+      </div>
+    </div>
+  );
+};
+
+const HistoryModule = ({ history }) => {
+  const [query, setQuery] = useState('');
+
+  const filteredHistory = useMemo(() => {
+    if (!history?.length) return [];
+    if (!query) return history;
+    const lowered = query.toLowerCase();
+    return history.filter((entry) =>
+      [entry.product_name, entry.sku, entry.upc]
+        .filter(Boolean)
+        .some((value) => value.toLowerCase().includes(lowered))
+    );
+  }, [history, query]);
+
+  return (
+    <div className="panel">
+      <div className="panel-header">
+        <h2 className="panel-title">Sales History</h2>
+      </div>
+      <div className="search-bar">
+        <input
+          type="text"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search product by UPC / SKU / Name"
+        />
+      </div>
+      {filteredHistory.length ? (
+        <div className="history-table">
+          <div className="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>SKU</th>
+                  <th>Year</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredHistory.map((entry) => (
+                  <tr key={`${entry.sku}-${entry.year}`}>
+                    <td>{entry.product_name || '—'}</td>
+                    <td>{entry.sku || '—'}</td>
+                    <td>{entry.year || '—'}</td>
+                    <td>{formatCurrency(entry.total || 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <div className="empty-state">Historical sales will appear once the feed is connected.</div>
+      )}
+    </div>
+  );
+};
+
+const ModuleNav = ({ active, onChange }) => {
+  const modules = [
+    { id: 'sales', label: 'Sales' },
+    { id: 'purchase', label: 'Purchase Orders' },
+    { id: 'inventory', label: 'Inventory' },
+    { id: 'history', label: 'Sales History' },
+  ];
+
+  return (
+    <nav className="module-nav">
+      {modules.map((module) => (
+        <button
+          key={module.id}
+          type="button"
+          className={active === module.id ? 'active' : ''}
+          onClick={() => onChange(module.id)}
+        >
+          {module.label}
+        </button>
+      ))}
+    </nav>
+  );
+};
+
+      const HeaderBar = ({ profile, stores, selectedStore, onStoreChange, onLogout }) => {
+        const storeOptions = stores || [];
+        const activeStore = selectedStore || storeOptions[0] || null;
+        const greetingName = profile?.full_name || profile?.email || 'there';
+        const storeLabel = activeStore
+          ? activeStore.store_name || activeStore.store_db || `Store ${getStoreIdentifier(activeStore)}`
+          : 'No store selected';
+
+        return (
+          <header>
+            <div className="header-bar">
+              <div className="header-top">
+                <div className="brand">
+                  <div className="brand-icon">SI</div>
+                  <h1>Store Insights</h1>
+                </div>
+                <div className="session-meta">
+                  <span className="session-greeting">Hello, {greetingName}</span>
+                  <span className="session-subtext">{storeLabel}</span>
+                </div>
+              </div>
+              <div className="header-controls">
+                <div className="store-controls">
+                  {storeOptions.length > 1 ? (
+                    <label>
+                      Select a store
+                      <select
+                        value={getStoreIdentifier(activeStore)}
+                        onChange={(event) => {
+                          const next = storeOptions.find(
+                            (store) => getStoreIdentifier(store) === event.target.value
+                          );
+                          onStoreChange(next || storeOptions[0]);
+                        }}
+                      >
+                        {storeOptions.map((store) => {
+                          const identifier = getStoreIdentifier(store);
+                          const label = store.store_name || store.store_db || `Store ${identifier}`;
+                          return (
+                            <option key={identifier} value={identifier}>
+                              {label}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </label>
+                  ) : (
+                    <div>
+                      <span className="session-subtext">Store</span>
+                      <div>{storeLabel}</div>
+                    </div>
+                  )}
+                </div>
+                <button type="button" className="sign-out" onClick={onLogout}>
+                  Sign out
+                </button>
+              </div>
+            </div>
+          </header>
+        );
+      };
+
       const Dashboard = ({
         stores,
         selectedStore,
         storeInfo,
         sales,
-        summary,
-        topItems,
-        syncLogs,
-        onStoreChange,
-        onRefresh,
-        loading,
-        error,
-      }) => {
-        const derivedSummary = useMemo(() => {
-          const fallback = sales.reduce(
-            (acc, day) => {
-              acc.sales += toNumber(day.total_sales, 0);
-              acc.items += toNumber(day.total_items_sold, 0);
-              return acc;
-            },
-            { sales: 0, items: 0 }
-          );
-          const fallbackDays = sales.length;
-          const base = summary || {};
-          const grossSales = toNumber(base.gross_sales, fallback.sales);
-          const totalItems = toNumber(base.total_items, fallback.items);
-          const rawDays =
-            base.days_captured !== undefined && base.days_captured !== null
-              ? toNumber(base.days_captured, fallbackDays)
-              : fallbackDays;
-          const safeDays = rawDays > 0 ? rawDays : fallbackDays;
-          const averageDailySales =
-            base.average_daily_sales !== undefined && base.average_daily_sales !== null
-              ? toNumber(base.average_daily_sales, safeDays ? grossSales / safeDays : 0)
-              : safeDays
-              ? fallback.sales / safeDays
-              : 0;
+  summary,
+  topItems,
+  breakdowns,
+  syncLogs,
+  purchaseOrders,
+  inventory,
+  history,
+  onStoreChange,
+  onRefresh,
+  activeModule,
+  onModuleChange,
+  loading,
+  error,
+}) => {
+  const storeLabel = useMemo(() => {
+    if (storeInfo?.store_name) return storeInfo.store_name;
+    if (storeInfo?.store_db) return storeInfo.store_db;
+    if (selectedStore?.store_name) return selectedStore.store_name;
+    if (selectedStore?.store_db) return selectedStore.store_db;
+    if (selectedStore?.store_id !== undefined && selectedStore?.store_id !== null) {
+      return `Store #${selectedStore.store_id}`;
+    }
+    return '';
+  }, [storeInfo, selectedStore]);
 
-          return {
-            grossSales,
-            totalItems,
-            daysCaptured: rawDays,
-            averageDailySales,
-          };
-        }, [sales, summary]);
-
-        const hasSalesData =
-          sales.length > 0 || derivedSummary.daysCaptured > 0 || derivedSummary.grossSales > 0;
-
-        const topDay = useMemo(() => {
-          if (!sales?.length) return null;
-          const ranked = [...sales].sort(
-            (a, b) => toNumber(b.total_sales, 0) - toNumber(a.total_sales, 0)
-          );
-          const winner = ranked[0];
-          if (!winner) return null;
-          return {
-            date: winner.date,
-            totalSales: toNumber(winner.total_sales, 0),
-            items: toNumber(winner.total_items_sold, 0),
-          };
-        }, [sales]);
-
-        const displayedTopItems = useMemo(() => {
-          if (!topItems?.length) return [];
-          return topItems.slice(0, 5);
-        }, [topItems]);
-
-        const remainingTopItems = Math.max((topItems?.length || 0) - displayedTopItems.length, 0);
-
-        const activeStoreLabel = useMemo(() => {
-          if (storeInfo?.store_name) return storeInfo.store_name;
-          if (storeInfo?.store_db) return storeInfo.store_db;
-          if (selectedStore?.store_name) return selectedStore.store_name;
-          if (selectedStore?.store_db) return selectedStore.store_db;
-          if (selectedStore?.store_id !== undefined && selectedStore?.store_id !== null) {
-            return `Store #${selectedStore.store_id}`;
-          }
-          return '';
-        }, [storeInfo, selectedStore]);
-
-        return (
-          <>
-            {error ? (
-              <section className="card error-card">
-                <h2>Heads up</h2>
-                <p>{error}</p>
-              </section>
-            ) : null}
-
-            <section className="card">
-              <h2>Store Controls</h2>
-              <div className="controls">
-                <StoreSelector stores={stores} selectedStore={selectedStore} onChange={onStoreChange} />
-                <div className="control-actions">
-                  <button type="button" onClick={onRefresh} disabled={loading}>
-                    {loading ? 'Refreshing…' : 'Refresh insights'}
-                  </button>
-                </div>
-              </div>
-            </section>
-
-            <section className="card">
-              <h2>7-Day Summary</h2>
-              {hasSalesData ? (
-                <>
-                  <div className="metrics">
-                    <div>
-                      <span className="metric-label">Gross sales</span>
-                      <span className="metric-value">{formatCurrency(derivedSummary.grossSales)}</span>
-                    </div>
-                    <div>
-                      <span className="metric-label">Items sold</span>
-                      <span className="metric-value">{formatQuantity(derivedSummary.totalItems)}</span>
-                    </div>
-                    <div>
-                      <span className="metric-label">Average daily sales</span>
-                      <span className="metric-value">{formatCurrency(derivedSummary.averageDailySales)}</span>
-                    </div>
-                    <div>
-                      <span className="metric-label">Days captured</span>
-                      <span className="metric-value">{formatInteger(derivedSummary.daysCaptured)}</span>
+  return (
+    <div className="app-main">
+      <div className="app-main-inner">
+              {stores?.length > 1 ? (
+                <div className="panel">
+                  <div className="panel-header">
+                    <h2 className="panel-title">Store Controls</h2>
+                    <div className="inline-actions">
+                      <button type="button" className="secondary" onClick={() => onRefresh()} disabled={loading}>
+                        {loading ? 'Refreshing…' : 'Refresh'}
+                      </button>
                     </div>
                   </div>
-                  {topDay ? (
-                    <div className="metric-note">
-                      <strong>{formatDate(topDay.date)}</strong> was the strongest day with {formatCurrency(topDay.totalSales)}
-                      {' '}across {formatQuantity(topDay.items)} items.
-                    </div>
-                  ) : null}
-                  {activeStoreLabel ? (
-                    <div className="metric-note">
-                      Showing the last seven days for <strong>{activeStoreLabel}</strong>.
-                    </div>
-                  ) : null}
-                </>
-              ) : (
-                <div className="empty-state">No sales recorded in the last 7 days.</div>
-              )}
-            </section>
+            <StoreSelector stores={stores} selectedStore={selectedStore} onChange={onStoreChange} />
+          </div>
+        ) : null}
 
-            <section className="card">
-              <h2>Top Products (7 Days)</h2>
-              {displayedTopItems.length ? (
-                <>
-                  <div className="table-wrapper">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>#</th>
-                          <th>SKU</th>
-                          <th>Product</th>
-                          <th>Items</th>
-                          <th>Sales</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {displayedTopItems.map((item, index) => (
-                          <tr key={`${item.sku}-${index}`}>
-                            <td>{index + 1}</td>
-                            <td>{item.sku || '—'}</td>
-                            <td>{item.description || '—'}</td>
-                            <td>{formatQuantity(item.total_items_sold)}</td>
-                            <td>{formatCurrency(item.total_sales)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  {remainingTopItems > 0 ? (
-                    <div className="metric-note">
-                      Showing top {displayedTopItems.length} of {topItems.length} items by sales.
-                    </div>
-                  ) : null}
-                </>
-              ) : (
-                <div className="empty-state">No product performance available for this window.</div>
-              )}
-            </section>
+        {error ? (
+          <div className="panel">
+            <div className="panel-header">
+              <h2 className="panel-title">Heads up</h2>
+            </div>
+            <div className="empty-state">{error}</div>
+          </div>
+        ) : null}
 
-            <section className="card">
-              <h2>Daily Sales</h2>
-              {sales.length ? (
-                <div className="table-wrapper">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>Items Sold</th>
-                        <th>Total Sales</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sales.map((sale) => (
-                        <tr key={sale.date}>
-                          <td>{formatDate(sale.date)}</td>
-                          <td>{formatQuantity(sale.total_items_sold)}</td>
-                          <td>{formatCurrency(sale.total_sales)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="empty-state">No sales recorded in the last 7 days.</div>
-              )}
-            </section>
+        <ModuleNav active={activeModule} onChange={onModuleChange} />
 
-            <section className="card">
-              <h2>Sales Trend (7 Days)</h2>
-              <div className="chart-wrapper">
-                <SalesChart sales={sales} />
-              </div>
-            </section>
+        {activeModule === 'sales' ? (
+          <SalesModule
+            summary={summary}
+            sales={sales}
+            topItems={topItems}
+            breakdowns={breakdowns}
+            syncLogs={syncLogs}
+            storeLabel={storeLabel}
+            onRefresh={onRefresh}
+            isLoading={loading}
+          />
+        ) : null}
 
-            <section className="card">
-              <h2>DBF Sync Activity</h2>
-              <SyncTable logs={syncLogs} />
-            </section>
-          </>
-        );
-      };
+        {activeModule === 'purchase' ? <PurchaseOrdersModule orders={purchaseOrders} /> : null}
 
+        {activeModule === 'inventory' ? <InventoryModule snapshot={inventory} /> : null}
+
+        {activeModule === 'history' ? <HistoryModule history={history} /> : null}
+      </div>
+    </div>
+  );
+};
       const App = () => {
-        const [activeTab, setActiveTab] = useState('dashboard');
+        const [activeModule, setActiveModule] = useState('sales');
         const [token, setToken] = useState(() => storage.get(STORAGE_KEYS.token, null));
         const [userRole, setUserRole] = useState(() => storage.get(STORAGE_KEYS.role, ''));
         const [profile, setProfile] = useState(() => storage.get(STORAGE_KEYS.profile, null));
@@ -1604,6 +2576,15 @@
         const [salesSummary, setSalesSummary] = useState(null);
         const [topItems, setTopItems] = useState([]);
         const [storeMeta, setStoreMeta] = useState(null);
+        const [salesBreakdowns, setSalesBreakdowns] = useState({
+          hourly: [],
+          payment: [],
+          payment_methods: [],
+          categories: [],
+        });
+        const [purchaseOrders, setPurchaseOrders] = useState([]);
+        const [inventorySnapshot, setInventorySnapshot] = useState(null);
+        const [salesHistory, setSalesHistory] = useState([]);
         const [syncLogs, setSyncLogs] = useState([]);
         const [authError, setAuthError] = useState('');
         const [isAuthenticating, setIsAuthenticating] = useState(false);
@@ -1650,12 +2631,16 @@
             setSalesSummary(null);
             setTopItems([]);
             setStoreMeta(null);
+            setSalesBreakdowns({ hourly: [], payment: [], payment_methods: [], categories: [] });
+            setPurchaseOrders([]);
+            setInventorySnapshot(null);
+            setSalesHistory([]);
             setSyncLogs([]);
             tokenRef.current = null;
             setAuthError(message);
             setIsAuthenticating(false);
             setIsLoadingData(false);
-            setActiveTab('dashboard');
+            setActiveModule('sales');
             handleAdminLogout('');
           },
           [handleAdminLogout]
@@ -1768,12 +2753,6 @@
         }, [userRole, adminKey, handleAdminLogout]);
 
         useEffect(() => {
-          if (activeTab === 'admin' && userRole !== 'admin') {
-            setActiveTab('dashboard');
-          }
-        }, [activeTab, userRole]);
-
-        useEffect(() => {
           if (!stores?.length) {
             if (selectedStore) {
               setSelectedStore(null);
@@ -1815,6 +2794,10 @@
             summary: payload.summary || null,
             topItems: payload.top_items || [],
             store: payload.store || null,
+            breakdowns: payload.breakdowns || {},
+            purchaseOrders: payload.purchase_orders || [],
+            inventory: payload.inventory || null,
+            history: payload.sales_history || [],
           };
         };
 
@@ -1851,6 +2834,15 @@
             setSalesSummary(salesPayload.summary || null);
             setTopItems(salesPayload.topItems || []);
             setStoreMeta(salesPayload.store || null);
+            setSalesBreakdowns({
+              hourly: salesPayload.breakdowns?.hourly || [],
+              payment: salesPayload.breakdowns?.payment_methods || [],
+              payment_methods: salesPayload.breakdowns?.payment_methods || [],
+              categories: salesPayload.breakdowns?.categories || [],
+            });
+            setPurchaseOrders(salesPayload.purchaseOrders || []);
+            setInventorySnapshot(salesPayload.inventory || null);
+            setSalesHistory(salesPayload.history || []);
             setSyncLogs(syncData);
             setAuthError('');
           } catch (error) {
@@ -2128,6 +3120,10 @@
               setSalesSummary(null);
               setTopItems([]);
               setStoreMeta(null);
+            setSalesBreakdowns({ hourly: [], payment: [], payment_methods: [], categories: [] });
+              setPurchaseOrders([]);
+              setInventorySnapshot(null);
+              setSalesHistory([]);
               setSyncLogs([]);
               setAdminUsers([]);
               setSelectedAdminUserId(null);
@@ -2138,7 +3134,7 @@
               } else {
                 setAdminError('');
               }
-              setActiveTab('admin');
+              setActiveModule('sales');
             } else {
               setStores(nextStores);
               setSelectedStore(nextStores[0] || null);
@@ -2149,8 +3145,12 @@
               setSalesSummary(null);
               setTopItems([]);
               setStoreMeta(null);
+              setSalesBreakdowns({ hourly: [], payment: [], payment_methods: [], categories: [] });
+              setPurchaseOrders([]);
+              setInventorySnapshot(null);
+              setSalesHistory([]);
               setSyncLogs([]);
-              setActiveTab('dashboard');
+              setActiveModule('sales');
             }
 
             setIsLoadingData(false);
@@ -2168,120 +3168,73 @@
           }
         };
 
-        const loginCard = (
-          <section className="card">
-            <h2>Sign in</h2>
-            <LoginForm onSubmit={handleLogin} isLoading={isAuthenticating} error={authError} />
-          </section>
-        );
+        if (!token) {
+          return (
+            <div className="login-layout">
+              <div className="login-card">
+                <h1>Store Insights</h1>
+                <p>Sign in to view your performance dashboard.</p>
+                <LoginForm onSubmit={handleLogin} isLoading={isAuthenticating} error={authError} />
+              </div>
+            </div>
+          );
+        }
 
-        const dashboardContent = (
-          <Dashboard
-            stores={stores}
-            selectedStore={selectedStore}
-            storeInfo={storeMeta}
-            sales={sales}
-            summary={salesSummary}
-            topItems={topItems}
-            syncLogs={syncLogs}
-            onStoreChange={setSelectedStore}
-            onRefresh={refresh}
-            loading={isLoadingData}
-            error={authError}
-          />
-        );
+        const handleStoreChange = (nextStore) => {
+          setSelectedStore(nextStore || null);
+        };
 
-        const adminContent = (
-          <AdminView
-            hasKey={Boolean(adminKey)}
-            users={adminUsers}
-            selectedUserId={selectedAdminUserId}
-            onSelectUser={setSelectedAdminUserId}
-            onRefresh={handleAdminRefresh}
-            onCreateUser={handleAdminCreateUser}
-            onAddStore={handleAdminAddStore}
-            onRemoveStore={handleAdminRemoveStore}
-            isLoading={isAdminLoading}
-            isProcessing={isAdminProcessing}
-            error={adminError}
-            message={adminMessage}
-          />
-        );
-
-        const canAccessAdmin = userRole === 'admin';
-        const displayedTab = canAccessAdmin ? 'admin' : activeTab;
-        const storesLength = stores?.length || 0;
-
-        const displayName = useMemo(() => {
-          if (profile?.full_name && profile.full_name.trim()) {
-            return profile.full_name.trim();
-          }
-          if (profile?.email) {
-            return profile.email;
-          }
-          const payload = decodeTokenPayload(token);
-          return (payload && payload.email) || '';
-        }, [profile, token]);
-
-        const headerStatus = useMemo(() => {
-          if (!token) {
-            return 'Sign in to view your dashboard';
-          }
-          if (displayedTab === 'admin') {
-            return 'Admin tools';
-          }
-          const storeLabel =
-            selectedStore?.store_name ||
-            selectedStore?.store_db ||
-            storeMeta?.store_name ||
-            storeMeta?.store_db;
-          if (storeLabel) {
-            return `Viewing ${storeLabel}`;
-          }
-          if (storesLength > 0) {
-            return 'Select a store to begin';
-          }
-          return 'No stores associated with this account';
-        }, [token, displayedTab, selectedStore, storeMeta, storesLength]);
-
-        const isLoggedIn = Boolean(token);
-        const greetingText = isLoggedIn ? `Hello, ${displayName || 'there'}` : '';
-
-        const currentContent = !isLoggedIn
-          ? loginCard
-          : displayedTab === 'admin'
-          ? adminContent
-          : dashboardContent;
+        const mainContent = userRole === 'admin'
+          ? (
+              <div className="admin-layout">
+                <AdminView
+                  hasKey={Boolean(adminKey)}
+                  users={adminUsers}
+                  selectedUserId={selectedAdminUserId}
+                  onSelectUser={setSelectedAdminUserId}
+                  onRefresh={handleAdminRefresh}
+                  onCreateUser={handleAdminCreateUser}
+                  onAddStore={handleAdminAddStore}
+                  onRemoveStore={handleAdminRemoveStore}
+                  isLoading={isAdminLoading}
+                  isProcessing={isAdminProcessing}
+                  error={adminError}
+                  message={adminMessage}
+                />
+              </div>
+            )
+          : (
+              <Dashboard
+                stores={stores}
+                selectedStore={selectedStore}
+                storeInfo={storeMeta}
+                sales={sales}
+                summary={salesSummary}
+                topItems={topItems}
+                breakdowns={salesBreakdowns}
+                syncLogs={syncLogs}
+                purchaseOrders={purchaseOrders}
+                inventory={inventorySnapshot}
+                history={salesHistory}
+                onStoreChange={handleStoreChange}
+                onRefresh={refresh}
+                activeModule={activeModule}
+                onModuleChange={setActiveModule}
+                loading={isLoadingData}
+                error={authError}
+              />
+            );
 
         return (
           <div className="app-shell">
-            <header>
-              <div className="header-inner">
-                <div className="header-brand">
-                  <h1>Store Insights</h1>
-                </div>
-                <div className="header-meta">
-                  {isLoggedIn ? (
-                    <>
-                      <span className="header-greeting">{greetingText}</span>
-                      <span className="header-status">{headerStatus}</span>
-                      <div className="header-actions">
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          onClick={() => handleLogout('')}
-                        >
-                          Sign out
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <span className="header-status">{headerStatus}</span>
-                  )}
-                </div>
-              </div>
-            </header>
-            <main>{currentContent}</main>
+            <HeaderBar
+              profile={profile}
+              stores={userRole === 'admin' ? [] : stores}
+              selectedStore={userRole === 'admin' ? null : selectedStore}
+              onStoreChange={handleStoreChange}
+              onLogout={() => handleLogout('')}
+            />
+            {mainContent}
           </div>
         );
       };
