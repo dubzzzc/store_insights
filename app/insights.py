@@ -8,7 +8,7 @@ Visual FoxPro schema differences (for example, DESCRIPTION vs DESCRIPT).  The
 main application continues to import the router from ``app.insights`` so we keep
 that import path stable.
 """
-
+router = APIRouter()
 def _select_store(user: dict, requested_store: Optional[str]) -> Dict[str, Any]:
     stores: List[Dict[str, Any]] = user.get("stores") or []
 
