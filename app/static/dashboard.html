@@ -2373,39 +2373,96 @@ const AdminView = ({
   );
 };
 
-const PurchaseOrdersModule = ({ orders }) => (
-  <div className="panel">
-    <div className="panel-header">
-      <h2 className="panel-title">Purchase Orders</h2>
-    </div>
-    {orders?.length ? (
-      <div className="table-wrapper">
-        <table>
-          <thead>
-            <tr>
-              <th>Vendor</th>
-              <th>Status</th>
-              <th>Orders</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {orders.map((order, idx) => (
-              <tr key={`${order.vendor_name || order.vendor_num || idx}-${order.status}-${order.order_count}`}>
-                <td>{order.vendor_name || `Vendor #${order.vendor_num || '—'}`}</td>
-                <td>{order.status || '—'}</td>
-                <td>{order.order_count || 0}</td>
-                <td>{formatCurrency(order.po_total || 0)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+const PurchaseOrdersModule = ({ orders }) => {
+  const [expandedVendor, setExpandedVendor] = useState(null);
+
+  const toggleVendor = (vendorKey) => {
+    setExpandedVendor(expandedVendor === vendorKey ? null : vendorKey);
+  };
+
+  return (
+    <div className="panel">
+      <div className="panel-header">
+        <h2 className="panel-title">Today's Purchase Orders</h2>
       </div>
-    ) : (
-      <div className="empty-state">No purchase orders captured for this period.</div>
-    )}
-  </div>
-);
+      {orders?.length ? (
+        <div className="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Vendor</th>
+                <th>Status</th>
+                <th>Orders</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.map((order, idx) => {
+                const vendorKey = `${order.vendor_num || idx}-${order.status}`;
+                const isExpanded = expandedVendor === vendorKey;
+                return (
+                  <React.Fragment key={vendorKey}>
+                    <tr>
+                      <td>{order.vendor_name || `Vendor #${order.vendor_num || '—'}`}</td>
+                      <td>{order.status || '—'}</td>
+                      <td>{order.order_count || 0}</td>
+                      <td>
+                        <button
+                          type="button"
+                          onClick={() => toggleVendor(vendorKey)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'inherit',
+                            cursor: 'pointer',
+                            textDecoration: 'underline',
+                            padding: 0,
+                            font: 'inherit',
+                          }}
+                        >
+                          {formatCurrency(order.po_total || 0)}
+                        </button>
+                      </td>
+                    </tr>
+                    {isExpanded && order.orders?.length > 0 && (
+                      <tr>
+                        <td colSpan="4" style={{ padding: '1rem 1.5rem', background: 'rgba(14, 165, 233, 0.05)' }}>
+                          <div style={{ display: 'grid', gap: '0.75rem' }}>
+                            <strong style={{ fontSize: '0.9rem', marginBottom: '0.5rem' }}>Order Details:</strong>
+                            <table style={{ width: '100%', fontSize: '0.9rem' }}>
+                              <thead>
+                                <tr>
+                                  <th style={{ textAlign: 'left', padding: '0.5rem' }}>PO ID</th>
+                                  <th style={{ textAlign: 'left', padding: '0.5rem' }}>Date</th>
+                                  <th style={{ textAlign: 'right', padding: '0.5rem' }}>Total</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {order.orders.map((po, poIdx) => (
+                                  <tr key={`${po.po_id}-${poIdx}`}>
+                                    <td style={{ padding: '0.5rem' }}>{po.po_id || '—'}</td>
+                                    <td style={{ padding: '0.5rem' }}>{po.order_date ? formatDate(po.order_date) : '—'}</td>
+                                    <td style={{ padding: '0.5rem', textAlign: 'right' }}>{formatCurrency(po.order_total || 0)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="empty-state">No purchase orders for today.</div>
+      )}
+    </div>
+  );
+};
 
 const InventoryModule = ({ snapshot }) => {
   const segments = snapshot?.segments || [];
