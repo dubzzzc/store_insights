@@ -210,6 +210,35 @@
     background: rgba(220, 38, 38, 0.1);
   }
 
+  .weather-compact {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: rgba(226, 232, 240, 0.85);
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+    margin-top: 0.25rem;
+  }
+
+  .weather-compact:hover {
+    opacity: 0.9;
+  }
+
+  .weather-temp {
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.95);
+  }
+
+  .weather-desc {
+    font-size: 0.8rem;
+    color: rgba(226, 232, 240, 0.7);
+  }
+
+  .weather-loading {
+    color: rgba(226, 232, 240, 0.5);
+  }
+
   .app-main {
     flex: 1;
     background: #f8fafc;
@@ -1042,6 +1071,15 @@
       font-size: 0.95rem;
     }
 
+    .weather-compact {
+      font-size: 0.8rem;
+      margin-top: 0.2rem;
+    }
+
+    .weather-desc {
+      font-size: 0.75rem;
+    }
+
 
     .chart-area {
       height: 260px;
@@ -1438,10 +1476,10 @@
         return <canvas ref={canvasRef}></canvas>;
       };
 
-      const WeatherCard = () => {
+      const WeatherCard = ({ compact = false }) => {
         const [weather, setWeather] = useState({ temp: null, desc: '', place: '' });
         const [error, setError] = useState('');
-        const [unit, setUnit] = useState('C'); // 'C' or 'F'
+        const [unit, setUnit] = useState('F'); // 'C' or 'F' - default to Fahrenheit
 
         useEffect(() => {
           const fetchCityName = async (lat, lon) => {
@@ -1503,7 +1541,29 @@
           return `${Math.round(weather.temp)}°C`;
         };
 
-        if (error) return <div className="empty-state">{error}</div>;
+        if (error) return null; // Don't show error in compact mode
+        
+        if (compact) {
+          // Compact version for header
+          return (
+            <div 
+              className="weather-compact"
+              onClick={toggleUnit}
+              title="Click to toggle °C / °F"
+            >
+              {weather.temp !== null ? (
+                <>
+                  <span className="weather-temp">{displayTemp()}</span>
+                  {weather.desc && <span className="weather-desc">{weather.desc}</span>}
+                </>
+              ) : (
+                <span className="weather-loading">—</span>
+              )}
+            </div>
+          );
+        }
+        
+        // Full version for dashboard
         return (
           <div className="summary-grid">
             <div className="summary-card" style={{ cursor: 'pointer' }} onClick={toggleUnit} title="Click to toggle °C / °F">
@@ -2643,10 +2703,6 @@ const AdminView = ({
           )}
         </div>
 
-        <div className="sync-card">
-          <h3>Today’s Weather</h3>
-          <WeatherCard />
-        </div>
       </div>
     </div>
   );
@@ -3212,6 +3268,7 @@ const ModuleNav = ({ active, onChange }) => {
                   >
                     Hello, {greetingName}
                   </span>
+                  <WeatherCard compact={true} />
                   <div className={`profile-menu ${profileMenuOpen ? 'open' : ''}`}>
                     {storeOptions.length > 1 ? (
                       <div className="profile-menu-item store-select">
