@@ -3167,6 +3167,7 @@ const ModuleNav = ({ active, onChange }) => {
 };
 
       const HeaderBar = ({ profile, stores, selectedStore, onStoreChange, onLogout }) => {
+        const [profileMenuOpen, setProfileMenuOpen] = useState(false);
         const storeOptions = stores || [];
         const activeStore = selectedStore || storeOptions[0] || null;
         const greetingName = profile?.full_name || profile?.email || 'there';
@@ -3174,54 +3175,78 @@ const ModuleNav = ({ active, onChange }) => {
           ? activeStore.store_name || activeStore.store_db || `Store ${getStoreIdentifier(activeStore)}`
           : 'No store selected';
 
+        // Close profile menu when clicking outside
+        useEffect(() => {
+          const handleClickOutside = (event) => {
+            if (profileMenuOpen && !event.target.closest('.session-meta')) {
+              setProfileMenuOpen(false);
+            }
+          };
+          if (profileMenuOpen) {
+            document.addEventListener('click', handleClickOutside);
+            return () => document.removeEventListener('click', handleClickOutside);
+          }
+        }, [profileMenuOpen]);
+
         return (
           <header>
             <div className="header-bar">
               <div className="header-top">
                 <div className="brand">
                   <div className="brand-icon">SI</div>
-                  <h1>Store Insights</h1>
+                  <h1>{storeLabel || 'Store Insights'}</h1>
                 </div>
                 <div className="session-meta">
-                  <span className="session-greeting">Hello, {greetingName}</span>
-                  <span className="session-subtext">{storeLabel}</span>
-                </div>
-              </div>
-              <div className="header-controls">
-                <div className="store-controls">
-                  {storeOptions.length > 1 ? (
-                    <label>
-                      Select a store
-                      <select
-                        value={getStoreIdentifier(activeStore)}
-                        onChange={(event) => {
-                          const next = storeOptions.find(
-                            (store) => getStoreIdentifier(store) === event.target.value
-                          );
-                          onStoreChange(next || storeOptions[0]);
-                        }}
-                      >
-                        {storeOptions.map((store) => {
-                          const identifier = getStoreIdentifier(store);
-                          const label = store.store_name || store.store_db || `Store ${identifier}`;
-                          return (
-                            <option key={identifier} value={identifier}>
-                              {label}
-                            </option>
-                          );
-                        })}
-                      </select>
-                    </label>
-                  ) : (
-                    <div>
-                      <span className="session-subtext">Store</span>
-                      <div>{storeLabel}</div>
+                  <span 
+                    className={`session-greeting ${profileMenuOpen ? 'open' : ''}`}
+                    onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+                  >
+                    Hello, {greetingName}
+                  </span>
+                  <div className={`profile-menu ${profileMenuOpen ? 'open' : ''}`}>
+                    {storeOptions.length > 1 ? (
+                      <div className="profile-menu-item store-select">
+                        <label>
+                          Select a store
+                          <select
+                            value={getStoreIdentifier(activeStore)}
+                            onChange={(event) => {
+                              const next = storeOptions.find(
+                                (store) => getStoreIdentifier(store) === event.target.value
+                              );
+                              onStoreChange(next || storeOptions[0]);
+                              setProfileMenuOpen(false);
+                            }}
+                          >
+                            {storeOptions.map((store) => {
+                              const identifier = getStoreIdentifier(store);
+                              const label = store.store_name || store.store_db || `Store ${identifier}`;
+                              return (
+                                <option key={identifier} value={identifier}>
+                                  {label}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </label>
+                      </div>
+                    ) : (
+                      <div className="profile-menu-item">
+                        <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Current Store</div>
+                        <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>{storeLabel}</div>
+                      </div>
+                    )}
+                    <div 
+                      className="profile-menu-item sign-out"
+                      onClick={() => {
+                        setProfileMenuOpen(false);
+                        onLogout();
+                      }}
+                    >
+                      Sign out
                     </div>
-                  )}
+                  </div>
                 </div>
-                <button type="button" className="sign-out" onClick={onLogout}>
-                  Sign out
-                </button>
               </div>
             </div>
           </header>
