@@ -9,7 +9,7 @@ router = APIRouter()
 
 # Engine cache to reuse engines per database connection string
 _engine_cache: Dict[str, Any] = {}
-_MAX_CACHED_ENGINES = 20  # Limit total number of cached engines
+_MAX_CACHED_ENGINES = 15  # Limit total number of cached engines (reduced to compensate for larger pools)
 
 def _get_engine(db_user: str, db_pass: str, db_name: str):
     """
@@ -33,11 +33,11 @@ def _get_engine(db_user: str, db_pass: str, db_name: str):
         
         _engine_cache[connection_string] = create_engine(
             connection_string,
-            pool_size=2,  # Very small pool - only 2 connections per engine
-            max_overflow=2,  # Maximum 2 additional connections beyond pool_size
+            pool_size=5,  # Base pool size - 5 connections per engine
+            max_overflow=5,  # Maximum 5 additional connections beyond pool_size
             pool_recycle=1800,  # Recycle connections after 30 minutes
             pool_pre_ping=True,  # Verify connections before using them
-            pool_timeout=30,  # Timeout after 30 seconds waiting for connection
+            pool_timeout=60,  # Timeout after 60 seconds waiting for connection
             connect_args={
                 "connect_timeout": 10,  # Connection timeout in seconds
             },
