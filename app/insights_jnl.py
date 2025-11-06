@@ -3,8 +3,38 @@ from app.auth import get_auth_user
 from sqlalchemy import create_engine, text
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
+import atexit
 
 router = APIRouter()
+
+# Engine cache to reuse engines per database connection string
+_engine_cache: Dict[str, Any] = {}
+
+def _get_engine(db_user: str, db_pass: str, db_name: str):
+    """
+    Get or create a database engine with proper connection pooling.
+    Reuses engines for the same connection string to avoid connection exhaustion.
+    """
+    connection_string = f"mysql+pymysql://{db_user}:{db_pass}@spirits-db.cbuumpmfxesr.us-east-1.rds.amazonaws.com/{db_name}"
+    
+    if connection_string not in _engine_cache:
+        _engine_cache[connection_string] = create_engine(
+            connection_string,
+            pool_size=5,
+            max_overflow=10,
+            pool_recycle=3600,
+            pool_pre_ping=True,
+            echo=False
+        )
+    
+    return _engine_cache[connection_string]
+
+def _dispose_engines():
+    for engine in _engine_cache.values():
+        engine.dispose()
+    _engine_cache.clear()
+
+atexit.register(_dispose_engines)
 
 def _select_store(user: dict, requested_store: Optional[str]) -> Dict[str, Any]:
     stores: List[Dict[str, Any]] = user.get("stores") or []
@@ -51,7 +81,7 @@ def get_sales_insights(
         print(f"📍 Authenticated as: {user['email']}")
         print(f"🔑 Connecting to DB: {db_name} with user {db_user}")
 
-        engine = create_engine(f"mysql+pymysql://{db_user}:{db_pass}@spirits-db.cbuumpmfxesr.us-east-1.rds.amazonaws.com/{db_name}")
+        engine = _get_engine(db_user, db_pass, db_name)
 
         seven_days_ago = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
         print(f"📅 Filtering from: {seven_days_ago}")

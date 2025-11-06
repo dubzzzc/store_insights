@@ -3,6 +3,7 @@ from app.auth import get_auth_user
 from sqlalchemy import create_engine, text
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+import atexit
 
 """
 This module re-exports the sales insights router that dynamically adapts to
@@ -12,6 +13,36 @@ that import path stable.
 """
 
 router = APIRouter()
+
+# Engine cache to reuse engines per database connection string
+_engine_cache: Dict[str, Any] = {}
+
+def _get_engine(db_user: str, db_pass: str, db_name: str):
+    """
+    Get or create a database engine with proper connection pooling.
+    Reuses engines for the same connection string to avoid connection exhaustion.
+    """
+    connection_string = f"mysql+pymysql://{db_user}:{db_pass}@spirits-db.cbuumpmfxesr.us-east-1.rds.amazonaws.com/{db_name}"
+    
+    if connection_string not in _engine_cache:
+        _engine_cache[connection_string] = create_engine(
+            connection_string,
+            pool_size=5,  # Number of connections to maintain in the pool
+            max_overflow=10,  # Maximum number of connections beyond pool_size
+            pool_recycle=3600,  # Recycle connections after 1 hour
+            pool_pre_ping=True,  # Verify connections before using them
+            echo=False
+        )
+    
+    return _engine_cache[connection_string]
+
+# Cleanup function to dispose of all engines on shutdown
+def _dispose_engines():
+    for engine in _engine_cache.values():
+        engine.dispose()
+    _engine_cache.clear()
+
+atexit.register(_dispose_engines)
 
 def _table_exists(conn, db_name: str, table: str) -> bool:
     res = conn.execute(
@@ -245,8 +276,8 @@ def get_sales_insights(
         db_user = selected_store["db_user"]
         db_pass = selected_store["db_pass"]
 
-        # Create engine dynamically per user
-        engine = create_engine(f"mysql+pymysql://{db_user}:{db_pass}@spirits-db.cbuumpmfxesr.us-east-1.rds.amazonaws.com/{db_name}")
+        # Get engine with connection pooling
+        engine = _get_engine(db_user, db_pass, db_name)
 
         with engine.connect() as conn:
             detected = _detect_sales_source(conn, db_name)
@@ -805,7 +836,7 @@ def get_operations_insights(
         db_user = selected_store["db_user"]
         db_pass = selected_store["db_pass"]
 
-        engine = create_engine(f"mysql+pymysql://{db_user}:{db_pass}@spirits-db.cbuumpmfxesr.us-east-1.rds.amazonaws.com/{db_name}")
+        engine = _get_engine(db_user, db_pass, db_name)
 
         with engine.connect() as conn:
             response_meta = {
@@ -1056,7 +1087,7 @@ def get_tenders_insights(
         db_user = selected_store["db_user"]
         db_pass = selected_store["db_pass"]
 
-        engine = create_engine(f"mysql+pymysql://{db_user}:{db_pass}@spirits-db.cbuumpmfxesr.us-east-1.rds.amazonaws.com/{db_name}")
+        engine = _get_engine(db_user, db_pass, db_name)
 
         with engine.connect() as conn:
             response_meta = {
@@ -1183,7 +1214,7 @@ def get_gateway_insights(
         db_user = selected_store["db_user"]
         db_pass = selected_store["db_pass"]
 
-        engine = create_engine(f"mysql+pymysql://{db_user}:{db_pass}@spirits-db.cbuumpmfxesr.us-east-1.rds.amazonaws.com/{db_name}")
+        engine = _get_engine(db_user, db_pass, db_name)
 
         with engine.connect() as conn:
             response_meta = {
@@ -1286,7 +1317,7 @@ def get_quick_insights(
         db_user = selected_store["db_user"]
         db_pass = selected_store["db_pass"]
 
-        engine = create_engine(f"mysql+pymysql://{db_user}:{db_pass}@spirits-db.cbuumpmfxesr.us-east-1.rds.amazonaws.com/{db_name}")
+        engine = _get_engine(db_user, db_pass, db_name)
 
         today = datetime.now().strftime('%Y-%m-%d')
         
