@@ -9,8 +9,9 @@ echo Current directory: %CD%
 echo.
 
 echo Installing/upgrading PyInstaller and required dependencies...
+pip install --upgrade pip
 pip install --upgrade pyinstaller
-pip install pystray pillow pywin32
+pip install -r requirements-uploader.txt
 
 echo.
 echo Building executable...
@@ -26,68 +27,29 @@ if not exist "vfp_dbf_to_rdsv2.py" (
 )
 
 REM Generate spec file with correct MySQL plugin paths
-echo Generating spec file with correct paths...
 python gen_spec.py
 if %ERRORLEVEL% neq 0 (
-    echo WARNING: Could not generate spec file. Using command line options.
-    goto :build_cmd
-)
-
-REM Check if runtime hook exists
-if not exist "mysql_plugin_hook.py" (
-    echo WARNING: mysql_plugin_hook.py not found. Plugins may not work correctly.
+    echo ERROR: Spec file verification failed.
+    pause
+    exit /b 1
 )
 
 REM Use spec file for more precise control
 if exist "vfp_dbf_to_rdsv2.spec" (
-    echo Using auto-generated spec file...
-    pyinstaller vfp_dbf_to_rdsv2.spec --clean
+    echo Using checked-in spec file...
+    pyinstaller --clean --noconfirm vfp_dbf_to_rdsv2.spec
     goto :build_done
 )
 
-:build_cmd
-echo Building with command line options...
-pyinstaller --name="VFP_DBF_Uploader" ^
-        --onefile ^
-        --windowed ^
-        --icon=NONE ^
-        --add-data "README_ODBC.txt;." ^
-        --hidden-import yaml ^
-        --hidden-import dbfread ^
-        --hidden-import pyodbc ^
-        --hidden-import mysql.connector ^
-        --hidden-import mysql.connector.pooling ^
-        --hidden-import mysql.connector.cursor ^
-        --hidden-import mysql.connector.plugins ^
-        --hidden-import mysql.connector.plugins.mysql_native_password ^
-        --hidden-import mysql.connector.plugins.caching_sha2_password ^
-        --hidden-import tkinter ^
-        --hidden-import tkinter.ttk ^
-        --hidden-import tkinter.filedialog ^
-        --hidden-import tkinter.messagebox ^
-        --hidden-import pystray ^
-        --hidden-import PIL ^
-        --hidden-import PIL.Image ^
-        --hidden-import PIL.ImageDraw ^
-        --hidden-import win32event ^
-        --hidden-import win32api ^
-        --hidden-import win32gui ^
-        --hidden-import win32con ^
-        --hidden-import winerror ^
-        --collect-all dbfread ^
-        --collect-all yaml ^
-        --collect-all mysql.connector ^
-        --collect-all pystray ^
-        --collect-all PIL ^
-        --collect-binaries mysql.connector ^
-        --collect-binaries pywin32 ^
-        vfp_dbf_to_rdsv2.py
+echo ERROR: vfp_dbf_to_rdsv2.spec was not found even after verification.
+pause
+exit /b 1
 
 :build_done
 
 if %ERRORLEVEL% == 0 (
     echo.
-    echo Build complete! Executable is in: %CD%\dist\VFP_DBF_Uploader.exe
+    echo Build complete! Executable is in: %CD%\dist\VFP_DBF_Uploader\VFP_DBF_Uploader.exe
     echo.
     echo IMPORTANT: Users must install ODBC Driver 17 for SQL Server separately.
     echo See README_ODBC.txt for instructions.

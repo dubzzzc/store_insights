@@ -19,3 +19,4 @@ python -m compileall vfp_dbf_to_rdsv2.py
 
 Both invocations point to the same file; the key difference is the relative
 path supplied to `compileall`.
+
