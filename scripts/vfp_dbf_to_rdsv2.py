@@ -13,6 +13,7 @@ VFP DBF → RDS Uploader
 
 Prereqs (Windows):
   pip install dbfread pyyaml pyodbc mysql-connector-python dearpygui
+  Optional for system tray: pip install pystray pillow pywin32
 
 Example config.yaml (single or multi-profile):
 ---
@@ -97,6 +98,7 @@ import re
 import sys
 import glob
 import json
+import shutil
 from urllib import request as urlrequest
 from urllib import parse as urlparse
 import yaml
@@ -267,6 +269,7 @@ ALLOWED_BASES = {
     "pod",
     "poh",
     "prc",
+    "slh",
     "sll",
     "stk",
     "str",
@@ -280,9 +283,100 @@ def is_allowed_dbf(path: str) -> bool:
     base = os.path.splitext(os.path.basename(path))[0].lower()
     return base in ALLOWED_BASES
 
+
+def get_sync_directory(source_folder: str) -> str:
+    """Get the sync directory path (vfptordssync inside ksv folder)."""
+    # Try to find ksv root from the source folder
+    ksv_root = find_ksv_root(source_folder)
+    if ksv_root:
+        sync_dir = os.path.join(ksv_root, "vfptordssync")
+    else:
+        # If no ksv root found, create sync dir next to source folder
+        sync_dir = os.path.join(os.path.dirname(source_folder), "vfptordssync")
+
+    # Ensure directory exists
+    os.makedirs(sync_dir, exist_ok=True)
+    return sync_dir
+
+
+def copy_dbf_and_related_files(source_file: str, sync_dir: str) -> str:
+    """Copy DBF file and its related CDX and FPT files to sync directory.
+
+    Returns:
+        Path to the copied DBF file in sync directory.
+    """
+
+    source_dir = os.path.dirname(source_file)
+    base_name = os.path.basename(source_file)
+    base_name_no_ext = os.path.splitext(base_name)[0]
+
+    # Paths for copied files
+    dest_dbf = os.path.join(sync_dir, base_name)
+    dest_cdx = os.path.join(sync_dir, f"{base_name_no_ext}.cdx")
+    dest_fpt = os.path.join(sync_dir, f"{base_name_no_ext}.fpt")
+
+    # Source paths
+    source_cdx = os.path.join(source_dir, f"{base_name_no_ext}.cdx")
+    source_fpt = os.path.join(source_dir, f"{base_name_no_ext}.fpt")
+
+    # Copy DBF file
+    try:
+        shutil.copy2(source_file, dest_dbf)
+    except Exception as e:
+        log_to_gui(f"WARNING: Could not copy {base_name}: {e}")
+        return source_file  # Fallback to original
+
+    # Copy CDX file if it exists
+    if os.path.exists(source_cdx):
+        try:
+            shutil.copy2(source_cdx, dest_cdx)
+        except Exception as e:
+            log_to_gui(f"WARNING: Could not copy {base_name_no_ext}.cdx: {e}")
+
+    # Copy FPT file if it exists
+    if os.path.exists(source_fpt):
+        try:
+            shutil.copy2(source_fpt, dest_fpt)
+        except Exception as e:
+            log_to_gui(f"WARNING: Could not copy {base_name_no_ext}.fpt: {e}")
+
+    return dest_dbf
+
+
+def sync_files_to_directory(
+    source_folder: str, include: Optional[List[str]] = None
+) -> Tuple[str, List[str]]:
+    """Copy allowed DBF files and their related files to sync directory.
+
+    Returns:
+        Tuple of (sync_directory_path, list_of_copied_dbf_paths)
+    """
+    sync_dir = get_sync_directory(source_folder)
+
+    # Get list of source DBF files
+    if include:
+        source_files = [os.path.join(source_folder, f) for f in include]
+    else:
+        source_files = glob.glob(os.path.join(source_folder, "*.dbf"))
+
+    # Filter to allowed DBFs
+    allowed_source_files = [p for p in source_files if is_allowed_dbf(p)]
+
+    # Copy files to sync directory
+    copied_files = []
+    for source_file in allowed_source_files:
+        copied_file = copy_dbf_and_related_files(source_file, sync_dir)
+        copied_files.append(copied_file)
+
+    return sync_dir, sorted(copied_files)
+
+
 def list_allowed_dbfs(folder: str, include: Optional[List[str]] = None) -> List[str]:
     """Return sorted list of *.dbf in folder limited to ALLOWED_BASES.
-       If include list is provided, still filter to ALLOWED_BASES.
+    If include list is provided, still filter to ALLOWED_BASES.
+
+    Note: This function returns paths to original files.
+    Use sync_files_to_directory() to copy files to sync directory first.
     """
     if include:
         files = [os.path.join(folder, f) for f in include]
@@ -575,7 +669,21 @@ def iter_dbf_rows(
             - join_field_related: field in related table to match on
             - date_field_related: date field in related table to check
     """
-    table = open_dbf(dbf_path)
+    try:
+        table = open_dbf(dbf_path)
+    except Exception as e:
+        error_msg = str(e).lower()
+        if "invalid date" in error_msg or (
+            "date" in error_msg and ("b'\\x00" in str(e) or "\\x00" in str(e))
+        ):
+            log_to_gui(
+                f"WARNING: Error opening DBF file (date field issue): {e}. Attempting to continue with defensive parsing..."
+            )
+            # Try to open with load=False (which we already do) - the issue is likely during iteration
+            # Re-raise to let caller handle it, but log the warning
+            raise RuntimeError(f"Cannot open DBF file due to date field error: {e}")
+        raise
+
     field_names = [f.name for f in table.fields]
 
     # Handle related table filtering (e.g., jnl using jnh.tstamp)
@@ -770,11 +878,14 @@ def iter_dbf_rows(
                                                 )
                                         else:
                                             # Try strptime with common formats
+                                            # Format: "11/04/2025 07:58:47 PM" - MM/DD/YYYY HH:MM:SS AM/PM
                                             date_formats = [
+                                                "%m/%d/%Y %I:%M:%S %p",  # MM/DD/YYYY HH:MM:SS AM/PM (e.g., 11/04/2025 07:58:47 PM)
+                                                "%m/%d/%Y %H:%M:%S",  # MM/DD/YYYY HH:MM:SS (24-hour)
                                                 "%Y-%m-%d",
                                                 "%Y-%m-%d %H:%M:%S",
                                                 "%Y-%m-%d %H:%M:%S.%f",
-                                                "%m/%d/%Y",
+                                                "%m/%d/%Y",  # MM/DD/YYYY (date only)
                                                 "%m-%d-%Y",
                                                 "%d/%m/%Y",
                                                 "%d-%m-%Y",
@@ -816,6 +927,12 @@ def iter_dbf_rows(
                                                     tzinfo=None
                                                 )
 
+                                            # Debug logging for first few records to diagnose parsing issues
+                                            if processed_count <= 10:
+                                                log_to_gui(
+                                                    f"  [Debug] jnh record {processed_count}: date_val={date_val!r}, parsed={parsed_date}, join_val={join_val}, effective_start={effective_start}, match={parsed_date >= effective_start}"
+                                                )
+
                                             # Check if date is newer than effective_start
                                             if parsed_date >= effective_start:
                                                 # Add join value to both string and numeric sets for efficient lookup
@@ -840,6 +957,11 @@ def iter_dbf_rows(
                                                             if join_val
                                                             else ""
                                                         )
+                                        elif processed_count <= 10:
+                                            # Log first few parse failures for debugging
+                                            log_to_gui(
+                                                f"  [Debug] jnh record {processed_count}: date_val={date_val!r}, parsed_date={parsed_date}, join_val={join_val} - DATE NOT PARSED"
+                                            )
                                     except Exception:
                                         continue  # Skip problematic rows in related table
 
@@ -856,6 +978,25 @@ def iter_dbf_rows(
                                 )  # String set contains all values
                                 log_msg = f"Related table '{related_table_name}': Found {total_valid} valid {join_field_related} values with {date_field_related} >= {effective_start}"
                                 log_to_gui(log_msg)
+
+                                # If no valid values found, provide diagnostic info
+                                if total_valid == 0:
+                                    log_to_gui(
+                                        f"  WARNING: No records found with {date_field_related} >= {effective_start}"
+                                    )
+                                    log_to_gui(f"  This could mean:")
+                                    log_to_gui(
+                                        f"    1. All records in '{related_table_name}' are older than the last sync time"
+                                    )
+                                    log_to_gui(
+                                        f"    2. Date field '{date_field_related}' format is not being parsed correctly"
+                                    )
+                                    log_to_gui(
+                                        f"    3. Date field contains null/invalid values"
+                                    )
+                                    log_to_gui(
+                                        f"  Check the debug logs above for sample date values and parsing results."
+                                    )
                     except Exception as e:
                         error_msg = f"WARNING: Could not load related table '{related_table_name}': {e}. Falling back to full sync."
                         log_to_gui(error_msg)
@@ -882,51 +1023,136 @@ def iter_dbf_rows(
             # Also print to stderr for visibility in headless mode
             print(warning_msg, file=sys.stderr)
 
+    def validate_parsed_date(parsed_dt: datetime) -> bool:
+        """Validate that a parsed date has a reasonable year range."""
+        if not isinstance(parsed_dt, datetime):
+            return False
+        year = parsed_dt.year
+        # Reject dates with years outside reasonable range (1900-2100)
+        if year < 1900 or year > 2100:
+            return False
+        return True
+
     def gen():
-        for rec in table:
+        # Wrap the table iteration itself to catch errors from DBF library
+        # The dbfread library may raise exceptions when encountering invalid date fields
+        # We need to catch these at the iteration level
+        skipped_count = 0
+        max_skipped_warnings = 10  # Only log first 10 warnings to avoid spam
+
+        while True:
+            try:
+                # Try to get next record - this may raise an exception if date fields are invalid
+                rec = next(table)
+            except StopIteration:
+                # End of table reached
+                break
+            except Exception as e:
+                # Catch any exception from DBF library during record access
+                error_msg = str(e).lower()
+                error_str = str(e)
+                if "invalid date" in error_msg or (
+                    "date" in error_msg
+                    and (
+                        "b'\\x00" in error_str
+                        or "\\x00" in error_str
+                        or "null" in error_msg
+                    )
+                ):
+                    skipped_count += 1
+                    if skipped_count <= max_skipped_warnings:
+                        log_to_gui(
+                            f"  Skipping record with invalid date field: {error_str[:100]}"
+                        )
+                    elif skipped_count == max_skipped_warnings + 1:
+                        log_to_gui(f"  ... (suppressing further date field warnings)")
+                    # Skip this record and continue
+                    continue
+                else:
+                    # For non-date errors, also skip but log differently
+                    skipped_count += 1
+                    if skipped_count <= max_skipped_warnings:
+                        log_to_gui(f"  Skipping record due to error: {error_str[:100]}")
+                    continue
             try:
                 # Try to get the raw record first, handling date field errors specially
-                row = []
-                for name in field_names:
-                    try:
-                        val = rec.get(name)
-                        # Check if this is a date field and handle it specially
-                        if (
-                            date_field_idx is not None
-                            and name.lower() == date_field.lower()
-                        ):
-                            # Special handling for date fields to catch DBF library errors
-                            try:
+                # Wrap the entire record access in a try-except to catch DBF library errors
+                try:
+                    # Attempt to access all fields - this may raise an error if date fields are invalid
+                    row = []
+                    for name in field_names:
+                        try:
+                            val = rec.get(name)
+                            # Check if this is a date field and handle it specially
+                            if (
+                                date_field_idx is not None
+                                and name.lower() == date_field.lower()
+                            ):
+                                # Special handling for date fields to catch DBF library errors
+                                try:
+                                    val = coerce_value(val)
+                                    # Check for null bytes in date field before processing
+                                    if isinstance(val, bytes):
+                                        # Check if all bytes are null (uninitialized date)
+                                        if all(b == 0 for b in val) or len(val) == 0:
+                                            val = None  # Mark as None to skip later
+                                    # Additional validation: check if it's a date/datetime with invalid year
+                                    elif isinstance(val, (date, datetime)):
+                                        if not validate_parsed_date(
+                                            val
+                                            if isinstance(val, datetime)
+                                            else datetime.combine(
+                                                val, datetime.min.time()
+                                            )
+                                        ):
+                                            val = None  # Mark invalid dates as None
+                                except Exception:
+                                    # DBF library couldn't parse this date field - mark as None
+                                    val = None
+                            else:
                                 val = coerce_value(val)
-                                # Check for null bytes in date field before processing
-                                if isinstance(val, bytes):
-                                    # Check if all bytes are null (uninitialized date)
-                                    if all(b == 0 for b in val) or len(val) == 0:
-                                        val = None  # Mark as None to skip later
-                            except Exception:
-                                # DBF library couldn't parse this date field - mark as None
-                                val = None
-                        else:
-                            val = coerce_value(val)
-                        row.append(val)
-                    except Exception as e:
-                        # If this is the date field and we get an error, mark it as None
-                        error_msg = str(e).lower()
-                        if (
-                            date_field_idx is not None
-                            and name.lower() == date_field.lower()
-                        ):
-                            if "invalid date" in error_msg or "date" in error_msg:
-                                row.append(None)  # Mark date field as None to skip
-                                continue
-                        # For other fields, try to use a default value or skip the field
-                        row.append(None)
+                            row.append(val)
+                        except Exception as e:
+                            # If this is the date field and we get an error, mark it as None
+                            error_msg = str(e).lower()
+                            if (
+                                date_field_idx is not None
+                                and name.lower() == date_field.lower()
+                            ):
+                                if "invalid date" in error_msg or "date" in error_msg:
+                                    row.append(None)  # Mark date field as None to skip
+                                    continue
+                            # For other fields, try to use a default value or skip the field
+                            row.append(None)
+                except Exception as e:
+                    # Handle errors from DBF library when accessing record (e.g., invalid date fields)
+                    # This catches errors that occur when the library tries to parse date fields
+                    error_msg = str(e).lower()
+                    error_str = str(e)
+                    if "invalid date" in error_msg or (
+                        "date" in error_msg
+                        and (
+                            "b'\\x00" in error_str
+                            or "null" in error_msg
+                            or "\\x00" in error_str
+                        )
+                    ):
+                        # Silently skip rows with invalid dates - this is expected for some DBF files
+                        continue
+                    # Re-raise if it's not a date error - we want to handle it at outer level
+                    raise
             except Exception as e:
                 # Handle errors from DBF library when reading entire record (e.g., invalid date fields)
                 # Skip this row and continue with next record
                 error_msg = str(e).lower()
+                error_str = str(e)
                 if "invalid date" in error_msg or (
-                    "date" in error_msg and ("b'\\x00" in str(e) or "null" in error_msg)
+                    "date" in error_msg
+                    and (
+                        "b'\\x00" in error_str
+                        or "null" in error_msg
+                        or "\\x00" in error_str
+                    )
                 ):
                     # Silently skip rows with invalid dates - this is expected for some DBF files
                     continue
@@ -983,6 +1209,30 @@ def iter_dbf_rows(
                     ):
                         continue
 
+                    # Validate date string before parsing (check for obviously invalid years)
+                    # Check if the string contains a year that looks invalid (e.g., 4102, 9999, etc.)
+                    if len(date_val) >= 4:
+                        # Try to extract year from common positions
+                        year_candidates = []
+                        # Check for 4-digit years at start or end
+                        if date_val[:4].isdigit():
+                            year_candidates.append(int(date_val[:4]))
+                        if date_val[-4:].isdigit():
+                            year_candidates.append(int(date_val[-4:]))
+                        # Check for years in middle (e.g., MM/DD/YYYY)
+                        parts = date_val.replace("/", "-").replace(".", "-").split()
+                        if parts:
+                            for part in parts[0].split("-"):
+                                if len(part) == 4 and part.isdigit():
+                                    year_candidates.append(int(part))
+
+                        # Reject if any year is outside reasonable range (1900-2100)
+                        if year_candidates:
+                            if any(
+                                year < 1900 or year > 2100 for year in year_candidates
+                            ):
+                                continue  # Skip row with invalid year
+
                     # Try parsing comprehensive list of date formats
                     date_formats = [
                         # ISO formats
@@ -1026,9 +1276,12 @@ def iter_dbf_rows(
                     parsed = False
                     for fmt in date_formats:
                         try:
-                            date_val = datetime.strptime(date_val, fmt)
-                            parsed = True
-                            break
+                            parsed_date = datetime.strptime(date_val, fmt)
+                            # Validate the parsed date has a reasonable year
+                            if validate_parsed_date(parsed_date):
+                                date_val = parsed_date
+                                parsed = True
+                                break
                         except (ValueError, TypeError):
                             continue
 
@@ -1037,24 +1290,33 @@ def iter_dbf_rows(
                         try:
                             from dateutil import parser as date_parser
 
-                            date_val = date_parser.parse(date_val, fuzzy=False)
-                            parsed = True
+                            parsed_date = date_parser.parse(date_val, fuzzy=False)
+                            if validate_parsed_date(parsed_date):
+                                date_val = parsed_date
+                                parsed = True
                         except (ImportError, ValueError, TypeError):
                             pass
 
                     if not parsed or isinstance(date_val, str):
-                        continue  # Couldn't parse, skip this row
+                        continue  # Couldn't parse or validate, skip this row
 
                 # Handle date objects (convert to datetime)
                 if isinstance(date_val, date) and not isinstance(date_val, datetime):
                     try:
                         date_val = datetime.combine(date_val, datetime.min.time())
+                        # Validate the converted date has a reasonable year
+                        if not validate_parsed_date(date_val):
+                            continue  # Skip row with invalid year
                     except Exception:
                         continue  # Skip row if conversion fails
 
                 # Final check: must be datetime at this point
                 if not isinstance(date_val, datetime):
                     continue  # Skip row if still not a datetime
+
+                # Final validation: ensure year is reasonable
+                if not validate_parsed_date(date_val):
+                    continue  # Skip row with invalid year
 
                 # Normalize timezone for comparison (convert timezone-aware to naive)
                 if date_val.tzinfo is not None:
@@ -1147,6 +1409,13 @@ def iter_dbf_rows(
                     continue  # Skip row if can't access join field
 
             yield row
+
+        # Log summary if we skipped records during iteration
+        if skipped_count > 0:
+            log_to_gui(
+                f"  Skipped {skipped_count} record(s) with invalid date fields or other errors"
+            )
+
     return field_names, gen()
 
 
@@ -1191,18 +1460,54 @@ def bulk_insert(
         date_range_start: Only insert records >= this date (initial load filter)
         date_range_end: Only insert records <= this date (initial load filter)
     """
-    dbf_obj = open_dbf(dbf_path)
-    ensure_table(conn, engine, table, dbf_obj.fields, schema, recreate=recreate)
+    try:
+        dbf_obj = open_dbf(dbf_path)
+    except Exception as e:
+        error_msg = str(e).lower()
+        if "invalid date" in error_msg or "date" in error_msg:
+            log_to_gui(
+                f"WARNING: Could not open DBF file (date field error): {e}. Attempting to continue with defensive parsing..."
+            )
+            # Try to open with a different encoding or skip problematic date fields
+            # For now, we'll try to continue - the iter_dbf_rows function should handle it
+            try:
+                dbf_obj = open_dbf(dbf_path)
+            except Exception:
+                # If we can't open at all, re-raise - this is a critical error
+                raise RuntimeError(f"Cannot open DBF file {dbf_path}: {e}")
+        else:
+            raise
+
+    try:
+        ensure_table(conn, engine, table, dbf_obj.fields, schema, recreate=recreate)
+    except Exception as e:
+        log_to_gui(f"WARNING: Error ensuring table structure: {e}")
+        raise
 
     cols_existing = existing_columns(conn, engine, table, schema)
-    col_names, row_iter = iter_dbf_rows(
-        dbf_path,
-        date_field=date_field,
-        since_date=since_date,
-        date_range_start=date_range_start,
-        date_range_end=date_range_end,
-        related_table_config=related_table_config,
-    )
+
+    try:
+        col_names, row_iter = iter_dbf_rows(
+            dbf_path,
+            date_field=date_field,
+            since_date=since_date,
+            date_range_start=date_range_start,
+            date_range_end=date_range_end,
+            related_table_config=related_table_config,
+        )
+    except Exception as e:
+        error_msg = str(e).lower()
+        if "invalid date" in error_msg or (
+            "date" in error_msg and ("b'\\x00" in str(e) or "\\x00" in str(e))
+        ):
+            log_to_gui(
+                f"WARNING: Date field error when iterating DBF rows: {e}. Rows with invalid dates will be skipped."
+            )
+            # Try to continue with a fresh iteration - our error handling should catch bad rows
+            # Re-raise if it's not a date-related error
+            raise RuntimeError(f"Critical error when reading DBF file: {e}")
+        raise
+
     insert_sql, _dest_cols = build_insert_sql(table, col_names, engine, schema, cols_existing)
 
     cur = conn.cursor()
@@ -1210,17 +1515,37 @@ def bulk_insert(
     inserted = 0
     batches = 0
 
-    for row in row_iter:
-        buf.append(row)
-        if len(buf) >= batch_size:
+    try:
+        for row in row_iter:
+            buf.append(row)
+            if len(buf) >= batch_size:
+                cur.executemany(insert_sql, buf)
+                inserted += len(buf)
+                batches += 1
+                buf.clear()
+        if buf:
             cur.executemany(insert_sql, buf)
             inserted += len(buf)
             batches += 1
-            buf.clear()
-    if buf:
-        cur.executemany(insert_sql, buf)
-        inserted += len(buf)
-        batches += 1
+    except Exception as e:
+        error_msg = str(e).lower()
+        if "invalid date" in error_msg or (
+            "date" in error_msg and ("b'\\x00" in str(e) or "\\x00" in str(e))
+        ):
+            # This shouldn't happen if our error handling is working, but catch it anyway
+            log_to_gui(
+                f"WARNING: Date field error during row iteration: {e}. Some rows may have been skipped."
+            )
+            # Commit what we have so far
+            if buf:
+                try:
+                    cur.executemany(insert_sql, buf)
+                    inserted += len(buf)
+                    batches += 1
+                except Exception:
+                    pass
+        else:
+            raise
 
     conn.commit()
     return inserted, batches
@@ -1302,6 +1627,14 @@ def run_headless(cfg_path: Optional[str] = None, profile: Optional[str] = None, 
 
     folder = cfg['source']['folder']
     include = cfg['source'].get('include')
+
+    # Copy files to sync directory (vfptordssync) to avoid interfering with source software
+    log_to_gui(f"Copying DBF files to sync directory...")
+    sync_dir, files = sync_files_to_directory(folder, include)
+    log_to_gui(f"Files copied to sync directory: {sync_dir}")
+    log_to_gui(
+        f"Using copied files for sync operations (original files remain untouched)"
+    )
 
     drop_recreate = bool(cfg['load'].get('drop_recreate', False))
     trunc = bool(cfg['load'].get('truncate_before_load', False))
@@ -1707,11 +2040,21 @@ def run_headless(cfg_path: Optional[str] = None, profile: Optional[str] = None, 
     # Save updated sync tracking (always save to track last sync time)
     if sync_updates:
         sync_tracking.update(sync_updates)
+        # Update last auto-sync time if this was an auto-sync run
+        if auto_sync:
+            sync_tracking["__last_auto_sync__"] = (
+                datetime.now().astimezone().isoformat()
+            )
         save_sync_tracking(sync_tracking)
         if delta_enabled:
-            log_to_gui(
-                f"\n[Delta Sync] Updated sync tracking for {len(sync_updates)} table(s)"
-            )
+            if auto_sync:
+                log_to_gui(
+                    f"\n[Auto-Sync] Sync complete. Updated sync tracking for {len(sync_updates)} table(s)"
+                )
+            else:
+                log_to_gui(
+                    f"\n[Delta Sync] Updated sync tracking for {len(sync_updates)} table(s)"
+                )
 
     try:
         conn.close()
@@ -1947,18 +2290,19 @@ def run_gui():
 
 # ---------- Single Instance Detection ----------
 
+
 def check_single_instance():
     """Check if another instance is already running. Returns (is_first_instance, mutex_handle)."""
     try:
         import win32event
         import win32api
         import winerror
-        
+
         # Create a named mutex for single instance detection
         mutex_name = "VFP_DBF_Uploader_SingleInstance"
         mutex = win32event.CreateMutex(None, False, mutex_name)
         last_error = win32api.GetLastError()
-        
+
         if last_error == winerror.ERROR_ALREADY_EXISTS:
             # Another instance is running
             return False, None
@@ -1966,14 +2310,15 @@ def check_single_instance():
     except ImportError:
         # Fallback: use lock file (works on all platforms)
         import tempfile
+
         lock_file = os.path.join(tempfile.gettempdir(), "vfp_dbf_uploader.lock")
-        
+
         try:
             # Try to create lock file exclusively
             if os.path.exists(lock_file):
                 # Check if process is still running
                 try:
-                    with open(lock_file, 'r') as f:
+                    with open(lock_file, "r") as f:
                         pid = int(f.read().strip())
                     # Check if process exists (Windows)
                     try:
@@ -1984,19 +2329,21 @@ def check_single_instance():
                         os.remove(lock_file)
                 except (ValueError, IOError):
                     os.remove(lock_file)
-            
+
             # Create new lock file
-            with open(lock_file, 'w') as f:
+            with open(lock_file, "w") as f:
                 f.write(str(os.getpid()))
             return True, lock_file
         except Exception:
             return True, None  # Allow if we can't create lock
+
 
 def cleanup_instance_lock(lock_handle):
     """Clean up the instance lock."""
     if lock_handle:
         try:
             import win32api
+
             win32api.CloseHandle(lock_handle)
         except (ImportError, Exception):
             # Lock file cleanup
@@ -2006,12 +2353,13 @@ def cleanup_instance_lock(lock_handle):
             except Exception:
                 pass
 
+
 def bring_window_to_front():
     """Try to bring existing window to front (Windows)."""
     try:
         import win32gui
         import win32con
-        
+
         def enum_handler(hwnd, ctx):
             if win32gui.IsWindowVisible(hwnd):
                 window_title = win32gui.GetWindowText(hwnd)
@@ -2024,11 +2372,12 @@ def bring_window_to_front():
                     win32gui.BringWindowToTop(hwnd)
                     return False  # Stop enumeration
             return True
-        
+
         win32gui.EnumWindows(enum_handler, None)
         return True
     except ImportError:
         return False
+
 
 # ---------- Tkinter GUI (Modernized) ----------
 
@@ -2036,7 +2385,7 @@ def run_gui_tk():
     import tkinter as tk
     from tkinter import ttk, filedialog, messagebox
     import pathlib
-    
+
     # Check for single instance
     is_first_instance, lock_handle = check_single_instance()
     if not is_first_instance:
@@ -2044,7 +2393,9 @@ def run_gui_tk():
         if bring_window_to_front():
             return  # Existing window brought to front, exit this instance
         else:
-            messagebox.showinfo("Already Running", "Another instance is already running.")
+            messagebox.showinfo(
+                "Already Running", "Another instance is already running."
+            )
             return
 
     # Resolve or ask for \ksv\ once; remember it next to the script
@@ -2098,14 +2449,37 @@ def run_gui_tk():
         if not folder or not os.path.isdir(folder):
             messagebox.showwarning("Folder", "Please select a valid folder.")
             return
-        files = list_allowed_dbfs(folder)
-        state["folder"] = folder
-        state["files"] = files
-        files_list.delete(0, "end")
-        for f in files:
-            files_list.insert("end", os.path.basename(f))
-        count_var.set(f"Found: {len(files)}")
-        log(f"Scanned {len(files)} DBFs.")
+
+        # Copy files to sync directory first
+        log("Copying DBF files and related files (CDX, FPT) to sync directory...")
+        try:
+            sync_dir, copied_files = sync_files_to_directory(folder)
+            log(f"Files copied to sync directory: {sync_dir}")
+            log(f"Using copied files for operations (original files remain untouched)")
+
+            # Use copied files from sync directory
+            state["folder"] = sync_dir  # Store sync directory as the working folder
+            state["source_folder"] = folder  # Keep track of original folder
+            state["files"] = copied_files
+            files_list.delete(0, "end")
+            for f in copied_files:
+                files_list.insert("end", os.path.basename(f))
+            count_var.set(f"Found: {len(copied_files)}")
+            log(f"Scanned {len(copied_files)} DBFs from sync directory.")
+        except Exception as e:
+            log(f"ERROR: Could not copy files to sync directory: {e}")
+            messagebox.showerror(
+                "Error", f"Could not copy files to sync directory: {e}"
+            )
+            # Fallback to original folder
+            files = list_allowed_dbfs(folder)
+            state["folder"] = folder
+            state["files"] = files
+            files_list.delete(0, "end")
+            for f in files:
+                files_list.insert("end", os.path.basename(f))
+            count_var.set(f"Found: {len(files)}")
+            log(f"Scanned {len(files)} DBFs (using original files).")
 
     def browse_folder():
         folder = filedialog.askdirectory(title="Select ksv/data folder", initialdir=os.path.join(ksv, "data"))
@@ -2795,23 +3169,44 @@ def run_gui_tk():
 
     def run_easy():
         default_data = os.path.join(ksv, "data")
-        if not state.get("folder"):
+        source_folder = (
+            state.get("source_folder") or state.get("folder") or default_data
+        )
+        if not source_folder or not os.path.isdir(source_folder):
             if os.path.isdir(default_data):
-                state["folder"] = default_data
+                source_folder = default_data
                 folder_var.set(default_data)
             else:
                 messagebox.showwarning("Folder", "Select your ksv\\data folder first.")
                 return
-        ffiles = list_allowed_dbfs(state["folder"])
-        if not ffiles:
-            messagebox.showinfo("Run (Easy)", "No DBF files found in selected folder.")
-            return
-        files_list.selection_clear(0, "end")
-        for i in range(len(ffiles)):
-            files_list.selection_set(i)
-        recreate_var.set(1)
-        trunc_var.set(0)
-        upload_selected()
+
+        # Copy files to sync directory first
+        log("Copying DBF files and related files (CDX, FPT) to sync directory...")
+        try:
+            sync_dir, ffiles = sync_files_to_directory(source_folder)
+            log(f"Files copied to sync directory: {sync_dir}")
+            state["folder"] = sync_dir
+            state["source_folder"] = source_folder
+
+            if not ffiles:
+                messagebox.showinfo(
+                    "Run (Easy)", "No DBF files found in selected folder."
+                )
+                return
+            files_list.delete(0, "end")
+            for f in ffiles:
+                files_list.insert("end", os.path.basename(f))
+            files_list.selection_clear(0, "end")
+            for i in range(len(ffiles)):
+                files_list.selection_set(i)
+            recreate_var.set(1)
+            trunc_var.set(0)
+            upload_selected()
+        except Exception as e:
+            log(f"ERROR: Could not copy files to sync directory: {e}")
+            messagebox.showerror(
+                "Error", f"Could not copy files to sync directory: {e}"
+            )
 
     # Placeholder for update function (defined later)
     update_auto_sync_status = lambda: None
@@ -3061,7 +3456,7 @@ def run_gui_tk():
     yscroll.grid(row=0, column=1, sticky="ns")
     files_list.configure(yscrollcommand=yscroll.set)
 
-    # Update last sync label when selection changes
+    # Update last auto-sync time display
     def _format_local_time(iso_str: str) -> str:
         try:
             dt = datetime.fromisoformat(iso_str)
@@ -3072,31 +3467,45 @@ def run_gui_tk():
         except Exception:
             return iso_str
 
-    def update_last_sync_label(event=None):
+    def update_last_auto_sync_label():
+        """Update the last auto-sync time display from sync tracking."""
         try:
-            sel = files_list.curselection()
-            if not sel or len(sel) != 1:
-                last_sync_var.set("—")
-                return
-            idx = sel[0]
-            p = state.get("files", [])[idx]
-            if not p:
-                last_sync_var.set("—")
-                return
-            base = os.path.splitext(os.path.basename(p))[0]
-            tpref = tpref_var.get().strip()
-            tsuff = tsuff_var.get().strip()
-            tgt = f"{tpref}{base}{tsuff}"
-            profile_key = 'default'
-            folder = folder_var.get().strip() or os.path.join(ksv, "data")
-            database = db_var.get().strip()
-            table_key = f"{profile_key}|{database}|{folder}|{tgt}"
             tracking = load_sync_tracking()
-            last = tracking.get(table_key)
-            last_sync_var.set(_format_local_time(last) if last else "Never")
+            # Get the most recent auto-sync time from tracking
+            # Look for "__last_auto_sync__" key or find most recent sync time
+            last_auto_sync = tracking.get("__last_auto_sync__")
+
+            if not last_auto_sync:
+                # Fallback: find the most recent sync time from all tables
+                sync_times = []
+                for key, value in tracking.items():
+                    if key != "__last_auto_sync__" and isinstance(value, str):
+                        try:
+                            dt = datetime.fromisoformat(value)
+                            sync_times.append((dt, value))
+                        except Exception:
+                            continue
+
+                if sync_times:
+                    # Get the most recent sync time
+                    sync_times.sort(reverse=True)
+                    last_auto_sync = sync_times[0][1]
+
+            if last_auto_sync:
+                last_sync_var.set(_format_local_time(last_auto_sync))
+            else:
+                last_sync_var.set("Never")
         except Exception:
             last_sync_var.set("—")
-    files_list.bind('<<ListboxSelect>>', update_last_sync_label)
+
+    # Update last sync label periodically
+    def periodic_update_last_sync():
+        """Periodically update the last auto-sync time display."""
+        update_last_auto_sync_label()
+        root.after(30000, periodic_update_last_sync)  # Update every 30 seconds
+
+    # Start periodic updates
+    root.after(1000, periodic_update_last_sync)  # Initial update after 1 second
 
     # Right: Form with modern card-like appearance (scrollable for overflow)
     # Create outer frame for scrollable content
@@ -3171,10 +3580,10 @@ def run_gui_tk():
         header_frame.grid_columnconfigure(1, weight=1)
 
         # Expand/collapse indicator
-        expand_var = tk.BooleanVar(value=True)  # Start expanded
+        expand_var = tk.BooleanVar(value=False)  # Start collapsed
         expand_label = tk.Label(
             header_frame,
-            text="▼",
+            text="▶",
             font=("Segoe UI", 8),
             bg=bg_color,
             fg=fg_color,
@@ -3193,10 +3602,11 @@ def run_gui_tk():
         )
         title_label.grid(row=0, column=1, sticky="w")
 
-        # Content frame (initially visible)
+        # Content frame (initially hidden - collapsed)
         content_frame = tk.Frame(section_frame, bg=bg_color)
         content_frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(3, 0))
         content_frame.grid_columnconfigure(1, weight=1)
+        content_frame.grid_remove()  # Start collapsed
 
         def toggle_section():
             if expand_var.get():
@@ -3559,7 +3969,7 @@ def run_gui_tk():
     # Add tooltip-style help text for delta sync date field (on next row to not interfere with entry box)
     delta_help_label = tk.Label(
         delta_content_frame,
-        text="(e.g., 'date', 'updated', 'created' - used to find records newer than last sync)",
+        text="(e.g., 'tstamp', 'time', 'created' - used to find records newer than last sync)",
         font=("Segoe UI", max(7, base_font_size - 2)),
         bg=entry_bg,
         fg="#666",
@@ -3745,7 +4155,11 @@ def run_gui_tk():
     )
     row = next_row
     tk.Label(
-        last_sync_frame, text="Last sync", font=label_font, bg=entry_bg, fg=text_color
+        last_sync_frame,
+        text="Last auto-sync",
+        font=label_font,
+        bg=entry_bg,
+        fg=text_color,
     ).grid(row=0, column=0, sticky="w", pady=row_pad)
     tk.Label(
         last_sync_frame,
@@ -3922,11 +4336,7 @@ def run_gui_tk():
 
     # Auto-scan default folder on open
     scan_dbfs()
-    # Initialize last sync label based on current selection
-    try:
-        update_last_sync_label()
-    except Exception:
-        pass
+    # Initialize last auto-sync label (will be updated by periodic_update_last_sync)
 
     # Start status update timer
     update_auto_sync_status()
@@ -3936,7 +4346,118 @@ def run_gui_tk():
     _gui_progress_func = update_progress
     _gui_root = root
 
-    root.mainloop()
+    # System tray setup
+    tray_icon = None
+    tray_thread = None
+
+    def setup_system_tray():
+        """Setup system tray icon for minimize to tray functionality."""
+        try:
+            import pystray
+            from PIL import Image, ImageDraw
+            import threading
+
+            # Create a simple icon
+            image = Image.new("RGB", (64, 64), color="white")
+            draw = ImageDraw.Draw(image)
+            draw.ellipse([16, 16, 48, 48], fill="blue")
+            draw.text((20, 26), "VFP", fill="white")
+
+            def show_window(icon=None, item=None):
+                """Show and restore the window."""
+                root.after(0, lambda: root.deiconify())
+                root.after(0, lambda: root.lift())
+                root.after(0, lambda: root.focus_force())
+
+            def quit_app(icon=None, item=None):
+                """Quit the application."""
+                root.after(0, lambda: root.quit())
+                if tray_icon:
+                    tray_icon.stop()
+
+            menu = pystray.Menu(
+                pystray.MenuItem("Show", show_window),
+                pystray.MenuItem("Quit", quit_app),
+            )
+
+            icon = pystray.Icon(
+                "VFP_DBF_Uploader", image, "VFP DBF → RDS Uploader", menu
+            )
+            icon.on_click = show_window  # Click to restore
+
+            return icon
+        except ImportError:
+            # pystray not available, return None
+            return None
+
+    def on_minimize(event=None):
+        """Handle window minimize - hide to system tray."""
+        if tray_icon:
+            root.withdraw()  # Hide window to system tray
+            log("Window minimized to system tray. Click tray icon to restore.")
+
+    def on_close(event=None):
+        """Handle window close - actually quit the program."""
+        # Clean up and close
+        cleanup_instance_lock(lock_handle)
+        if tray_icon:
+            try:
+                tray_icon.stop()
+            except Exception:
+                pass
+        root.quit()
+        return None
+
+    # Setup system tray if available
+    try:
+        tray_icon = setup_system_tray()
+        if tray_icon:
+            # Run tray icon in separate thread
+            def run_tray():
+                try:
+                    tray_icon.run()
+                except Exception:
+                    pass
+
+            tray_thread = threading.Thread(target=run_tray, daemon=True)
+            tray_thread.start()
+
+            # Bind close event (X button - actually closes)
+            root.protocol("WM_DELETE_WINDOW", on_close)
+
+            # Bind minimize event to hide to system tray
+            def on_minimize_event(event=None):
+                """Handle minimize button - hide to system tray."""
+                if tray_icon and root.state() == "iconic":
+                    root.withdraw()
+                    log("Window minimized to system tray. Click tray icon to restore.")
+
+            # Monitor for minimize events
+            def check_minimize():
+                """Periodically check if window was minimized."""
+                if tray_icon and root.state() == "iconic" and root.winfo_viewable():
+                    on_minimize_event()
+                root.after(500, check_minimize)
+
+            root.after(500, check_minimize)
+    except Exception:
+        # System tray not available, just handle normal close
+        def on_close_normal(event=None):
+            cleanup_instance_lock(lock_handle)
+            root.quit()
+
+        root.protocol("WM_DELETE_WINDOW", on_close_normal)
+
+    try:
+        root.mainloop()
+    finally:
+        # Cleanup on exit
+        cleanup_instance_lock(lock_handle)
+        if tray_icon:
+            try:
+                tray_icon.stop()
+            except Exception:
+                pass
 
 # ---------- Auto-sync functionality ----------
 
@@ -3996,6 +4517,12 @@ def run_auto_sync(cfg_path: Optional[str] = None, profile: Optional[str] = None)
 
             sync_end_time = datetime.now()
             duration = (sync_end_time - sync_start_time).total_seconds()
+
+            # Update last auto-sync time in tracking
+            sync_tracking = load_sync_tracking()
+            sync_tracking["__last_auto_sync__"] = sync_end_time.astimezone().isoformat()
+            save_sync_tracking(sync_tracking)
+
             log_to_gui(
                 f"[{sync_end_time.strftime('%Y-%m-%d %H:%M:%S')}] Sync complete (took {duration:.1f}s). Next sync in {interval_seconds}s"
             )

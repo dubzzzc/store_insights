@@ -8,8 +8,9 @@ cd /d "%~dp0"
 echo Current directory: %CD%
 echo.
 
-echo Installing/upgrading PyInstaller...
+echo Installing/upgrading PyInstaller and required dependencies...
 pip install --upgrade pyinstaller
+pip install pystray pillow pywin32
 
 echo.
 echo Building executable...
@@ -64,10 +65,22 @@ pyinstaller --name="VFP_DBF_Uploader" ^
         --hidden-import tkinter.ttk ^
         --hidden-import tkinter.filedialog ^
         --hidden-import tkinter.messagebox ^
+        --hidden-import pystray ^
+        --hidden-import PIL ^
+        --hidden-import PIL.Image ^
+        --hidden-import PIL.ImageDraw ^
+        --hidden-import win32event ^
+        --hidden-import win32api ^
+        --hidden-import win32gui ^
+        --hidden-import win32con ^
+        --hidden-import winerror ^
         --collect-all dbfread ^
         --collect-all yaml ^
         --collect-all mysql.connector ^
+        --collect-all pystray ^
+        --collect-all PIL ^
         --collect-binaries mysql.connector ^
+        --collect-binaries pywin32 ^
         vfp_dbf_to_rdsv2.py
 
 :build_done

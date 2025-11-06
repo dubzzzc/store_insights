@@ -29,6 +29,15 @@ a = Analysis(
         'tkinter.ttk',
         'tkinter.filedialog',
         'tkinter.messagebox',
+        'pystray',
+        'PIL',
+        'PIL.Image',
+        'PIL.ImageDraw',
+        'win32event',
+        'win32api',
+        'win32gui',
+        'win32con',
+        'winerror',
     ],
     hookspath=[],
     hooksconfig={},
@@ -38,6 +47,8 @@ a = Analysis(
     win_private_assemblies=False,
     cipher=block_cipher,
     noarchive=False,
+    collect_all=['pystray', 'PIL', 'mysql.connector', 'dbfread', 'yaml'],
+    collect_binaries=['mysql.connector', 'pywin32'],
 )
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
