@@ -3,6 +3,8 @@ from app.auth import get_auth_user
 from sqlalchemy import create_engine, text
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+from collections import OrderedDict
+import os
 import atexit
 
 """
@@ -15,49 +17,68 @@ that import path stable.
 router = APIRouter()
 
 # Engine cache to reuse engines per database connection string
-_engine_cache: Dict[str, Any] = {}
-_MAX_CACHED_ENGINES = 15  # Limit total number of cached engines (reduced to compensate for larger pools)
+_engine_cache: "OrderedDict[str, Any]" = OrderedDict()
+
+_MAX_CACHED_ENGINES = int(os.getenv("STORE_INSIGHTS_MAX_CACHED_ENGINES", "10"))
+_POOL_SIZE = int(os.getenv("STORE_INSIGHTS_POOL_SIZE", "12"))
+_POOL_MAX_OVERFLOW = int(os.getenv("STORE_INSIGHTS_POOL_MAX_OVERFLOW", "18"))
+_POOL_TIMEOUT = int(os.getenv("STORE_INSIGHTS_POOL_TIMEOUT", "45"))
+_POOL_RECYCLE = int(os.getenv("STORE_INSIGHTS_POOL_RECYCLE", "1200"))
+_CONNECT_TIMEOUT = int(os.getenv("STORE_INSIGHTS_CONNECT_TIMEOUT", "10"))
+
 
 def _get_engine(db_user: str, db_pass: str, db_name: str):
     """
     Get or create a database engine with proper connection pooling.
     Reuses engines for the same connection string to avoid connection exhaustion.
-    Uses very conservative pool settings to prevent connection exhaustion.
+    Uses tuneable pool settings (via env vars) to reduce queue timeout errors under load.
     Limits total number of cached engines to prevent connection exhaustion.
     """
-    connection_string = f"mysql+pymysql://{db_user}:{db_pass}@spirits-db.cbuumpmfxesr.us-east-1.rds.amazonaws.com/{db_name}"
-    
-    if connection_string not in _engine_cache:
-        # If we've hit the limit, dispose of the oldest engine (FIFO)
-        if len(_engine_cache) >= _MAX_CACHED_ENGINES:
-            # Remove the first (oldest) entry
-            oldest_key = next(iter(_engine_cache))
-            oldest_engine = _engine_cache.pop(oldest_key)
-            try:
-                oldest_engine.dispose()
-            except Exception:
-                pass  # Ignore errors during disposal
-        
-        _engine_cache[connection_string] = create_engine(
-            connection_string,
-            pool_size=5,  # Base pool size - 5 connections per engine
-            max_overflow=5,  # Maximum 5 additional connections beyond pool_size
-            pool_recycle=1800,  # Recycle connections after 30 minutes
-            pool_pre_ping=True,  # Verify connections before using them
-            pool_timeout=60,  # Timeout after 60 seconds waiting for connection
-            connect_args={
-                "connect_timeout": 10,  # Connection timeout in seconds
-            },
-            echo=False
-        )
-    
-    return _engine_cache[connection_string]
+    connection_string = (
+        f"mysql+pymysql://{db_user}:{db_pass}@"
+        f"spirits-db.cbuumpmfxesr.us-east-1.rds.amazonaws.com/{db_name}"
+    )
+
+    engine = _engine_cache.get(connection_string)
+    if engine is not None:
+        # Refresh LRU order so frequently used engines stay cached
+        _engine_cache.move_to_end(connection_string)
+        return engine
+
+    # If we've hit the cache limit, dispose of the least-recently-used engine
+    if _MAX_CACHED_ENGINES > 0 and len(_engine_cache) >= _MAX_CACHED_ENGINES:
+        oldest_key, oldest_engine = _engine_cache.popitem(last=False)
+        try:
+            oldest_engine.dispose()
+        except Exception:
+            pass  # Ignore errors during disposal
+
+    engine = create_engine(
+        connection_string,
+        pool_size=_POOL_SIZE,
+        max_overflow=_POOL_MAX_OVERFLOW,
+        pool_recycle=_POOL_RECYCLE,
+        pool_pre_ping=True,
+        pool_timeout=_POOL_TIMEOUT,
+        connect_args={
+            "connect_timeout": _CONNECT_TIMEOUT,
+        },
+        echo=False,
+    )
+
+    _engine_cache[connection_string] = engine
+    return engine
+
 
 # Cleanup function to dispose of all engines on shutdown
 def _dispose_engines():
     for engine in _engine_cache.values():
-        engine.dispose()
+        try:
+            engine.dispose()
+        except Exception:
+            pass
     _engine_cache.clear()
+
 
 atexit.register(_dispose_engines)
 

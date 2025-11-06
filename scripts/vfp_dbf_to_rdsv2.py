@@ -146,8 +146,10 @@ def configure_logging(level: Optional[int] = None) -> None:
 
 logger = logging.getLogger(LOGGER_NAME)
 
+
 def debug_config_path(msg: str, path: Union[str, Path]) -> None:
     logger.debug("%s: %s", msg, path)
+
 
 def find_ksv_root(start: Optional[Union[str, Path]] = None) -> Optional[str]:
     r"""
@@ -207,7 +209,7 @@ def default_config_path() -> str:
 def save_config(cfg: dict, path: Optional[Union[str, Path]] = None) -> str:
     resolved_path = Path(path) if path else Path(default_config_path())
     resolved_path.parent.mkdir(parents=True, exist_ok=True)
-    with resolved_path.open('w', encoding='utf-8') as f:
+    with resolved_path.open("w", encoding="utf-8") as f:
         yaml.safe_dump(cfg, f, sort_keys=False)
     debug_config_path("Saved config", resolved_path)
     return str(resolved_path)
@@ -216,7 +218,7 @@ def save_config(cfg: dict, path: Optional[Union[str, Path]] = None) -> str:
 def load_config(path: Optional[Union[str, Path]] = None) -> dict:
     resolved_path = Path(path) if path else Path(default_config_path())
     debug_config_path("Loading config", resolved_path)
-    with resolved_path.open('r', encoding='utf-8') as f:
+    with resolved_path.open("r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
@@ -235,21 +237,23 @@ def load_sync_tracking(path: Optional[Union[str, Path]] = None) -> dict:
     resolved_path = Path(path) if path else Path(default_sync_tracking_path())
     if resolved_path.exists():
         try:
-            with resolved_path.open('r', encoding='utf-8') as f:
+            with resolved_path.open("r", encoding="utf-8") as f:
                 data = yaml.safe_load(f)
                 return data if data else {}
         except Exception:
             return {}
     return {}
 
+
 def save_sync_tracking(tracking: dict, path: Optional[Union[str, Path]] = None) -> str:
     """Save sync tracking data."""
     resolved_path = Path(path) if path else Path(default_sync_tracking_path())
     resolved_path.parent.mkdir(parents=True, exist_ok=True)
-    with resolved_path.open('w', encoding='utf-8') as f:
+    with resolved_path.open("w", encoding="utf-8") as f:
         yaml.safe_dump(tracking, f, sort_keys=False)
     debug_config_path("Saved sync tracking", resolved_path)
     return str(resolved_path)
+
 
 def resolve_profile(cfg: dict, profile: Optional[str]) -> dict:
     """
@@ -257,21 +261,28 @@ def resolve_profile(cfg: dict, profile: Optional[str]) -> dict:
     If 'profiles' exists, require --profile and return that entry.
     Otherwise treat cfg as single-profile.
     """
-    if 'profiles' in cfg:
+    if "profiles" in cfg:
         if not profile:
-            raise RuntimeError("Config contains multiple profiles. Use --profile <name>.")
-        if profile not in cfg['profiles']:
+            raise RuntimeError(
+                "Config contains multiple profiles. Use --profile <name>."
+            )
+        if profile not in cfg["profiles"]:
             raise RuntimeError(f"Profile '{profile}' not found in config.")
-        return cfg['profiles'][profile]
+        return cfg["profiles"][profile]
     return cfg
+
 
 def ensure_password(cfg: dict) -> str:
     """Read password directly from YAML config."""
-    r = cfg.get('rds', {})
-    pw = r.get('password')
+    r = cfg.get("rds", {})
+    pw = r.get("password")
     if not pw:
-        raise RuntimeError("No password specified in config. Please add 'password' to rds section in YAML.")
+        raise RuntimeError(
+            "No password specified in config. Please add 'password' to rds section in YAML."
+        )
     return pw
+
+
 # ---------- Admin backend creds fetch ----------
 def fetch_admin_creds(base_url: str, api_key: str, store_id: str) -> dict:
     """Fetch per-store DB credentials from admin backend.
@@ -280,23 +291,24 @@ def fetch_admin_creds(base_url: str, api_key: str, store_id: str) -> dict:
     """
     if not base_url:
         raise RuntimeError("Admin base_url is required when admin_api.enabled is true")
-    if base_url.endswith('/'):
+    if base_url.endswith("/"):
         base_url = base_url[:-1]
     url = f"{base_url}/uploader/creds?{urlparse.urlencode({'store_id': store_id})}"
     req = urlrequest.Request(url)
-    req.add_header('X-API-Key', api_key or '')
+    req.add_header("X-API-Key", api_key or "")
     try:
         with urlrequest.urlopen(req, timeout=15) as resp:
             if resp.status != 200:
                 raise RuntimeError(f"Admin creds fetch failed: HTTP {resp.status}")
-            data = json.loads(resp.read().decode('utf-8'))
+            data = json.loads(resp.read().decode("utf-8"))
             # Basic shape check
-            for k in ("host","port","database","username","password"):
+            for k in ("host", "port", "database", "username", "password"):
                 if k not in data:
                     raise RuntimeError(f"Admin creds missing field: {k}")
             return data
     except Exception as e:
         raise RuntimeError(f"Admin creds fetch error: {e}")
+
 
 # --- Only scan these DBFs ---
 ALLOWED_BASES = {
@@ -320,6 +332,7 @@ ALLOWED_BASES = {
     "timeclock",
     "hst",
 }
+
 
 def is_allowed_dbf(path: str) -> bool:
     base = os.path.splitext(os.path.basename(path))[0].lower()
@@ -521,6 +534,7 @@ except Exception:
 
 try:
     import mysql.connector  # MySQL option
+
     # Pre-import MySQL plugins to ensure they're registered (critical for PyInstaller builds)
     try:
         import mysql.connector.plugins.mysql_native_password
@@ -558,6 +572,7 @@ RESERVED = set(
 
 # ---------- DBF → SQL type mapping ----------
 
+
 def safe_sql_name(name: str, coerce_lower: bool = True) -> str:
     n = name.strip().replace(" ", "_")
     n = re.sub(r"[^A-Za-z0-9_]", "_", n)
@@ -567,72 +582,96 @@ def safe_sql_name(name: str, coerce_lower: bool = True) -> str:
         n = f"_{n}"
     return n
 
-def map_dbf_field_to_sql(field, engine: str = "mysql", nvarchar_default: int = 255) -> str:
+
+def map_dbf_field_to_sql(
+    field, engine: str = "mysql", nvarchar_default: int = 255
+) -> str:
     ftype = field.type  # 'C', 'N', 'F', 'D', 'T', 'L', 'M', 'I', 'B'
-    length = getattr(field, 'length', None) or getattr(field, 'size', None) or nvarchar_default
-    decimals = getattr(field, 'decimal_count', 0)
+    length = (
+        getattr(field, "length", None)
+        or getattr(field, "size", None)
+        or nvarchar_default
+    )
+    decimals = getattr(field, "decimal_count", 0)
 
     if engine == "mssql":
-        if ftype == 'C':
+        if ftype == "C":
             return f"NVARCHAR({length if length and length <= 4000 else 'MAX'})"
-        if ftype in ('N', 'F'):
+        if ftype in ("N", "F"):
             if decimals and decimals > 0:
                 precision = max(length or 18, decimals + 1)
                 scale = decimals
                 precision = min(38, precision)
                 return f"DECIMAL({precision},{scale})"
             else:
-                return "INT" if (length or 10) <= 9 else ("BIGINT" if (length or 19) <= 18 else "DECIMAL(38,0)")
-        if ftype == 'I':
+                return (
+                    "INT"
+                    if (length or 10) <= 9
+                    else ("BIGINT" if (length or 19) <= 18 else "DECIMAL(38,0)")
+                )
+        if ftype == "I":
             return "INT"
-        if ftype == 'B':
+        if ftype == "B":
             return "FLOAT"
-        if ftype == 'D':
+        if ftype == "D":
             return "DATE"
-        if ftype in ('T', '@'):
+        if ftype in ("T", "@"):
             return "DATETIME2(3)"
-        if ftype == 'L':
+        if ftype == "L":
             return "BIT"
-        if ftype == 'M':
+        if ftype == "M":
             return "NVARCHAR(MAX)"
         return f"NVARCHAR({nvarchar_default})"
 
     # mysql (default)
-    if ftype == 'C':
+    if ftype == "C":
         return f"VARCHAR({min(length or nvarchar_default, 65535)})"
-    if ftype in ('N', 'F'):
+    if ftype in ("N", "F"):
         if decimals and decimals > 0:
             precision = max(length or 18, decimals + 1)
             scale = decimals
             return f"DECIMAL({precision},{scale})"
         else:
-            return "INT" if (length or 10) <= 9 else ("BIGINT" if (length or 19) <= 18 else "DECIMAL(38,0)"
-                   )
-    if ftype == 'I':
+            return (
+                "INT"
+                if (length or 10) <= 9
+                else ("BIGINT" if (length or 19) <= 18 else "DECIMAL(38,0)")
+            )
+    if ftype == "I":
         return "INT"
-    if ftype == 'B':
+    if ftype == "B":
         return "DOUBLE"
-    if ftype == 'D':
+    if ftype == "D":
         return "DATE"
-    if ftype in ('T', '@'):
+    if ftype in ("T", "@"):
         return "DATETIME"
-    if ftype == 'L':
+    if ftype == "L":
         return "TINYINT(1)"
-    if ftype == 'M':
+    if ftype == "M":
         return "LONGTEXT"
     return f"VARCHAR({nvarchar_default})"
 
+
 # ---------- DDL generation & schema reconciliation ----------
+
 
 def build_create_table_sql(table: str, fields, engine: str, schema: str = None) -> str:
     col_defs = []
     for f in fields:
         col_name = safe_sql_name(f.name)
         col_type = map_dbf_field_to_sql(f, engine)
-        col_defs.append(f"[{col_name}] {col_type}" if engine == 'mssql' else f"`{col_name}` {col_type}")
+        col_defs.append(
+            f"[{col_name}] {col_type}"
+            if engine == "mssql"
+            else f"`{col_name}` {col_type}"
+        )
 
-    if engine == 'mssql':
-        target = f"[{schema}].[{safe_sql_name(table)}]" if schema else f"[{safe_sql_name(table)}]"
+    if engine == "mssql":
+        target = (
+            f"[{schema}].[{safe_sql_name(table)}]"
+            if schema
+            else f"[{safe_sql_name(table)}]"
+        )
         ddl = f"CREATE TABLE {target} (\n  [__id] INT IDENTITY(1,1) PRIMARY KEY,\n  {',\n  '.join(col_defs)}\n)"
     else:
         target = f"`{safe_sql_name(table)}`"
@@ -643,12 +682,16 @@ def build_create_table_sql(table: str, fields, engine: str, schema: str = None) 
         )
     return ddl
 
+
 # ---------- Connections ----------
 
-def connect_mssql(server: str, database: str, username: str, password: str, port: int = 1433):
+
+def connect_mssql(
+    server: str, database: str, username: str, password: str, port: int = 1433
+):
     if pyodbc is None:
         raise RuntimeError("pyodbc not installed. pip install pyodbc")
-    driver = 'ODBC Driver 17 for SQL Server'
+    driver = "ODBC Driver 17 for SQL Server"
     conn_str = f"DRIVER={{{{}}}};SERVER={server},{port};DATABASE={database};UID={username};PWD={password};"
     # Put driver name inside braces with value:
     conn_str = f"DRIVER={{{driver}}};SERVER={server},{port};DATABASE={database};UID={username};PWD={password};"
@@ -659,9 +702,14 @@ def connect_mssql(server: str, database: str, username: str, password: str, port
         pass
     return conn
 
-def connect_mysql(host: str, database: str, username: str, password: str, port: int = 3306):
+
+def connect_mysql(
+    host: str, database: str, username: str, password: str, port: int = 3306
+):
     if mysql is None:
-        raise RuntimeError("mysql-connector-python not installed. pip install mysql-connector-python")
+        raise RuntimeError(
+            "mysql-connector-python not installed. pip install mysql-connector-python"
+        )
     # Use pure Python implementation to avoid C extension issues in PyInstaller builds
     # This ensures plugins work correctly in frozen executables
     return mysql.connector.connect(
@@ -673,44 +721,60 @@ def connect_mysql(host: str, database: str, username: str, password: str, port: 
         use_pure=True,  # Force pure Python implementation
     )
 
+
 # ---------- Helpers ----------
+
 
 def table_exists(conn, engine: str, table: str, schema: str = None) -> bool:
     cur = conn.cursor()
-    if engine == 'mssql':
+    if engine == "mssql":
         if schema:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT 1 FROM INFORMATION_SCHEMA.TABLES
                 WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
-            """, (schema, safe_sql_name(table)))
+            """,
+                (schema, safe_sql_name(table)),
+            )
         else:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT 1 FROM INFORMATION_SCHEMA.TABLES
                 WHERE TABLE_NAME = ?
-            """, (safe_sql_name(table),))
+            """,
+                (safe_sql_name(table),),
+            )
         row = cur.fetchone()
         return bool(row)
     else:
         cur.execute("SHOW TABLES LIKE %s", (safe_sql_name(table),))
         return bool(cur.fetchone())
 
+
 def existing_columns(conn, engine: str, table: str, schema: str = None) -> List[str]:
     cur = conn.cursor()
-    if engine == 'mssql':
+    if engine == "mssql":
         if schema:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
                 WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
-            """, (schema, safe_sql_name(table)))
+            """,
+                (schema, safe_sql_name(table)),
+            )
         else:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
                 WHERE TABLE_NAME = ?
-            """, (safe_sql_name(table),))
+            """,
+                (safe_sql_name(table),),
+            )
         return [r[0] for r in cur.fetchall()]
     else:
         cur.execute(f"SHOW COLUMNS FROM `{safe_sql_name(table)}`")
         return [r[0] for r in cur.fetchall()]
+
 
 def choose_column_name(dbf_name: str, existing: List[str]) -> str:
     wanted = safe_sql_name(dbf_name)
@@ -720,15 +784,22 @@ def choose_column_name(dbf_name: str, existing: List[str]) -> str:
     raw = re.sub(r"[^A-Za-z0-9_]", "_", dbf_name.strip())
     if raw.lower() in existing_lower:
         return existing_lower[raw.lower()]
-    no_lead_us = wanted[1:] if wanted.startswith('_') else wanted
+    no_lead_us = wanted[1:] if wanted.startswith("_") else wanted
     if no_lead_us.lower() in existing_lower:
         return existing_lower[no_lead_us.lower()]
     return wanted
 
-def add_missing_column(conn, engine: str, table: str, col_name: str, field, schema: str = None):
+
+def add_missing_column(
+    conn, engine: str, table: str, col_name: str, field, schema: str = None
+):
     col_type = map_dbf_field_to_sql(field, engine)
-    if engine == 'mssql':
-        target = f"[{schema}].[{safe_sql_name(table)}]" if schema else f"[{safe_sql_name(table)}]"
+    if engine == "mssql":
+        target = (
+            f"[{schema}].[{safe_sql_name(table)}]"
+            if schema
+            else f"[{safe_sql_name(table)}]"
+        )
         sql = f"ALTER TABLE {target} ADD [{col_name}] {col_type}"
     else:
         target = f"`{safe_sql_name(table)}`"
@@ -737,17 +808,25 @@ def add_missing_column(conn, engine: str, table: str, col_name: str, field, sche
     cur.execute(sql)
     conn.commit()
 
+
 def drop_table(conn, engine: str, table: str, schema: str = None):
     cur = conn.cursor()
-    if engine == 'mssql':
-        target = f"[{schema}].[{safe_sql_name(table)}]" if schema else f"[{safe_sql_name(table)}]"
+    if engine == "mssql":
+        target = (
+            f"[{schema}].[{safe_sql_name(table)}]"
+            if schema
+            else f"[{safe_sql_name(table)}]"
+        )
         cur.execute(f"IF OBJECT_ID(N'{target}', N'U') IS NOT NULL DROP TABLE {target}")
     else:
         target = f"`{safe_sql_name(table)}`"
         cur.execute(f"DROP TABLE IF EXISTS {target}")
     conn.commit()
 
-def ensure_table(conn, engine: str, table: str, fields, schema: str = None, recreate: bool = False):
+
+def ensure_table(
+    conn, engine: str, table: str, fields, schema: str = None, recreate: bool = False
+):
     if recreate and table_exists(conn, engine, table, schema):
         drop_table(conn, engine, table, schema)
     if not table_exists(conn, engine, table, schema):
@@ -761,25 +840,33 @@ def ensure_table(conn, engine: str, table: str, fields, schema: str = None, recr
         for f in fields:
             chosen = choose_column_name(f.name, existing)
             if chosen.lower() not in {c.lower() for c in existing}:
-                add_missing_column(conn, engine, table, safe_sql_name(f.name), f, schema)
+                add_missing_column(
+                    conn, engine, table, safe_sql_name(f.name), f, schema
+                )
                 existing.append(safe_sql_name(f.name))
+
 
 def truncate_table(conn, engine: str, table: str, schema: str = None):
     cur = conn.cursor()
-    if engine == 'mssql':
-        target = f"[{schema}].[{safe_sql_name(table)}]" if schema else f"[{safe_sql_name(table)}]"
+    if engine == "mssql":
+        target = (
+            f"[{schema}].[{safe_sql_name(table)}]"
+            if schema
+            else f"[{safe_sql_name(table)}]"
+        )
         cur.execute(f"TRUNCATE TABLE {target}")
     else:
         target = f"`{safe_sql_name(table)}`"
         cur.execute(f"TRUNCATE TABLE {target}")
     conn.commit()
 
+
 def coerce_value(v):
     if isinstance(v, bytes):
         try:
-            return v.decode('utf-8', errors='replace')
+            return v.decode("utf-8", errors="replace")
         except Exception:
-            return v.decode('latin-1', errors='replace')
+            return v.decode("latin-1", errors="replace")
     if isinstance(v, Decimal):
         return v
     if isinstance(v, (datetime, date)):
@@ -1563,14 +1650,24 @@ def iter_dbf_rows(
     return field_names, gen()
 
 
-def build_insert_sql(table: str, col_names: List[str], engine: str, schema: str = None, existing: List[str] = None) -> Tuple[str, List[str]]:
+def build_insert_sql(
+    table: str,
+    col_names: List[str],
+    engine: str,
+    schema: str = None,
+    existing: List[str] = None,
+) -> Tuple[str, List[str]]:
     if existing is None:
         dest_cols = [safe_sql_name(c) for c in col_names]
     else:
         dest_cols = [choose_column_name(c, existing) for c in col_names]
 
-    if engine == 'mssql':
-        target = f"[{schema}].[{safe_sql_name(table)}]" if schema else f"[{safe_sql_name(table)}]"
+    if engine == "mssql":
+        target = (
+            f"[{schema}].[{safe_sql_name(table)}]"
+            if schema
+            else f"[{safe_sql_name(table)}]"
+        )
         cols = ", ".join(f"[{c}]" for c in dest_cols)
         placeholders = ", ".join(["?"] * len(dest_cols))
         return f"INSERT INTO {target} ({cols}) VALUES ({placeholders})", dest_cols
@@ -1652,7 +1749,9 @@ def bulk_insert(
             raise RuntimeError(f"Critical error when reading DBF file: {e}")
         raise
 
-    insert_sql, _dest_cols = build_insert_sql(table, col_names, engine, schema, cols_existing)
+    insert_sql, _dest_cols = build_insert_sql(
+        table, col_names, engine, schema, cols_existing
+    )
 
     cur = conn.cursor()
     buf = []
@@ -1724,7 +1823,11 @@ def update_gui_progress(percent: float, status: str):
             pass
 
 
-def run_headless(cfg_path: Optional[str] = None, profile: Optional[str] = None, auto_sync: bool = False):
+def run_headless(
+    cfg_path: Optional[str] = None,
+    profile: Optional[str] = None,
+    auto_sync: bool = False,
+):
     """
     Run headless sync operation.
 
@@ -1746,32 +1849,32 @@ def run_headless(cfg_path: Optional[str] = None, profile: Optional[str] = None, 
     raw_cfg = load_config(cfg_path) if cfg_path else load_config()
     cfg = resolve_profile(raw_cfg, profile)
 
-    engine = cfg['rds'].get('engine', 'mysql')
-    server = cfg['rds']['server']
-    port = int(cfg['rds'].get('port', 3306 if engine=='mysql' else 1433))
-    database = cfg['rds']['database']
-    username = cfg['rds']['username']
+    engine = cfg["rds"].get("engine", "mysql")
+    server = cfg["rds"]["server"]
+    port = int(cfg["rds"].get("port", 3306 if engine == "mysql" else 1433))
+    database = cfg["rds"]["database"]
+    username = cfg["rds"]["username"]
     password = ensure_password(cfg)
-    schema = cfg['rds'].get('schema') if engine=='mssql' else None
+    schema = cfg["rds"].get("schema") if engine == "mssql" else None
 
     # Admin API override
-    admin_cfg = cfg.get('admin_api', {})
-    if admin_cfg.get('enabled'):
+    admin_cfg = cfg.get("admin_api", {})
+    if admin_cfg.get("enabled"):
         creds = fetch_admin_creds(
-            admin_cfg.get('base_url', ''),
-            admin_cfg.get('api_key', ''),
-            str(admin_cfg.get('store_id', '')),
+            admin_cfg.get("base_url", ""),
+            admin_cfg.get("api_key", ""),
+            str(admin_cfg.get("store_id", "")),
         )
-        engine = creds.get('engine', engine)
-        server = creds['host']
-        port = int(creds.get('port', port))
-        database = creds['database']
-        username = creds['username']
-        password = creds['password']
-        schema = creds.get('schema') if engine == 'mssql' else None
+        engine = creds.get("engine", engine)
+        server = creds["host"]
+        port = int(creds.get("port", port))
+        database = creds["database"]
+        username = creds["username"]
+        password = creds["password"]
+        schema = creds.get("schema") if engine == "mssql" else None
 
-    folder = cfg['source']['folder']
-    include = cfg['source'].get('include')
+    folder = cfg["source"]["folder"]
+    include = cfg["source"].get("include")
 
     # Copy files to sync directory (vfptordssync) to avoid interfering with source software
     log_to_gui(f"Copying DBF files to sync directory...")
@@ -1781,15 +1884,15 @@ def run_headless(cfg_path: Optional[str] = None, profile: Optional[str] = None, 
         f"Using copied files for sync operations (original files remain untouched)"
     )
 
-    drop_recreate = bool(cfg['load'].get('drop_recreate', False))
-    trunc = bool(cfg['load'].get('truncate_before_load', False))
-    batch = int(cfg['load'].get('batch_size', 1000))
-    tpref = cfg['load'].get('table_prefix', '')
-    tsuff = cfg['load'].get('table_suffix', '')
-    lower = bool(cfg['load'].get('coerce_lowercase_names', True))
+    drop_recreate = bool(cfg["load"].get("drop_recreate", False))
+    trunc = bool(cfg["load"].get("truncate_before_load", False))
+    batch = int(cfg["load"].get("batch_size", 1000))
+    tpref = cfg["load"].get("table_prefix", "")
+    tsuff = cfg["load"].get("table_suffix", "")
+    lower = bool(cfg["load"].get("coerce_lowercase_names", True))
 
     # Delta sync settings
-    delta_cfg = cfg.get('delta_sync', {})
+    delta_cfg = cfg.get("delta_sync", {})
     # When auto_sync=True, force enable delta sync if configured (even if disabled in config, auto-sync implies delta)
     if auto_sync:
         delta_enabled = bool(delta_cfg.get("enabled", False)) and not drop_recreate
@@ -1855,8 +1958,8 @@ def run_headless(cfg_path: Optional[str] = None, profile: Optional[str] = None, 
     sync_tracking = load_sync_tracking()
 
     # Create tracking key from profile + (store_id when admin) + database + folder
-    profile_key = profile or 'default'
-    if admin_cfg.get('enabled') and str(admin_cfg.get('store_id', '')).strip():
+    profile_key = profile or "default"
+    if admin_cfg.get("enabled") and str(admin_cfg.get("store_id", "")).strip():
         tracking_key = f"{profile_key}|{admin_cfg.get('store_id')}|{database}|{folder}"
     else:
         tracking_key = f"{profile_key}|{database}|{folder}"
@@ -1871,11 +1974,13 @@ def run_headless(cfg_path: Optional[str] = None, profile: Optional[str] = None, 
     # set global lowercase rule
     global safe_sql_name
     _orig_safe = safe_sql_name
+
     def _lower_override(name, coerce_lower=lower):
         return _orig_safe(name, coerce_lower=coerce_lower)
+
     safe_sql_name = _lower_override
 
-    if engine == 'mssql':
+    if engine == "mssql":
         conn = connect_mssql(server, database, username, password, port)
     else:
         conn = connect_mysql(server, database, username, password, port)
@@ -2209,44 +2314,47 @@ def run_headless(cfg_path: Optional[str] = None, profile: Optional[str] = None, 
     update_gui_progress(100, f"Complete! Inserted {total_rows} rows total.")
     log_to_gui(f"ALL DONE. Inserted {total_rows} rows total.")
 
+
 def cli_init(path: Optional[str] = None):
     print("\n=== Initial Setup (creates a saved config) ===")
-    engine = input("Engine (mysql/mssql) [mysql]: ").strip().lower() or 'mysql'
+    engine = input("Engine (mysql/mssql) [mysql]: ").strip().lower() or "mysql"
     server = input("RDS server/host: ").strip()
     port = input("Port [3306 for mysql, 1433 for mssql]: ").strip()
-    port = int(port) if port else (3306 if engine == 'mysql' else 1433)
+    port = int(port) if port else (3306 if engine == "mysql" else 1433)
     database = input("Database name: ").strip()
     username = input("Username: ").strip()
     password = getpass.getpass("Password: ")
     folder = input(r"Path to ksv\data folder (e.g., C:/ksv/data): ").strip()
-    schema = input("Schema (mssql) [dbo]: ").strip() if engine == 'mssql' else None
-    schema = schema or ('dbo' if engine == 'mssql' else None)
+    schema = input("Schema (mssql) [dbo]: ").strip() if engine == "mssql" else None
+    schema = schema or ("dbo" if engine == "mssql" else None)
 
     cfg = {
-        'rds': {
-            'engine': engine,
-            'server': server,
-            'port': port,
-            'database': database,
-            'username': username,
-            'password': password,
-            'schema': schema,
+        "rds": {
+            "engine": engine,
+            "server": server,
+            "port": port,
+            "database": database,
+            "username": username,
+            "password": password,
+            "schema": schema,
         },
-        'source': {'folder': folder},
-        'load': {
-            'drop_recreate': True,
-            'truncate_before_load': False,
-            'batch_size': 1000,
-            'table_prefix': '',
-            'table_suffix': '',
-            'coerce_lowercase_names': True,
+        "source": {"folder": folder},
+        "load": {
+            "drop_recreate": True,
+            "truncate_before_load": False,
+            "batch_size": 1000,
+            "table_prefix": "",
+            "table_suffix": "",
+            "coerce_lowercase_names": True,
         },
     }
     cfg_path = path or default_config_path()
     save_config(cfg, cfg_path)
     print(f"Saved config to {cfg_path}.")
 
+
 # ---------- DearPyGui GUI (kept, optional) ----------
+
 
 def run_gui():
     configure_logging()
@@ -2258,7 +2366,7 @@ def run_gui():
         sys.exit(1)
 
     dpg.create_context()
-    state = {'files': [], 'folder': ''}
+    state = {"files": [], "folder": ""}
 
     def log(msg: str):
         old = dpg.get_value("log_box") if dpg.does_item_exist("log_box") else ""
@@ -2270,14 +2378,14 @@ def run_gui():
             log("Please select a valid folder.")
             return
         files = list_allowed_dbfs(folder)
-        state['folder'] = folder
-        state['files'] = files
+        state["folder"] = folder
+        state["files"] = files
         dpg.configure_item("files_list", items=[os.path.basename(f) for f in files])
         dpg.set_value("count_text", f"Found: {len(files)}")
         log(f"Scanned {len(files)} DBFs.")
 
     def choose_folder(sender, app_data):
-        path = app_data.get('file_path_name') or app_data.get('current_path')
+        path = app_data.get("file_path_name") or app_data.get("current_path")
         if path and os.path.isdir(path):
             dpg.set_value("folder_input", path)
             scan_dbfs()
@@ -2285,37 +2393,37 @@ def run_gui():
     def save_cfg():
         engine = dpg.get_value("engine_combo")
         server = dpg.get_value("server_input")
-        port = int(dpg.get_value("port_input") or (3306 if engine=='mysql' else 1433))
+        port = int(dpg.get_value("port_input") or (3306 if engine == "mysql" else 1433))
         database = dpg.get_value("db_input")
         username = dpg.get_value("user_input")
-        password = dpg.get_value("pwd_input") or ''
-        schema = dpg.get_value("schema_input") if engine=='mssql' else None
+        password = dpg.get_value("pwd_input") or ""
+        schema = dpg.get_value("schema_input") if engine == "mssql" else None
         recreate = bool(dpg.get_value("recreate_chk"))
         trunc = bool(dpg.get_value("trunc_chk"))
         batch = int(dpg.get_value("batch_input") or 1000)
-        tpref = dpg.get_value("tpref_input") or ''
-        tsuff = dpg.get_value("tsuff_input") or ''
+        tpref = dpg.get_value("tpref_input") or ""
+        tsuff = dpg.get_value("tsuff_input") or ""
 
         # Persist current settings (including password) to config
         cfg = {
-            'rds': {
-                'engine': engine,
-                'server': server,
-                'port': port,
-                'database': database,
-                'username': username,
-                'password': password,
-                'schema': schema,
+            "rds": {
+                "engine": engine,
+                "server": server,
+                "port": port,
+                "database": database,
+                "username": username,
+                "password": password,
+                "schema": schema,
             },
-            'source': {'folder': state.get('folder','')},
-            'load': {
-                'drop_recreate': recreate,
-                'truncate_before_load': trunc,
-                'batch_size': batch,
-                'table_prefix': tpref,
-                'table_suffix': tsuff,
-                'coerce_lowercase_names': True,
-            }
+            "source": {"folder": state.get("folder", "")},
+            "load": {
+                "drop_recreate": recreate,
+                "truncate_before_load": trunc,
+                "batch_size": batch,
+                "table_prefix": tpref,
+                "table_suffix": tsuff,
+                "coerce_lowercase_names": True,
+            },
         }
 
         path = save_config(cfg, default_config_path())
@@ -2329,42 +2437,42 @@ def run_gui():
 
         engine = dpg.get_value("engine_combo")
         server = dpg.get_value("server_input")
-        port = int(dpg.get_value("port_input") or (3306 if engine=='mysql' else 1433))
+        port = int(dpg.get_value("port_input") or (3306 if engine == "mysql" else 1433))
         database = dpg.get_value("db_input")
         username = dpg.get_value("user_input")
         password = dpg.get_value("pwd_input")
-        schema = dpg.get_value("schema_input") if engine=='mssql' else None
+        schema = dpg.get_value("schema_input") if engine == "mssql" else None
         recreate = bool(dpg.get_value("recreate_chk"))
         trunc = bool(dpg.get_value("trunc_chk"))
         batch = int(dpg.get_value("batch_input") or 1000)
-        tpref = dpg.get_value("tpref_input") or ''
-        tsuff = dpg.get_value("tsuff_input") or ''
+        tpref = dpg.get_value("tpref_input") or ""
+        tsuff = dpg.get_value("tsuff_input") or ""
 
         # Persist current settings (including password) to config
         cfg = {
-            'rds': {
-                'engine': engine,
-                'server': server,
-                'port': port,
-                'database': database,
-                'username': username,
-                'password': password,
-                'schema': schema,
+            "rds": {
+                "engine": engine,
+                "server": server,
+                "port": port,
+                "database": database,
+                "username": username,
+                "password": password,
+                "schema": schema,
             },
-            'source': {'folder': state.get('folder','')},
-            'load': {
-                'drop_recreate': recreate,
-                'truncate_before_load': trunc,
-                'batch_size': batch,
-                'table_prefix': tpref,
-                'table_suffix': tsuff,
-                'coerce_lowercase_names': True,
-            }
+            "source": {"folder": state.get("folder", "")},
+            "load": {
+                "drop_recreate": recreate,
+                "truncate_before_load": trunc,
+                "batch_size": batch,
+                "table_prefix": tpref,
+                "table_suffix": tsuff,
+                "coerce_lowercase_names": True,
+            },
         }
         save_config(cfg, default_config_path())
 
         try:
-            if engine == 'mssql':
+            if engine == "mssql":
                 conn = connect_mssql(server, database, username, password, port)
             else:
                 conn = connect_mysql(server, database, username, password, port)
@@ -2375,17 +2483,23 @@ def run_gui():
         total_rows = 0
         try:
             for idx in sel_indices:
-                p = state['files'][idx]
+                p = state["files"][idx]
                 base = os.path.splitext(os.path.basename(p))[0]
                 tgt = f"{tpref}{base}{tsuff}"
                 try:
                     if recreate:
-                        inserted, batches = bulk_insert(conn, engine, tgt, p, batch, schema, recreate=True)
+                        inserted, batches = bulk_insert(
+                            conn, engine, tgt, p, batch, schema, recreate=True
+                        )
                     else:
-                        inserted, batches = bulk_insert(conn, engine, tgt, p, batch, schema, recreate=False)
+                        inserted, batches = bulk_insert(
+                            conn, engine, tgt, p, batch, schema, recreate=False
+                        )
                         if trunc:
                             truncate_table(conn, engine, tgt, schema)
-                            inserted, batches = bulk_insert(conn, engine, tgt, p, batch, schema, recreate=False)
+                            inserted, batches = bulk_insert(
+                                conn, engine, tgt, p, batch, schema, recreate=False
+                            )
                     total_rows += inserted
                     log(f"Loaded {inserted} rows into {tgt} in {batches} batch(es).")
                 except Exception as e:
@@ -2398,42 +2512,66 @@ def run_gui():
         log(f"DONE. Total inserted rows: {total_rows}.")
 
     # Layout
-    with dpg.window(label="VFP DBF → RDS Uploader (DearPyGui)", width=980, height=700, pos=(50, 50)):
+    with dpg.window(
+        label="VFP DBF → RDS Uploader (DearPyGui)", width=980, height=700, pos=(50, 50)
+    ):
         with dpg.group(horizontal=True):
             dpg.add_input_text(label="ksv/data folder", tag="folder_input", width=600)
-            dpg.add_button(label="Browse", callback=lambda: dpg.show_item("folder_dialog"))
+            dpg.add_button(
+                label="Browse", callback=lambda: dpg.show_item("folder_dialog")
+            )
             dpg.add_button(label="Scan DBFs", callback=scan_dbfs)
             dpg.add_text("Found: 0", tag="count_text")
         dpg.add_separator()
         with dpg.group(horizontal=True):
-            dpg.add_listbox(items=[], tag="files_list", width=400, num_items=16, label="DBF Tables")
+            dpg.add_listbox(
+                items=[], tag="files_list", width=400, num_items=16, label="DBF Tables"
+            )
             with dpg.group():
-                dpg.add_combo(["mysql","mssql"], default_value="mysql", label="Engine", tag="engine_combo")
+                dpg.add_combo(
+                    ["mysql", "mssql"],
+                    default_value="mysql",
+                    label="Engine",
+                    tag="engine_combo",
+                )
                 dpg.add_input_text(label="Server/Host", tag="server_input")
                 dpg.add_input_text(label="Port", tag="port_input", default_value="3306")
                 dpg.add_input_text(label="Database", tag="db_input")
                 dpg.add_input_text(label="Username", tag="user_input")
                 dpg.add_input_text(label="Password", tag="pwd_input", password=True)
-                dpg.add_input_text(label="Schema (mssql)", tag="schema_input", default_value="dbo")
-                dpg.add_checkbox(label="Drop & recreate tables", tag="recreate_chk", default_value=True)
+                dpg.add_input_text(
+                    label="Schema (mssql)", tag="schema_input", default_value="dbo"
+                )
+                dpg.add_checkbox(
+                    label="Drop & recreate tables",
+                    tag="recreate_chk",
+                    default_value=True,
+                )
                 dpg.add_checkbox(label="Truncate before load", tag="trunc_chk")
-                dpg.add_input_text(label="Batch size", tag="batch_input", default_value="1000")
+                dpg.add_input_text(
+                    label="Batch size", tag="batch_input", default_value="1000"
+                )
                 dpg.add_input_text(label="Table prefix", tag="tpref_input")
                 dpg.add_input_text(label="Table suffix", tag="tsuff_input")
                 with dpg.group(horizontal=True):
                     dpg.add_button(label="Save Config", callback=save_cfg)
                     dpg.add_button(label="Upload Selected", callback=upload_selected)
         dpg.add_separator()
-        dpg.add_input_text(tag="log_box", multiline=True, readonly=True, height=220, width=940)
+        dpg.add_input_text(
+            tag="log_box", multiline=True, readonly=True, height=220, width=940
+        )
 
-    with dpg.file_dialog(directory_selector=True, show=False, callback=choose_folder, tag="folder_dialog"):
+    with dpg.file_dialog(
+        directory_selector=True, show=False, callback=choose_folder, tag="folder_dialog"
+    ):
         dpg.add_file_extension(".dbf")
 
-    dpg.create_viewport(title='DBF → RDS Uploader', width=1100, height=820)
+    dpg.create_viewport(title="DBF → RDS Uploader", width=1100, height=820)
     dpg.setup_dearpygui()
     dpg.show_viewport()
     dpg.start_dearpygui()
     dpg.destroy_context()
+
 
 # ---------- Single Instance Detection ----------
 
@@ -2527,6 +2665,7 @@ def bring_window_to_front():
 
 
 # ---------- Tkinter GUI (Modernized) ----------
+
 
 def run_gui_tk():
     import tkinter as tk
@@ -2705,7 +2844,9 @@ def run_gui_tk():
             log(f"Scanned {len(files)} DBFs (using original files).")
 
     def browse_folder():
-        folder = filedialog.askdirectory(title="Select ksv/data folder", initialdir=os.path.join(ksv, "data"))
+        folder = filedialog.askdirectory(
+            title="Select ksv/data folder", initialdir=os.path.join(ksv, "data")
+        )
         if folder:
             folder_var.set(folder)
             scan_dbfs()
@@ -2713,35 +2854,47 @@ def run_gui_tk():
     def load_cfg():
         try:
             cfg = load_config(default_config_path())
-            if 'profiles' in cfg:
-                prof = next(iter(cfg['profiles'].keys()))
-                eff = cfg['profiles'][prof]
+            if "profiles" in cfg:
+                prof = next(iter(cfg["profiles"].keys()))
+                eff = cfg["profiles"][prof]
             else:
                 eff = cfg
-            r = eff['rds']; s = eff['source']; l = eff['load']
-            admin = eff.get('admin_api', {})
-            engine_var.set(r.get('engine','mysql'))
-            server_var.set(r.get('server',''))
-            port_var.set(str(r.get('port', 3306 if r.get('engine','mysql')=='mysql' else 1433)))
-            db_var.set(r.get('database',''))
-            user_var.set(r.get('username',''))
-            schema_var.set(r.get('schema','') if r.get('engine','mysql')=='mssql' else '')
-            folder_var.set(s.get('folder','') or os.path.join(ksv, "data"))
-            trunc_var.set(1 if l.get('truncate_before_load') else 0)
-            recreate_var.set(1 if l.get('drop_recreate', True) else 0)
-            batch_var.set(str(l.get('batch_size',1000)))
-            tpref_var.set(l.get('table_prefix',''))
-            tsuff_var.set(l.get('table_suffix',''))
+            r = eff["rds"]
+            s = eff["source"]
+            l = eff["load"]
+            admin = eff.get("admin_api", {})
+            engine_var.set(r.get("engine", "mysql"))
+            server_var.set(r.get("server", ""))
+            port_var.set(
+                str(
+                    r.get("port", 3306 if r.get("engine", "mysql") == "mysql" else 1433)
+                )
+            )
+            db_var.set(r.get("database", ""))
+            user_var.set(r.get("username", ""))
+            schema_var.set(
+                r.get("schema", "") if r.get("engine", "mysql") == "mssql" else ""
+            )
+            folder_var.set(s.get("folder", "") or os.path.join(ksv, "data"))
+            trunc_var.set(1 if l.get("truncate_before_load") else 0)
+            recreate_var.set(1 if l.get("drop_recreate", True) else 0)
+            batch_var.set(str(l.get("batch_size", 1000)))
+            tpref_var.set(l.get("table_prefix", ""))
+            tsuff_var.set(l.get("table_suffix", ""))
             # Load password if available
-            if 'password' in r:
-                pwd_var.set(r['password'])
+            if "password" in r:
+                pwd_var.set(r["password"])
 
             # Load delta sync settings (map None to empty string for UI)
-            delta = eff.get('delta_sync', {})
-            delta_enabled_var.set(1 if delta.get('enabled', False) else 0)
-            _date_field_val = delta.get('date_field')
-            delta_date_field_var.set(_date_field_val if isinstance(_date_field_val, str) and _date_field_val else '')
-            delta_interval_var.set(str(delta.get('auto_sync_interval_seconds', 3600)))
+            delta = eff.get("delta_sync", {})
+            delta_enabled_var.set(1 if delta.get("enabled", False) else 0)
+            _date_field_val = delta.get("date_field")
+            delta_date_field_var.set(
+                _date_field_val
+                if isinstance(_date_field_val, str) and _date_field_val
+                else ""
+            )
+            delta_interval_var.set(str(delta.get("auto_sync_interval_seconds", 3600)))
 
             # Load date range filter settings
             date_range = l.get("date_range_filter", {})
@@ -2766,14 +2919,17 @@ def run_gui_tk():
             )
 
             # Admin API settings
-            admin_enabled_var.set(1 if admin.get('enabled') else 0)
-            admin_base_url_var.set(admin.get('base_url', ''))
-            admin_api_key_var.set(admin.get('api_key', ''))
-            admin_store_id_var.set(str(admin.get('store_id', '')))
+            admin_enabled_var.set(1 if admin.get("enabled") else 0)
+            admin_base_url_var.set(admin.get("base_url", ""))
+            admin_api_key_var.set(admin.get("api_key", ""))
+            admin_store_id_var.set(str(admin.get("store_id", "")))
 
             log("Loaded values from existing config.")
         except FileNotFoundError:
-            messagebox.showinfo("Load Config", "No config found yet. Fill the form and click Save Config.")
+            messagebox.showinfo(
+                "Load Config",
+                "No config found yet. Fill the form and click Save Config.",
+            )
         except Exception as e:
             messagebox.showerror("Load Config", str(e))
 
@@ -2857,7 +3013,9 @@ def run_gui_tk():
                 if "profiles" in existing_cfg:
                     cfg["profiles"] = existing_cfg["profiles"]
         except ValueError:
-            messagebox.showerror("Config", "Port, Batch size, and Auto-sync interval must be numbers.")
+            messagebox.showerror(
+                "Config", "Port, Batch size, and Auto-sync interval must be numbers."
+            )
             return
 
         path = save_config(cfg, default_config_path())
@@ -2867,6 +3025,8 @@ def run_gui_tk():
         """Thread-safe progress bar update."""
         progress_var.set(percent)
         progress_status_var.set(status)
+        # Update percentage display
+        progress_percent_var.set(f"{int(percent)}%")
         if percent > 0:
             progress_frame.grid()
         if percent >= 100:
@@ -3476,7 +3636,9 @@ def run_gui_tk():
         cfg_path = default_config_path()
 
         if not os.path.exists(cfg_path):
-            if not messagebox.askyesno("Create Config", "Config file doesn't exist. Create it?"):
+            if not messagebox.askyesno(
+                "Create Config", "Config file doesn't exist. Create it?"
+            ):
                 return
             save_cfg()  # Create default config
 
@@ -3498,12 +3660,20 @@ def run_gui_tk():
         editor.minsize(600, 400)
         editor.configure(bg=bg_color)
 
-        tk.Label(editor, text=f"Editing: {cfg_path}", font=label_font, bg=bg_color, fg=text_color).pack(pady=5)
+        tk.Label(
+            editor,
+            text=f"Editing: {cfg_path}",
+            font=label_font,
+            bg=bg_color,
+            fg=text_color,
+        ).pack(pady=5)
 
         text_frame = tk.Frame(editor, bg=entry_bg, relief="flat", bd=1)
         text_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        yaml_text = tk.Text(text_frame, wrap="word", font=("Consolas", 9), bg="#fafafa", fg=text_color)
+        yaml_text = tk.Text(
+            text_frame, wrap="word", font=("Consolas", 9), bg="#fafafa", fg=text_color
+        )
         yaml_text.pack(side="left", fill="both", expand=True, padx=5, pady=5)
 
         scroll = ttk.Scrollbar(text_frame, orient="vertical", command=yaml_text.yview)
@@ -3512,7 +3682,7 @@ def run_gui_tk():
 
         # Load current config
         try:
-            with open(cfg_path, 'r', encoding='utf-8') as f:
+            with open(cfg_path, "r", encoding="utf-8") as f:
                 yaml_text.insert("1.0", f.read())
         except Exception as e:
             messagebox.showerror("Error", f"Could not load config: {e}")
@@ -3525,7 +3695,7 @@ def run_gui_tk():
                 # Validate YAML
                 yaml.safe_load(content)
                 # Save
-                with open(cfg_path, 'w', encoding='utf-8') as f:
+                with open(cfg_path, "w", encoding="utf-8") as f:
                     f.write(content)
                 messagebox.showinfo("Success", "Config saved successfully!")
                 log("Config YAML saved. Reload config to apply changes.")
@@ -3538,8 +3708,12 @@ def run_gui_tk():
 
         btn_frame = tk.Frame(editor, bg=bg_color)
         btn_frame.pack(pady=10)
-        ttk.Button(btn_frame, text="Save", command=save_yaml, style='Accent.TButton').pack(side="left", padx=5)
-        ttk.Button(btn_frame, text="Cancel", command=editor.destroy, style='Modern.TButton').pack(side="left", padx=5)
+        ttk.Button(
+            btn_frame, text="Save", command=save_yaml, style="Accent.TButton"
+        ).pack(side="left", padx=5)
+        ttk.Button(
+            btn_frame, text="Cancel", command=editor.destroy, style="Modern.TButton"
+        ).pack(side="left", padx=5)
 
     def edit_sync_tracking_yaml():
         """Open sync tracking YAML file in an editor window."""
@@ -3714,16 +3888,25 @@ def run_gui_tk():
 
     # Configure ttk styles
     style = ttk.Style()
-    style.theme_use('clam')
+    style.theme_use("clam")
 
     # Style configurations
-    style.configure('Title.TLabel', font=title_font, background=bg_color, foreground=header_color)
-    style.configure('Header.TLabel', font=("Segoe UI", 10, "bold"), background=bg_color, foreground=text_color)
-    style.configure('Modern.TButton', font=button_font, padding=8)
-    style.configure('Accent.TButton', font=button_font, padding=8)
-    style.map('Accent.TButton',
-              background=[('active', accent_hover), ('!active', accent_color)],
-              foreground=[('active', 'white'), ('!active', 'white')])
+    style.configure(
+        "Title.TLabel", font=title_font, background=bg_color, foreground=header_color
+    )
+    style.configure(
+        "Header.TLabel",
+        font=("Segoe UI", 10, "bold"),
+        background=bg_color,
+        foreground=text_color,
+    )
+    style.configure("Modern.TButton", font=button_font, padding=8)
+    style.configure("Accent.TButton", font=button_font, padding=8)
+    style.map(
+        "Accent.TButton",
+        background=[("active", accent_hover), ("!active", accent_color)],
+        foreground=[("active", "white"), ("!active", "white")],
+    )
 
     # Use grid layout for better control over section proportions
     root.grid_rowconfigure(2, weight=1)  # Middle section expands
@@ -3736,8 +3919,13 @@ def run_gui_tk():
     title_frame.grid(row=0, column=0, sticky="ew")
     title_frame.grid_propagate(False)
     title_frame.grid_columnconfigure(0, weight=1)
-    title_label = tk.Label(title_frame, text="VFP DBF → RDS Uploader", 
-                          font=title_font, bg=header_color, fg="white")
+    title_label = tk.Label(
+        title_frame,
+        text="VFP DBF → RDS Uploader",
+        font=title_font,
+        bg=header_color,
+        fg="white",
+    )
     title_label.grid(row=0, column=0)
     title_frame.grid_rowconfigure(0, weight=1)
 
@@ -3748,21 +3936,40 @@ def run_gui_tk():
     top.grid(row=1, column=0, sticky="ew")
     top.grid_columnconfigure(1, weight=1)
 
-    default_folder = os.path.join(ksv, "data") if os.path.isdir(os.path.join(ksv, "data")) else ksv
+    default_folder = (
+        os.path.join(ksv, "data") if os.path.isdir(os.path.join(ksv, "data")) else ksv
+    )
     folder_var = tk.StringVar(value=default_folder)
 
     # Responsive folder entry width
     folder_entry_width = max(35, int(window_width / 18))
-    tk.Label(top, text="Data Folder", font=label_font, bg=bg_color, fg=text_color).grid(row=0, column=0, padx=(0, 6))
-    folder_entry = tk.Entry(top, textvariable=folder_var, width=folder_entry_width, font=label_font, 
-                           bg=entry_bg, relief="flat", bd=1, highlightthickness=1,
-                           highlightbackground="#ddd", highlightcolor=accent_color)
+    tk.Label(top, text="Data Folder", font=label_font, bg=bg_color, fg=text_color).grid(
+        row=0, column=0, padx=(0, 6)
+    )
+    folder_entry = tk.Entry(
+        top,
+        textvariable=folder_var,
+        width=folder_entry_width,
+        font=label_font,
+        bg=entry_bg,
+        relief="flat",
+        bd=1,
+        highlightthickness=1,
+        highlightbackground="#ddd",
+        highlightcolor=accent_color,
+    )
     folder_entry.grid(row=0, column=1, padx=4, sticky="ew")
 
-    ttk.Button(top, text="Browse", command=browse_folder, style='Modern.TButton').grid(row=0, column=2, padx=4)
-    ttk.Button(top, text="Scan DBFs", command=scan_dbfs, style='Accent.TButton').grid(row=0, column=3, padx=4)
+    ttk.Button(top, text="Browse", command=browse_folder, style="Modern.TButton").grid(
+        row=0, column=2, padx=4
+    )
+    ttk.Button(top, text="Scan DBFs", command=scan_dbfs, style="Accent.TButton").grid(
+        row=0, column=3, padx=4
+    )
     count_var = tk.StringVar(value="Found: 0")
-    tk.Label(top, textvariable=count_var, font=label_font, bg=bg_color, fg=text_color).grid(row=0, column=4, padx=(8, 0))
+    tk.Label(
+        top, textvariable=count_var, font=label_font, bg=bg_color, fg=text_color
+    ).grid(row=0, column=4, padx=(8, 0))
 
     # Middle: list + connection form (takes most space, but leaves room for log)
     mid = tk.Frame(root, bg=bg_color, padx=pad_x, pady=max(4, pad_y // 2))
@@ -3778,8 +3985,9 @@ def run_gui_tk():
     left_frame.grid_rowconfigure(1, weight=1)  # List container expands
     left_frame.grid_columnconfigure(0, weight=1)
 
-    tk.Label(left_frame, text="DBF Tables", font=header_font, 
-            bg=bg_color, fg=text_color).grid(row=0, column=0, sticky="w", pady=(0, 3))
+    tk.Label(
+        left_frame, text="DBF Tables", font=header_font, bg=bg_color, fg=text_color
+    ).grid(row=0, column=0, sticky="w", pady=(0, 3))
 
     list_container = tk.Frame(left_frame, bg=entry_bg, relief="flat", bd=1)
     list_container.grid(row=1, column=0, sticky="nsew")
@@ -3789,10 +3997,19 @@ def run_gui_tk():
     # Listbox fills available vertical space (no fixed height limit)
     # Calculate reasonable minimum rows based on screen
     min_listbox_rows = max(10, min(int(window_height / 50), 20))
-    files_list = tk.Listbox(list_container, selectmode="extended", height=min_listbox_rows,
-                           font=label_font, bg=entry_bg, fg=text_color,
-                           selectbackground=accent_color, selectforeground="white",
-                           relief="flat", bd=0, highlightthickness=0)
+    files_list = tk.Listbox(
+        list_container,
+        selectmode="extended",
+        height=min_listbox_rows,
+        font=label_font,
+        bg=entry_bg,
+        fg=text_color,
+        selectbackground=accent_color,
+        selectforeground="white",
+        relief="flat",
+        bd=0,
+        highlightthickness=0,
+    )
     files_list.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
 
     yscroll = ttk.Scrollbar(list_container, orient="vertical", command=files_list.yview)
@@ -3859,11 +4076,15 @@ def run_gui_tk():
 
     # Create canvas for scrolling
     right_canvas = tk.Canvas(right_outer, bg=entry_bg, highlightthickness=0)
-    right_scrollbar = ttk.Scrollbar(right_outer, orient="vertical", command=right_canvas.yview)
+    right_scrollbar = ttk.Scrollbar(
+        right_outer, orient="vertical", command=right_canvas.yview
+    )
     right_scrollable_frame = tk.Frame(right_canvas, bg=entry_bg)
 
     # Create the window for the scrollable frame
-    canvas_window = right_canvas.create_window((0, 0), window=right_scrollable_frame, anchor="nw")
+    canvas_window = right_canvas.create_window(
+        (0, 0), window=right_scrollable_frame, anchor="nw"
+    )
 
     def update_scroll_region(event=None):
         """Update scroll region when frame content changes."""
@@ -3878,7 +4099,7 @@ def run_gui_tk():
 
     # Bind events for scrolling
     right_scrollable_frame.bind("<Configure>", update_scroll_region)
-    right_canvas.bind('<Configure>', update_canvas_width)
+    right_canvas.bind("<Configure>", update_canvas_width)
     right_canvas.configure(yscrollcommand=right_scrollbar.set)
 
     right_canvas.grid(row=0, column=0, sticky="nsew")
@@ -3888,7 +4109,8 @@ def run_gui_tk():
     def _on_mousewheel(event):
         # Only scroll if mouse is over the canvas
         if right_canvas.winfo_containing(event.x_root, event.y_root):
-            right_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            right_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
     right_canvas.bind_all("<MouseWheel>", _on_mousewheel)
 
     # Also support Linux mousewheel (Button-4/Button-5)
@@ -3897,12 +4119,15 @@ def run_gui_tk():
             right_canvas.yview_scroll(-1, "units")
         elif event.num == 5:
             right_canvas.yview_scroll(1, "units")
+
     right_canvas.bind_all("<Button-4>", _on_linux_scroll)
     right_canvas.bind_all("<Button-5>", _on_linux_scroll)
 
     # Use right_scrollable_frame instead of right_frame for all widgets
     right_frame = right_scrollable_frame
-    right_frame.configure(relief="flat", bd=1, padx=max(8, pad_x), pady=max(6, pad_y // 2))
+    right_frame.configure(
+        relief="flat", bd=1, padx=max(8, pad_x), pady=max(6, pad_y // 2)
+    )
     right_frame.grid_columnconfigure(1, weight=1)
 
     # Helper function to create collapsible sections
@@ -4538,9 +4763,16 @@ def run_gui_tk():
         row=auto_sync_row, column=0, columnspan=2, sticky="we", pady=(4, 0)
     )
 
-    tk.Label(auto_sync_frame, text="Status:", font=label_font, bg=entry_bg, fg=text_color).pack(side="left", padx=(0, 5))
-    status_label = tk.Label(auto_sync_frame, textvariable=auto_sync_status_var, font=label_font, 
-                           bg=entry_bg, fg=text_color)
+    tk.Label(
+        auto_sync_frame, text="Status:", font=label_font, bg=entry_bg, fg=text_color
+    ).pack(side="left", padx=(0, 5))
+    status_label = tk.Label(
+        auto_sync_frame,
+        textvariable=auto_sync_status_var,
+        font=label_font,
+        bg=entry_bg,
+        fg=text_color,
+    )
     status_label.pack(side="left", padx=(0, 10))
 
     # Make status_label accessible to update function
@@ -4558,8 +4790,20 @@ def run_gui_tk():
     # Replace the update function
     update_auto_sync_status = update_auto_sync_status_with_label
 
-    ttk.Button(auto_sync_frame, text="Start", command=start_auto_sync_gui, style='Modern.TButton', width=8).pack(side="left", padx=2)
-    ttk.Button(auto_sync_frame, text="Stop", command=stop_auto_sync_gui, style='Modern.TButton', width=8).pack(side="left", padx=2)
+    ttk.Button(
+        auto_sync_frame,
+        text="Start",
+        command=start_auto_sync_gui,
+        style="Modern.TButton",
+        width=8,
+    ).pack(side="left", padx=2)
+    ttk.Button(
+        auto_sync_frame,
+        text="Stop",
+        command=stop_auto_sync_gui,
+        style="Modern.TButton",
+        width=8,
+    ).pack(side="left", padx=2)
     row += 1
 
     # Button frame with modern styling (reduced padding)
@@ -4567,9 +4811,15 @@ def run_gui_tk():
     btn_frame = tk.Frame(right_frame, bg=entry_bg)
     btn_frame.grid(row=row, column=0, columnspan=2, sticky="we", pady=(btn_pad, 0))
 
-    ttk.Button(btn_frame, text="Load Config", command=load_cfg, style='Modern.TButton').pack(side="left", padx=2, fill="x", expand=True)
-    ttk.Button(btn_frame, text="Save Config", command=save_cfg, style='Modern.TButton').pack(side="left", padx=2, fill="x", expand=True)
-    ttk.Button(btn_frame, text="Edit YAML", command=edit_config_yaml, style='Modern.TButton').pack(side="left", padx=2, fill="x", expand=True)
+    ttk.Button(
+        btn_frame, text="Load Config", command=load_cfg, style="Modern.TButton"
+    ).pack(side="left", padx=2, fill="x", expand=True)
+    ttk.Button(
+        btn_frame, text="Save Config", command=save_cfg, style="Modern.TButton"
+    ).pack(side="left", padx=2, fill="x", expand=True)
+    ttk.Button(
+        btn_frame, text="Edit YAML", command=edit_config_yaml, style="Modern.TButton"
+    ).pack(side="left", padx=2, fill="x", expand=True)
     ttk.Button(
         btn_frame,
         text="Edit Sync Times",
@@ -4578,7 +4828,9 @@ def run_gui_tk():
     ).pack(side="left", padx=2, fill="x", expand=True)
 
     action_frame = tk.Frame(right_frame, bg=entry_bg)
-    action_frame.grid(row=row+1, column=0, columnspan=2, sticky="we", pady=(btn_pad, 0))
+    action_frame.grid(
+        row=row + 1, column=0, columnspan=2, sticky="we", pady=(btn_pad, 0)
+    )
 
     # Create upload button now that upload_selected and action_frame are both defined
     upload_btn_ref["btn"] = ttk.Button(
@@ -4604,7 +4856,8 @@ def run_gui_tk():
                 w.configure(state=state)
             except Exception:
                 pass
-    admin_enabled_var.trace_add('write', _apply_admin_toggle)
+
+    admin_enabled_var.trace_add("write", _apply_admin_toggle)
     # Apply initial
     _apply_admin_toggle()
 
@@ -4621,8 +4874,9 @@ def run_gui_tk():
     log_max_px = min(int(window_height * 0.25), 200)  # Max 25% or 200px
     log_height_px = max(log_min_px, min(log_max_px, int(window_height * 0.2)))
 
-    tk.Label(log_frame, text="Activity Log", font=header_font, 
-            bg=bg_color, fg=text_color).grid(row=0, column=0, sticky="w", pady=(0, 3))
+    tk.Label(
+        log_frame, text="Activity Log", font=header_font, bg=bg_color, fg=text_color
+    ).grid(row=0, column=0, sticky="w", pady=(0, 3))
 
     log_container = tk.Frame(log_frame, bg=entry_bg, relief="flat", bd=1)
     log_container.grid(row=1, column=0, sticky="ew")
@@ -4634,10 +4888,18 @@ def run_gui_tk():
     log_font_size = max(8, base_font_size - 1)
     # Calculate rows based on pixel height (approx 20px per row)
     log_rows = max(8, int(log_height_px / 22))
-    log_box = tk.Text(log_container, height=log_rows, wrap="word", 
-                     font=("Consolas", log_font_size),
-                     bg="#fafafa", fg=text_color, relief="flat", bd=0,
-                     padx=max(6, pad_x // 2), pady=max(4, pad_y // 2))
+    log_box = tk.Text(
+        log_container,
+        height=log_rows,
+        wrap="word",
+        font=("Consolas", log_font_size),
+        bg="#fafafa",
+        fg=text_color,
+        relief="flat",
+        bd=0,
+        padx=max(6, pad_x // 2),
+        pady=max(4, pad_y // 2),
+    )
     log_box.grid(row=0, column=0, sticky="nsew")
     log_box.configure(state="disabled")
 
@@ -4648,6 +4910,7 @@ def run_gui_tk():
     # Progress bar variables
     progress_var = tk.DoubleVar(value=0.0)
     progress_status_var = tk.StringVar(value="Ready")
+    progress_percent_var = tk.StringVar(value="0%")
 
     # Progress bar widget (initially hidden)
     progress_frame = tk.Frame(log_frame, bg=bg_color)
@@ -4663,14 +4926,31 @@ def run_gui_tk():
     )
     progress_label.grid(row=0, column=0, sticky="w", pady=(0, 2))
 
+    # Progress bar with percentage label
+    progress_bar_container = tk.Frame(progress_frame, bg=bg_color)
+    progress_bar_container.grid(row=1, column=0, sticky="ew", pady=(0, 2))
+    progress_frame.grid_columnconfigure(0, weight=1)
+    progress_bar_container.grid_columnconfigure(0, weight=1)
+
     progress_bar = ttk.Progressbar(
-        progress_frame,
+        progress_bar_container,
         variable=progress_var,
         maximum=100,
         length=300,
         mode="determinate",
     )
-    progress_bar.grid(row=1, column=0, sticky="ew", pady=(0, 2))
+    progress_bar.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+
+    # Percentage label next to progress bar
+    progress_percent_label = tk.Label(
+        progress_bar_container,
+        textvariable=progress_percent_var,
+        font=label_font,
+        bg=bg_color,
+        fg=text_color,
+        width=5,
+    )
+    progress_percent_label.grid(row=0, column=1, sticky="e")
 
     # Hide progress bar initially
     progress_frame.grid_remove()
@@ -4812,6 +5092,7 @@ def run_gui_tk():
             root.after(3000, check_minimize)  # Start checking after 3 seconds
     except Exception as e:
         log_error(f"System tray setup error: {e}")
+
         # System tray not available, just handle normal close
         def on_close_normal(event=None):
             cleanup_instance_lock(lock_handle)
@@ -4852,10 +5133,12 @@ def run_gui_tk():
             except Exception:
                 pass
 
+
 # ---------- Auto-sync functionality ----------
 
 _auto_sync_thread = None
 _auto_sync_stop = threading.Event()
+
 
 def run_auto_sync(cfg_path: Optional[str] = None, profile: Optional[str] = None):
     """
@@ -4872,8 +5155,10 @@ def run_auto_sync(cfg_path: Optional[str] = None, profile: Optional[str] = None)
     raw_cfg = load_config(cfg_path) if cfg_path else load_config()
     cfg = resolve_profile(raw_cfg, profile)
 
-    delta_cfg = cfg.get('delta_sync', {})
-    interval_seconds = int(delta_cfg.get('auto_sync_interval_seconds', 3600))  # Default 1 hour
+    delta_cfg = cfg.get("delta_sync", {})
+    interval_seconds = int(
+        delta_cfg.get("auto_sync_interval_seconds", 3600)
+    )  # Default 1 hour
     delta_enabled = bool(delta_cfg.get("enabled", False))
     date_field = delta_cfg.get(
         "date_field"
@@ -4950,17 +5235,23 @@ def run_auto_sync(cfg_path: Optional[str] = None, profile: Optional[str] = None)
     log_to_gui("Auto-sync stopped.")
     update_gui_progress(0, "Auto-sync stopped.")
 
-def start_auto_sync_background(cfg_path: Optional[str] = None, profile: Optional[str] = None):
+
+def start_auto_sync_background(
+    cfg_path: Optional[str] = None, profile: Optional[str] = None
+):
     """Start auto-sync in a background thread."""
     global _auto_sync_thread
     if _auto_sync_thread and _auto_sync_thread.is_alive():
         print("Auto-sync already running.")
         return
-    
+
     _auto_sync_stop.clear()
-    _auto_sync_thread = threading.Thread(target=run_auto_sync, args=(cfg_path, profile), daemon=True)
+    _auto_sync_thread = threading.Thread(
+        target=run_auto_sync, args=(cfg_path, profile), daemon=True
+    )
     _auto_sync_thread.start()
     print("Auto-sync started in background.")
+
 
 def stop_auto_sync():
     """Stop the running auto-sync."""
@@ -4970,22 +5261,32 @@ def stop_auto_sync():
         _auto_sync_thread.join(timeout=5)
     print("Auto-sync stopped.")
 
+
 # ---------- Main ----------
+
 
 def main():
     import argparse
+
     configure_logging()
 
     ap = argparse.ArgumentParser(description="VFP DBF → RDS Uploader")
-    ap.add_argument('--config', help='Path to YAML config (defaults to ksv\\vfp_uploader.yaml if found, else AppData)')
-    ap.add_argument('--init', action='store_true', help='Run interactive setup wizard and save config')
+    ap.add_argument(
+        "--config",
+        help="Path to YAML config (defaults to ksv\\vfp_uploader.yaml if found, else AppData)",
+    )
+    ap.add_argument(
+        "--init",
+        action="store_true",
+        help="Run interactive setup wizard and save config",
+    )
     ap.add_argument(
         "--gui",
         action="store_true",
         help="Launch Tkinter GUI (default if no other mode specified)",
     )
-    ap.add_argument('--dpg', action='store_true', help='Launch DearPyGui GUI')
-    ap.add_argument('--profile', help='Profile name in config (when using profiles)')
+    ap.add_argument("--dpg", action="store_true", help="Launch DearPyGui GUI")
+    ap.add_argument("--profile", help="Profile name in config (when using profiles)")
     ap.add_argument(
         "--headless",
         action="store_true",
@@ -5057,5 +5358,6 @@ def main():
     run_gui_tk()
     return
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
