@@ -1,0 +1,11 @@
+# Core dependencies required to run the VFP DBF → RDS uploader
+# Install them into a clean virtual environment before building the executable.
+dbfread
+pyyaml
+mysql-connector-python
+pyodbc
+platformdirs>=3.0
+dearpygui
+pystray
+pillow
+pywin32; platform_system == "Windows"

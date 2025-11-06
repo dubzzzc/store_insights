@@ -3,11 +3,11 @@
 ## Prerequisites
 
 1. **Python 3.8+** installed on Windows
-2. **PyInstaller** - will be installed automatically by the build script
-3. **All dependencies** installed:
+2. Install the uploader dependencies:
    ```bash
-   pip install dbfread pyyaml pyodbc mysql-connector-python
+   pip install -r requirements-uploader.txt
    ```
+3. **PyInstaller** (installed automatically by `build_exe.bat` or manually with `pip install pyinstaller`)
 
 ## Quick Build (Recommended)
 
@@ -16,27 +16,17 @@
    ```bash
    build_exe.bat
    ```
-3. The executable will be in `dist\VFP_DBF_Uploader.exe`
+3. The executable will be in `dist\VFP_DBF_Uploader\VFP_DBF_Uploader.exe`
 
 ## Manual Build with PyInstaller
 
 If you prefer to build manually:
 
 ```bash
+pip install -r requirements-uploader.txt
 pip install pyinstaller
 
-pyinstaller --name="VFP_DBF_Uploader" \
-    --onefile \
-    --windowed \
-    --hidden-import yaml \
-    --hidden-import dbfread \
-    --hidden-import pyodbc \
-    --hidden-import mysql.connector \
-    --hidden-import mysql.connector.pooling \
-    --hidden-import mysql.connector.cursor \
-    --collect-all dbfread \
-    --collect-all yaml \
-    vfp_dbf_to_rdsv2.py
+pyinstaller --clean --noconfirm vfp_dbf_to_rdsv2.spec
 ```
 
 ## Creating an Installer (Optional)
@@ -103,14 +93,10 @@ VFP_DBF_Uploader_Release/
 ## Troubleshooting
 
 ### "mysql_native_password cannot be loaded" error
-This means MySQL connector plugins weren't bundled correctly. Fix:
-1. Rebuild using the updated `build_exe.bat` which includes:
-   - `--hidden-import mysql.connector.plugins.mysql_native_password`
-   - `--hidden-import mysql.connector.plugins.caching_sha2_password`
-   - `--collect-all mysql.connector`
-   - `--collect-binaries mysql.connector`
-2. Or use the provided `vfp_dbf_to_rdsv2.spec` file which has these included
-3. After rebuild, test the executable again
+This means the MySQL connector plugins were not copied into the build output. Fix:
+1. Ensure you installed the dependencies with `pip install -r requirements-uploader.txt` before running PyInstaller.
+2. Rebuild using `build_exe.bat` or the provided `vfp_dbf_to_rdsv2.spec`, both of which bundle the MySQL plugin binaries automatically.
+3. After rebuild, test the executable again.
 
 ### "ODBC Driver not found" error
 - User needs to install ODBC Driver 17 for SQL Server

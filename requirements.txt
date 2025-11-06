@@ -7,3 +7,4 @@ mysql-connector-python
 bcrypt==4.0.1
 PyJWT==2.8.0
 email-validator
+platformdirs>=3.0
