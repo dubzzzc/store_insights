@@ -2734,12 +2734,272 @@ const HistoryModule = ({ history }) => {
   );
 };
 
+const TendersModule = ({ data, dateRange, onDateRangeChange }) => {
+  if (!data) {
+    return <div className="empty-state">Loading payment methods data...</div>;
+  }
+
+  const tenders = data.tenders || [];
+  const dailyTrends = data.daily_trends || [];
+
+  return (
+    <div className="panel">
+      <div className="panel-header">
+        <h2 className="panel-title">Payment Methods</h2>
+      </div>
+      {tenders.length ? (
+        <div className="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Payment Type</th>
+                <th>Sale Amount</th>
+                <th>Sale Count</th>
+                <th>Reversal Amount</th>
+                <th>Reversal Count</th>
+                <th>Net Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tenders.map((tender, idx) => (
+                <tr key={idx}>
+                  <td>{tender.payment_type}</td>
+                  <td>{formatCurrency(tender.sale_amount)}</td>
+                  <td>{tender.sale_count}</td>
+                  <td>{formatCurrency(tender.reversal_amount)}</td>
+                  <td>{tender.reversal_count}</td>
+                  <td><strong>{formatCurrency(tender.net_amount)}</strong></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="empty-state">No payment method data available.</div>
+      )}
+    </div>
+  );
+};
+
+const GatewayModule = ({ data, dateRange, onDateRangeChange }) => {
+  if (!data) {
+    return <div className="empty-state">Loading credit card data...</div>;
+  }
+
+  const creditCards = data.credit_cards || [];
+  const summary = data.summary || {};
+
+  return (
+    <div className="panel">
+      <div className="panel-header">
+        <h2 className="panel-title">Credit Card & Gateway Analytics</h2>
+      </div>
+      <div className="summary-grid">
+        <div className="summary-card">
+          <h3>Total Credit Card Sales</h3>
+          <strong>{formatCurrency(summary.total_credit_card_sales || 0)}</strong>
+        </div>
+        <div className="summary-card">
+          <h3>Ecommerce Sales</h3>
+          <strong>{formatCurrency(summary.total_ecommerce_sales || 0)}</strong>
+        </div>
+        <div className="summary-card">
+          <h3>Combined Total</h3>
+          <strong>{formatCurrency(summary.total_combined || 0)}</strong>
+        </div>
+      </div>
+      {creditCards.length ? (
+        <div className="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Tender Type</th>
+                <th>In-Store Sales</th>
+                <th>Ecommerce Sales</th>
+                <th>Total Sales</th>
+              </tr>
+            </thead>
+            <tbody>
+              {creditCards.map((cc, idx) => (
+                <tr key={idx}>
+                  <td>{cc.tender_type}</td>
+                  <td>{formatCurrency(cc.in_store_sales)}</td>
+                  <td>{formatCurrency(cc.ecommerce_sales)}</td>
+                  <td><strong>{formatCurrency(cc.total_sales)}</strong></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="empty-state">No credit card data available.</div>
+      )}
+    </div>
+  );
+};
+
+const OperationsModule = ({ data, dateRange, onDateRangeChange }) => {
+  if (!data) {
+    return <div className="empty-state">Loading operations data...</div>;
+  }
+
+  return (
+    <div className="panel">
+      <div className="panel-header">
+        <h2 className="panel-title">Store Operations</h2>
+      </div>
+      <div className="summary-grid">
+        <div className="summary-card">
+          <h3>Transaction Count</h3>
+          <strong>{data.transaction_count || 0}</strong>
+        </div>
+        <div className="summary-card">
+          <h3>Total Till</h3>
+          <strong>{formatCurrency(data.total_till || 0)}</strong>
+        </div>
+        <div className="summary-card">
+          <h3>Product Count</h3>
+          <strong>{data.products?.count || 0}</strong>
+        </div>
+        <div className="summary-card">
+          <h3>Supplier Invoices</h3>
+          <strong>{data.supplier_invoices?.count || 0}</strong>
+        </div>
+      </div>
+      <div className="insight-grid two-column">
+        <div className="table-card">
+          <h3>Gift Card Activity</h3>
+          <div className="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Count</th>
+                  <th>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Redemptions</td>
+                  <td>{data.gift_cards?.redemptions?.count || 0}</td>
+                  <td>{formatCurrency(data.gift_cards?.redemptions?.amount || 0)}</td>
+                </tr>
+                <tr>
+                  <td>Purchases</td>
+                  <td>{data.gift_cards?.purchases?.count || 0}</td>
+                  <td>{formatCurrency(data.gift_cards?.purchases?.amount || 0)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div className="table-card">
+          <h3>Product Information</h3>
+          <div className="table-wrapper">
+            <table>
+              <tbody>
+                <tr>
+                  <td>Total Products</td>
+                  <td><strong>{data.products?.count || 0}</strong></td>
+                </tr>
+                <tr>
+                  <td>First Created</td>
+                  <td>{data.products?.first_created || 'N/A'}</td>
+                </tr>
+                <tr>
+                  <td>Last Created</td>
+                  <td>{data.products?.last_created || 'N/A'}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      {data.supplier_invoices && (
+        <div className="table-card">
+          <h3>Supplier Invoice Information</h3>
+          <div className="table-wrapper">
+            <table>
+              <tbody>
+                <tr>
+                  <td>Total Invoices</td>
+                  <td><strong>{data.supplier_invoices.count || 0}</strong></td>
+                </tr>
+                <tr>
+                  <td>First Date</td>
+                  <td>{data.supplier_invoices.first_date || 'N/A'}</td>
+                </tr>
+                <tr>
+                  <td>Last Date</td>
+                  <td>{data.supplier_invoices.last_date || 'N/A'}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const QuickViewWidget = ({ data }) => {
+  if (!data) {
+    return null;
+  }
+
+  return (
+    <div className="panel" style={{ marginBottom: '1.5rem' }}>
+      <div className="panel-header">
+        <h2 className="panel-title">Quick View - {data.date}</h2>
+      </div>
+      <div className="summary-grid">
+        <div className="summary-card">
+          <h3>Today's Sales</h3>
+          <strong>{formatCurrency(data.sales_summary?.total_sales || 0)}</strong>
+          <span>{data.sales_summary?.transaction_count || 0} transactions</span>
+        </div>
+        <div className="summary-card">
+          <h3>Gift Cards</h3>
+          <strong>{data.gift_card_activity?.redemptions || 0} redemptions</strong>
+          <span>{data.gift_card_activity?.purchases || 0} purchases</span>
+        </div>
+      </div>
+      {data.top_items && data.top_items.length > 0 && (
+        <div className="table-card">
+          <h3>Top Items Today</h3>
+          <div className="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Quantity</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.top_items.map((item, idx) => (
+                  <tr key={idx}>
+                    <td>{item.description || item.sku}</td>
+                    <td>{formatQuantity(item.quantity)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ModuleNav = ({ active, onChange }) => {
   const modules = [
     { id: 'sales', label: 'Sales' },
     { id: 'purchase', label: 'Purchase Orders' },
     { id: 'inventory', label: 'Inventory' },
     { id: 'history', label: 'Sales History' },
+    { id: 'tenders', label: 'Payment Methods' },
+    { id: 'gateway', label: 'Credit Cards' },
+    { id: 'operations', label: 'Operations' },
   ];
 
   return (
@@ -2832,6 +3092,10 @@ const ModuleNav = ({ active, onChange }) => {
   purchaseOrders,
   inventory,
   history,
+  tendersData,
+  gatewayData,
+  operationsData,
+  quickData,
   onStoreChange,
   onRefresh,
   activeModule,
@@ -2866,6 +3130,8 @@ const ModuleNav = ({ active, onChange }) => {
           </div>
         ) : null}
 
+        {activeModule === 'sales' && quickData ? <QuickViewWidget data={quickData} /> : null}
+
         <ModuleNav active={activeModule} onChange={onModuleChange} />
 
         {activeModule === 'sales' ? (
@@ -2888,6 +3154,12 @@ const ModuleNav = ({ active, onChange }) => {
         {activeModule === 'inventory' ? <InventoryModule snapshot={inventory} /> : null}
 
         {activeModule === 'history' ? <HistoryModule history={history} /> : null}
+
+        {activeModule === 'tenders' ? <TendersModule data={tendersData} dateRange={dateRange} onDateRangeChange={onDateRangeChange} /> : null}
+
+        {activeModule === 'gateway' ? <GatewayModule data={gatewayData} dateRange={dateRange} onDateRangeChange={onDateRangeChange} /> : null}
+
+        {activeModule === 'operations' ? <OperationsModule data={operationsData} dateRange={dateRange} onDateRangeChange={onDateRangeChange} /> : null}
       </div>
     </div>
   );
@@ -2915,6 +3187,10 @@ const ModuleNav = ({ active, onChange }) => {
         const [inventorySnapshot, setInventorySnapshot] = useState(null);
         const [salesHistory, setSalesHistory] = useState([]);
         const [syncLogs, setSyncLogs] = useState([]);
+        const [tendersData, setTendersData] = useState(null);
+        const [gatewayData, setGatewayData] = useState(null);
+        const [operationsData, setOperationsData] = useState(null);
+        const [quickData, setQuickData] = useState(null);
         const [authError, setAuthError] = useState('');
         const [isAuthenticating, setIsAuthenticating] = useState(false);
         const [isLoadingData, setIsLoadingData] = useState(false);
@@ -2978,6 +3254,10 @@ const ModuleNav = ({ active, onChange }) => {
             setInventorySnapshot(null);
             setSalesHistory([]);
             setSyncLogs([]);
+            setTendersData(null);
+            setGatewayData(null);
+            setOperationsData(null);
+            setQuickData(null);
             tokenRef.current = null;
             setAuthError(message);
             setIsAuthenticating(false);
@@ -3161,13 +3441,86 @@ const ModuleNav = ({ active, onChange }) => {
           return payload.logs || [];
         };
 
+        const fetchTenders = async (authToken, query) => {
+          const response = await fetch(`${API_BASE}/insights/tenders${query}`, {
+            headers: { Authorization: `Bearer ${authToken}` },
+          });
+          let payload = {};
+          try {
+            payload = await response.json();
+          } catch (error) {
+            payload = {};
+          }
+          if (!response.ok) {
+            const requestError = new Error(payload.detail || 'Unable to load tenders data');
+            requestError.status = response.status;
+            throw requestError;
+          }
+          return payload;
+        };
+
+        const fetchGateway = async (authToken, query) => {
+          const response = await fetch(`${API_BASE}/insights/gateway${query}`, {
+            headers: { Authorization: `Bearer ${authToken}` },
+          });
+          let payload = {};
+          try {
+            payload = await response.json();
+          } catch (error) {
+            payload = {};
+          }
+          if (!response.ok) {
+            const requestError = new Error(payload.detail || 'Unable to load gateway data');
+            requestError.status = response.status;
+            throw requestError;
+          }
+          return payload;
+        };
+
+        const fetchOperations = async (authToken, query) => {
+          const response = await fetch(`${API_BASE}/insights/operations${query}`, {
+            headers: { Authorization: `Bearer ${authToken}` },
+          });
+          let payload = {};
+          try {
+            payload = await response.json();
+          } catch (error) {
+            payload = {};
+          }
+          if (!response.ok) {
+            const requestError = new Error(payload.detail || 'Unable to load operations data');
+            requestError.status = response.status;
+            throw requestError;
+          }
+          return payload;
+        };
+
+        const fetchQuick = async (authToken, query) => {
+          const response = await fetch(`${API_BASE}/insights/quick${query}`, {
+            headers: { Authorization: `Bearer ${authToken}` },
+          });
+          let payload = {};
+          try {
+            payload = await response.json();
+          } catch (error) {
+            payload = {};
+          }
+          if (!response.ok) {
+            const requestError = new Error(payload.detail || 'Unable to load quick insights');
+            requestError.status = response.status;
+            throw requestError;
+          }
+          return payload;
+        };
+
         const loadInsights = async (authToken, query) => {
           if (!authToken) return;
           setIsLoadingData(true);
           try {
-            const [salesPayload, syncData] = await Promise.all([
+            const [salesPayload, syncData, quickPayload] = await Promise.all([
               fetchSales(authToken, query),
               fetchSyncLogs(authToken, query),
+              fetchQuick(authToken, query).catch(() => null),
             ]);
             if (authToken !== tokenRef.current) {
               return;
@@ -3186,6 +3539,7 @@ const ModuleNav = ({ active, onChange }) => {
             setInventorySnapshot(salesPayload.inventory || null);
             setSalesHistory(salesPayload.history || []);
             setSyncLogs(syncData);
+            setQuickData(quickPayload);
             setAuthError('');
           } catch (error) {
             console.error(error);
@@ -3203,11 +3557,47 @@ const ModuleNav = ({ active, onChange }) => {
           }
         };
 
+        const loadModuleData = async (authToken, query, module) => {
+          if (!authToken) return;
+          setIsLoadingData(true);
+          try {
+            let payload = null;
+            if (module === 'tenders') {
+              payload = await fetchTenders(authToken, query);
+              setTendersData(payload);
+            } else if (module === 'gateway') {
+              payload = await fetchGateway(authToken, query);
+              setGatewayData(payload);
+            } else if (module === 'operations') {
+              payload = await fetchOperations(authToken, query);
+              setOperationsData(payload);
+            }
+            setAuthError('');
+          } catch (error) {
+            console.error(error);
+            if (error.status === 401) {
+              handleLogout('Session expired. Please sign in again.');
+              return;
+            }
+            setAuthError(error.message || 'Unable to load module data');
+          } finally {
+            setIsLoadingData(false);
+          }
+        };
+
         useEffect(() => {
           if (!token || userRole === 'admin') return;
           if (stores.length > 1 && !selectedStore) return;
           loadInsights(token, storeQueryValue);
         }, [token, storeQueryValue, stores, selectedStore, userRole]);
+
+        useEffect(() => {
+          if (!token || userRole === 'admin') return;
+          if (stores.length > 1 && !selectedStore) return;
+          if (['tenders', 'gateway', 'operations'].includes(activeModule)) {
+            loadModuleData(token, storeQueryValue, activeModule);
+          }
+        }, [token, storeQueryValue, stores, selectedStore, userRole, activeModule]);
 
         const loadAdminUsers = useCallback(
           async (key) => {
@@ -3512,6 +3902,10 @@ const ModuleNav = ({ active, onChange }) => {
               setInventorySnapshot(null);
               setSalesHistory([]);
               setSyncLogs([]);
+              setTendersData(null);
+              setGatewayData(null);
+              setOperationsData(null);
+              setQuickData(null);
               setAdminUsers([]);
               setSelectedAdminUserId(null);
               setAdminMessage('');
@@ -3537,6 +3931,10 @@ const ModuleNav = ({ active, onChange }) => {
               setInventorySnapshot(null);
               setSalesHistory([]);
               setSyncLogs([]);
+              setTendersData(null);
+              setGatewayData(null);
+              setOperationsData(null);
+              setQuickData(null);
               setActiveModule('sales');
             }
 
@@ -3604,6 +4002,10 @@ const ModuleNav = ({ active, onChange }) => {
                 purchaseOrders={purchaseOrders}
                 inventory={inventorySnapshot}
                 history={salesHistory}
+                tendersData={tendersData}
+                gatewayData={gatewayData}
+                operationsData={operationsData}
+                quickData={quickData}
                 onStoreChange={handleStoreChange}
                 onRefresh={refresh}
                 activeModule={activeModule}

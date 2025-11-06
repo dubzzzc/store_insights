@@ -92,9 +92,12 @@ profiles:
       auto_sync_interval_seconds: 1800  # 30 minutes
 
 Usage:
-  python vfp_dbf_to_rdsv2.py --gui                    # Launch GUI
-  python vfp_dbf_to_rdsv2.py --config path/to/config.yaml  # Run once
-  python vfp_dbf_to_rdsv2.py --auto-sync              # Run auto-sync (periodic)
+  python vfp_dbf_to_rdsv2.py                          # Launch GUI (default)
+  python vfp_dbf_to_rdsv2.py --gui                    # Launch GUI (explicit)
+  python vfp_dbf_to_rdsv2.py --headless --config path/to/config.yaml  # Run once without GUI
+  python vfp_dbf_to_rdsv2.py --headless --silent --config path/to/config.yaml  # Run silently (Task Scheduler)
+  python vfp_dbf_to_rdsv2.py --auto-sync              # Run auto-sync (periodic, headless, for Task Scheduler)
+  python vfp_dbf_to_rdsv2.py --auto-sync --silent      # Run auto-sync silently (Task Scheduler)
   python vfp_dbf_to_rdsv2.py --profile store6885      # Use specific profile
 """
 
@@ -422,16 +425,93 @@ def list_allowed_dbfs(folder: str, include: Optional[List[str]] = None) -> List[
     return sorted([str(p) for p in files if is_allowed_dbf(str(p))])
 
 
-from dbfread import DBF
+from dbfread import DBF, FieldParser
 
-def open_dbf(path: str, encodings=("latin-1", "cp1252", "cp437", "utf-8")) -> DBF:
+
+# Safe field parser that handles parsing errors gracefully
+class SafeFieldParser(FieldParser):
+    """Field parser that returns None instead of raising exceptions on parse errors."""
+
+    def parseD(self, f, d):
+        try:
+            return super().parseD(f, d)
+        except Exception:
+            return None
+
+    def parseN(self, f, d):
+        try:
+            return super().parseN(f, d)
+        except Exception:
+            return None
+
+    def parseF(self, f, d):
+        try:
+            return super().parseF(f, d)
+        except Exception:
+            return None
+
+    def parseL(self, f, d):
+        try:
+            return super().parseL(f, d)
+        except Exception:
+            return None
+
+    def parseT(self, f, d):
+        try:
+            return super().parseT(f, d)
+        except Exception:
+            return None
+
+    def parseI(self, f, d):
+        try:
+            return super().parseI(f, d)
+        except Exception:
+            return None
+
+    def parseB(self, f, d):
+        try:
+            return super().parseB(f, d)
+        except Exception:
+            return None
+
+    def parseM(
+        self, f, d
+    ):  # Memo fields - return empty string to avoid FPT file access
+        return ""
+
+    def parseG(self, f, d):  # General/OLE
+        return ""
+
+    def parseO(self, f, d):  # Object
+        return ""
+
+    def parseP(self, f, d):  # Picture
+        return ""
+
+
+def open_dbf(
+    path: str,
+    encodings=("latin-1", "cp1252", "cp437", "utf-8"),
+    use_safe_parser: bool = True,
+) -> DBF:
+    """Open DBF file with optional safe parser that handles parsing errors gracefully."""
     last_err = None
     for enc in encodings:
         try:
-            return DBF(path, encoding=enc, load=False)
+            if use_safe_parser:
+                return DBF(
+                    path,
+                    encoding=enc,
+                    load=False,
+                    parserclass=SafeFieldParser,
+                    ignore_missing_memofile=True,
+                )
+            else:
+                return DBF(path, encoding=enc, load=False)
         except Exception as e:
             last_err = e
     raise last_err
+
 
 # Optional imports depending on target engine
 try:
@@ -441,6 +521,23 @@ except Exception:
 
 try:
     import mysql.connector  # MySQL option
+    # Pre-import MySQL plugins to ensure they're registered (critical for PyInstaller builds)
+    try:
+        import mysql.connector.plugins.mysql_native_password
+    except ImportError:
+        pass
+    try:
+        import mysql.connector.plugins.caching_sha2_password
+    except ImportError:
+        pass
+    try:
+        import mysql.connector.plugins.sha256_password
+    except ImportError:
+        pass
+    try:
+        import mysql.connector.plugins.mysql_clear_password
+    except ImportError:
+        pass
 except Exception:
     mysql = None
 
@@ -565,7 +662,16 @@ def connect_mssql(server: str, database: str, username: str, password: str, port
 def connect_mysql(host: str, database: str, username: str, password: str, port: int = 3306):
     if mysql is None:
         raise RuntimeError("mysql-connector-python not installed. pip install mysql-connector-python")
-    return mysql.connector.connect(host=host, user=username, password=password, database=database, port=port)
+    # Use pure Python implementation to avoid C extension issues in PyInstaller builds
+    # This ensures plugins work correctly in frozen executables
+    return mysql.connector.connect(
+        host=host,
+        user=username,
+        password=password,
+        database=database,
+        port=port,
+        use_pure=True,  # Force pure Python implementation
+    )
 
 # ---------- Helpers ----------
 
@@ -964,12 +1070,6 @@ def iter_dbf_rows(
                                                     tzinfo=None
                                                 )
 
-                                            # Debug logging for first few records to diagnose parsing issues
-                                            if processed_count <= 10:
-                                                log_to_gui(
-                                                    f"  [Debug] jnh record {processed_count}: date_val={date_val!r}, parsed={parsed_date}, join_val={join_val}, effective_start={effective_start}, match={parsed_date >= effective_start}"
-                                                )
-
                                             # Check if date is newer than effective_start
                                             if parsed_date >= effective_start:
                                                 # Add join value to both string and numeric sets for efficient lookup
@@ -994,11 +1094,6 @@ def iter_dbf_rows(
                                                             if join_val
                                                             else ""
                                                         )
-                                        elif processed_count <= 10:
-                                            # Log first few parse failures for debugging
-                                            log_to_gui(
-                                                f"  [Debug] jnh record {processed_count}: date_val={date_val!r}, parsed_date={parsed_date}, join_val={join_val} - DATE NOT PARSED"
-                                            )
                                     except Exception:
                                         continue  # Skip problematic rows in related table
 
@@ -4884,13 +4979,43 @@ def main():
     ap = argparse.ArgumentParser(description="VFP DBF → RDS Uploader")
     ap.add_argument('--config', help='Path to YAML config (defaults to ksv\\vfp_uploader.yaml if found, else AppData)')
     ap.add_argument('--init', action='store_true', help='Run interactive setup wizard and save config')
-    ap.add_argument('--gui', action='store_true', help='Launch Tkinter GUI')
+    ap.add_argument(
+        "--gui",
+        action="store_true",
+        help="Launch Tkinter GUI (default if no other mode specified)",
+    )
     ap.add_argument('--dpg', action='store_true', help='Launch DearPyGui GUI')
     ap.add_argument('--profile', help='Profile name in config (when using profiles)')
-    ap.add_argument('--auto-sync', action='store_true', help='Run auto-sync (periodic sync based on config interval)')
-    ap.add_argument('--stop-sync', action='store_true', help='Stop running auto-sync')
-    ap.add_argument('--headless', action='store_true', help='Run without GUI using the resolved config file')
+    ap.add_argument(
+        "--headless",
+        action="store_true",
+        help="Run without GUI (for Task Scheduler). Use with --auto-sync for scheduled runs.",
+    )
+    ap.add_argument(
+        "--silent",
+        action="store_true",
+        help="Run silently without console output (use with --headless)",
+    )
+    ap.add_argument(
+        "--auto-sync",
+        action="store_true",
+        help="Run auto-sync (periodic sync based on config interval). Implies --headless.",
+    )
+    ap.add_argument("--stop-sync", action="store_true", help="Stop running auto-sync")
     args = ap.parse_args()
+
+    # Redirect output if silent mode
+    if args.silent and args.headless:
+        import sys
+        import os
+
+        # Redirect stdout and stderr to null device
+        try:
+            devnull = open(os.devnull, "w")
+            sys.stdout = devnull
+            sys.stderr = devnull
+        except Exception:
+            pass  # If we can't redirect, continue anyway
 
     if args.stop_sync:
         stop_auto_sync()
@@ -4901,13 +5026,16 @@ def main():
         run_headless(args.config, profile=args.profile)
         return
 
+    # Auto-sync implies headless mode (for Task Scheduler)
     if args.auto_sync:
         try:
             run_auto_sync(args.config, profile=args.profile)
         except KeyboardInterrupt:
-            print("\nStopped by user.")
+            if not args.silent:
+                print("\nStopped by user.")
         return
 
+    # Explicit GUI modes
     if args.dpg:
         run_gui()
         return
@@ -4916,7 +5044,8 @@ def main():
         run_gui_tk()
         return
 
-    if args.headless or args.config:
+    # Headless mode (explicit)
+    if args.headless:
         cfg_path = args.config or default_config_path()
         if not Path(cfg_path).exists():
             raise SystemExit(f"Config file not found: {cfg_path}")
@@ -4924,7 +5053,7 @@ def main():
         run_headless(cfg_path, profile=args.profile)
         return
 
-    # Default behaviour: show the GUI, even if a config already exists.
+    # Default behavior: Launch GUI (when double-clicked or run without arguments)
     run_gui_tk()
     return
 

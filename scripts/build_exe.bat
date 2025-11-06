@@ -35,24 +35,26 @@ if %ERRORLEVEL% neq 0 (
 )
 
 REM Use spec file for more precise control
-if exist "vfp_dbf_to_rdsv2.spec" (
-    echo Using checked-in spec file...
-    pyinstaller --clean --noconfirm vfp_dbf_to_rdsv2.spec
-    goto :build_done
+if not exist "vfp_dbf_to_rdsv2.spec" (
+    echo ERROR: vfp_dbf_to_rdsv2.spec was not found even after verification.
+    pause
+    exit /b 1
 )
 
-echo ERROR: vfp_dbf_to_rdsv2.spec was not found even after verification.
-pause
-exit /b 1
-
-:build_done
-
-if %ERRORLEVEL% == 0 (
+echo Using checked-in spec file...
+pyinstaller --clean --noconfirm vfp_dbf_to_rdsv2.spec
+if %ERRORLEVEL% EQU 0 (
     echo.
     echo Build complete! Executable is in: %CD%\dist\VFP_DBF_Uploader\VFP_DBF_Uploader.exe
     echo.
     echo IMPORTANT: Users must install ODBC Driver 17 for SQL Server separately.
     echo See README_ODBC.txt for instructions.
+    echo.
+    echo USAGE NOTES:
+    echo   - Double-click to launch GUI (default behavior)
+    echo   - For Task Scheduler: Use --auto-sync --silent
+    echo   - For headless mode: Use --headless --config path/to/config.yaml
+    echo   - See BUILD_INSTRUCTIONS.md for details
 ) else (
     echo.
     echo ERROR: Build failed! Check the error messages above.

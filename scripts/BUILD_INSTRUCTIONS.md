@@ -81,14 +81,65 @@ VFP_DBF_Uploader_Release/
 └── LICENSE.txt                   (If applicable)
 ```
 
+## Executable Usage
+
+### Default Behavior (Double-Click)
+- **Double-clicking the executable launches the GUI** (default behavior)
+- No command-line arguments needed for interactive use
+
+### Command-Line Options
+
+#### GUI Mode (Default)
+```bash
+VFP_DBF_Uploader.exe                    # Launch GUI (default)
+VFP_DBF_Uploader.exe --gui              # Launch GUI (explicit)
+```
+
+#### Headless Mode (for Task Scheduler)
+```bash
+# One-time sync
+VFP_DBF_Uploader.exe --headless --config path/to/config.yaml
+
+# Silent one-time sync (no console output)
+VFP_DBF_Uploader.exe --headless --silent --config path/to/config.yaml
+
+# Auto-sync (periodic, runs continuously)
+VFP_DBF_Uploader.exe --auto-sync
+
+# Silent auto-sync (for Task Scheduler)
+VFP_DBF_Uploader.exe --auto-sync --silent
+
+# With profile
+VFP_DBF_Uploader.exe --headless --profile store6885 --config path/to/config.yaml
+```
+
+### Windows Task Scheduler Setup
+
+1. **Create a new scheduled task** in Task Scheduler
+2. **Set the action** to start a program:
+   - Program: `C:\path\to\VFP_DBF_Uploader.exe`
+   - Arguments: `--auto-sync --silent`
+   - Start in: `C:\path\to\` (directory containing the executable)
+3. **Set the trigger** (e.g., daily at 2 AM, every hour, etc.)
+4. **Set user account** (use account with appropriate permissions)
+5. **Configure conditions**:
+   - Uncheck "Start the task only if the computer is on AC power" (if needed)
+   - Check "Run whether user is logged on or not" (for background execution)
+
+**Recommended Task Scheduler Arguments:**
+- `--auto-sync --silent` - Runs periodic sync silently in background
+- `--headless --silent --config C:\ksv\vfp_uploader.yaml` - One-time sync silently
+
 ## Testing the Executable
 
 1. Test on a clean Windows machine (VM recommended)
 2. Verify:
-   - Application launches
+   - Application launches (double-click should show GUI)
    - Database connections work (MySQL and SQL Server)
    - File operations work
    - GUI displays correctly
+   - Headless mode works with `--headless --config path/to/config.yaml`
+   - Auto-sync works with `--auto-sync`
 
 ## Troubleshooting
 
