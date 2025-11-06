@@ -1040,10 +1040,32 @@ def iter_dbf_rows(
         skipped_count = 0
         max_skipped_warnings = 10  # Only log first 10 warnings to avoid spam
 
+        # Create an iterator from the DBF table
+        try:
+            table_iter = iter(table)
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "invalid date" in error_msg or (
+                "date" in error_msg and ("b'\\x00" in str(e) or "\\x00" in str(e))
+            ):
+                log_to_gui(
+                    f"WARNING: Error creating table iterator (date field issue): {e}. Will attempt to skip problematic records."
+                )
+                # Try to get a safe iterator - if this fails, we can't proceed
+                try:
+                    table_iter = iter(table)
+                except Exception:
+                    log_to_gui(
+                        f"ERROR: Cannot iterate DBF file due to date field errors. Skipping this file."
+                    )
+                    return  # Return empty generator
+            else:
+                raise
+
         while True:
             try:
                 # Try to get next record - this may raise an exception if date fields are invalid
-                rec = next(table)
+                rec = next(table_iter)
             except StopIteration:
                 # End of table reached
                 break
@@ -2386,29 +2408,92 @@ def run_gui_tk():
     from tkinter import ttk, filedialog, messagebox
     import pathlib
 
-    # Check for single instance
-    is_first_instance, lock_handle = check_single_instance()
-    if not is_first_instance:
-        # Try to bring existing window to front
-        if bring_window_to_front():
-            return  # Existing window brought to front, exit this instance
-        else:
-            messagebox.showinfo(
-                "Already Running", "Another instance is already running."
+    # Add error logging to file for debugging when running as exe
+    error_log_path = None
+    try:
+        # Try to create error log in temp directory or next to exe
+        if getattr(sys, "frozen", False):
+            # Running as compiled exe
+            error_log_path = os.path.join(
+                os.path.dirname(sys.executable), "vfp_uploader_error.log"
             )
-            return
+        else:
+            # Running as script
+            error_log_path = os.path.join(
+                os.path.dirname(__file__), "vfp_uploader_error.log"
+            )
+    except Exception:
+        error_log_path = None
 
-    # Resolve or ask for \ksv\ once; remember it next to the script
-    ksv = find_ksv_root()
-    if not ksv:
-        messagebox.showinfo("Select ksv Folder", "Please select your 'ksv' folder once. We'll remember it.")
-        chosen = filedialog.askdirectory(title="Select the 'ksv' folder (e.g., C:\\ksv)")
-        if not chosen or os.path.basename(chosen).lower() != "ksv":
-            messagebox.showerror("ksv folder", "You must select a folder literally named 'ksv'.")
+    def log_error(msg):
+        """Log error to file and console"""
+        print(f"ERROR: {msg}", file=sys.stderr)
+        if error_log_path:
+            try:
+                with open(error_log_path, "a", encoding="utf-8") as f:
+                    f.write(f"{datetime.now().isoformat()}: {msg}\n")
+            except Exception:
+                pass
+
+    try:
+        # Check for single instance
+        is_first_instance, lock_handle = check_single_instance()
+        if not is_first_instance:
+            # Try to bring existing window to front
+            if bring_window_to_front():
+                return  # Existing window brought to front, exit this instance
+            else:
+                try:
+                    messagebox.showinfo(
+                        "Already Running", "Another instance is already running."
+                    )
+                except Exception as e:
+                    log_error(f"Could not show message box: {e}")
+                return
+    except Exception as e:
+        log_error(f"Error in single instance check: {e}")
+        # Continue anyway - might be a pywin32 issue
+        lock_handle = None
+
+    try:
+        # Resolve or ask for \ksv\ once; remember it next to the script
+        ksv = find_ksv_root()
+        if not ksv:
+            try:
+                messagebox.showinfo(
+                    "Select ksv Folder",
+                    "Please select your 'ksv' folder once. We'll remember it.",
+                )
+                chosen = filedialog.askdirectory(
+                    title="Select the 'ksv' folder (e.g., C:\\ksv)"
+                )
+                if not chosen or os.path.basename(chosen).lower() != "ksv":
+                    messagebox.showerror(
+                        "ksv folder", "You must select a folder literally named 'ksv'."
+                    )
+                    return
+                script_dir = (
+                    os.path.dirname(sys.executable)
+                    if getattr(sys, "frozen", False)
+                    else os.path.dirname(__file__)
+                )
+                hint_path = pathlib.Path(script_dir) / "ksv_path.txt"
+                hint_path.write_text(chosen, encoding="utf-8")
+                ksv = chosen
+            except Exception as e:
+                log_error(f"Error selecting ksv folder: {e}")
+                # Try a default
+                ksv = "C:\\ksv"
+                if not os.path.isdir(ksv):
+                    log_error(f"Default ksv folder not found: {ksv}")
+                    return
+    except Exception as e:
+        log_error(f"Error finding ksv root: {e}")
+        # Try a default
+        ksv = "C:\\ksv"
+        if not os.path.isdir(ksv):
+            log_error(f"Default ksv folder not found: {ksv}")
             return
-        hint_path = pathlib.Path(__file__).resolve().parent / "ksv_path.txt"
-        hint_path.write_text(chosen, encoding="utf-8")
-        ksv = chosen
 
     state = {"files": [], "folder": ""}
 
@@ -3319,8 +3404,15 @@ def run_gui_tk():
         ttk.Button(btn_frame, text="Cancel", command=editor.destroy, style='Modern.TButton').pack(side="left", padx=5)
 
     # --- Modern UI Setup ---
-    root = tk.Tk()
-    root.title("VFP DBF → RDS Uploader")
+    try:
+        root = tk.Tk()
+        root.title("VFP DBF → RDS Uploader")
+    except Exception as e:
+        log_error(f"Error creating Tkinter root window: {e}")
+        import traceback
+
+        log_error(traceback.format_exc())
+        return
 
     # Get screen dimensions for responsive design
     screen_width = root.winfo_screenwidth()
@@ -4449,10 +4541,23 @@ def run_gui_tk():
         root.protocol("WM_DELETE_WINDOW", on_close_normal)
 
     try:
+        # Ensure window is visible before starting mainloop
+        root.update()
+        root.deiconify()
+        root.lift()
+        root.focus_force()
         root.mainloop()
+    except Exception as e:
+        log_error(f"Error in mainloop: {e}")
+        import traceback
+
+        log_error(traceback.format_exc())
     finally:
         # Cleanup on exit
-        cleanup_instance_lock(lock_handle)
+        try:
+            cleanup_instance_lock(lock_handle)
+        except Exception:
+            pass
         if tray_icon:
             try:
                 tray_icon.stop()

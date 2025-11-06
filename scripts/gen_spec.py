@@ -9,8 +9,8 @@ try:
     mysql_path = os.path.dirname(mysql.connector.__file__)
     mysql_pkg_path = os.path.dirname(mysql.__file__)
     plugins_path = os.path.join(mysql_path, 'plugins')
-    
-    spec_content = f'''# -*- mode: python ; coding: utf-8 -*-
+
+    spec_content = f"""# -*- mode: python ; coding: utf-8 -*-
 # PyInstaller spec file for vfp_dbf_to_rdsv2.py
 # Auto-generated with correct MySQL plugin paths
 
@@ -79,24 +79,23 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,
+    console=False,  # Set to True to see startup errors, change back to False after debugging
     disable_windowed_traceback=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
     icon=None,
 )
-'''
-    
+"""
+
     with open('vfp_dbf_to_rdsv2.spec', 'w', encoding='utf-8') as f:
         f.write(spec_content)
-    
+
     print(f"Generated vfp_dbf_to_rdsv2.spec with plugins path: {plugins_path}")
-    
+
 except ImportError:
     print("ERROR: mysql.connector not found. Install it with: pip install mysql-connector-python")
     sys.exit(1)
 except Exception as e:
     print(f"ERROR: {e}")
     sys.exit(1)
-
