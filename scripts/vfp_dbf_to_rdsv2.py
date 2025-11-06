@@ -93,12 +93,13 @@ Usage:
   python vfp_dbf_to_rdsv2.py --profile store6885      # Use specific profile
 """
 
+import logging
 import os
 import re
 import sys
-import glob
 import json
 import shutil
+from pathlib import Path
 from urllib import request as urlrequest
 from urllib import parse as urlparse
 import yaml
@@ -107,107 +108,140 @@ import time
 import threading
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import List, Dict, Any, Iterable, Tuple, Optional
+from typing import List, Dict, Any, Iterable, Tuple, Optional, Union
+
+try:
+    from platformdirs import user_config_path
+except ImportError:  # pragma: no cover - optional dependency for legacy environments
+    user_config_path = None  # type: ignore[assignment]
 
 # ---------------- Config persistence helpers ----------------
 APP_NAME = "StoreInsights"
 CONFIG_NAME = "vfp_uploader.yaml"
 SYNC_TRACKING_NAME = "vfp_sync_tracking.yaml"
 
-def debug_config_path(msg: str, path: str):
-    try:
-        print(f"[CFG] {msg}: {path}")
-    except Exception:
-        pass
+LOGGER_NAME = "store_insights.uploader"
+LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
-def find_ksv_root(start: Optional[str] = None) -> Optional[str]:
+
+def configure_logging(level: Optional[int] = None) -> None:
+    """Configure application-wide logging."""
+    if level is None:
+        level_name = os.getenv("STORE_INSIGHTS_LOG_LEVEL", "INFO").upper()
+        resolved_level = logging.getLevelName(level_name)
+        level = resolved_level if isinstance(resolved_level, int) else logging.INFO
+    root_logger = logging.getLogger()
+    if not root_logger.handlers:
+        logging.basicConfig(level=level, format=LOG_FORMAT)
+    logging.getLogger(LOGGER_NAME).setLevel(level)
+
+
+logger = logging.getLogger(LOGGER_NAME)
+
+def debug_config_path(msg: str, path: Union[str, Path]) -> None:
+    logger.debug("%s: %s", msg, path)
+
+def find_ksv_root(start: Optional[Union[str, Path]] = None) -> Optional[str]:
     r"""
-    Try to locate a folder literally named 'ksv' (C:\ksv or ancestor).
+    Try to locate a folder literally named 'ksv' (C:\\ksv or ancestor).
     Priority:
       1) current working dir or its parents
       2) script dir or its parents
       3) hint file 'ksv_path.txt' next to this script
     """
-    import pathlib
-    candidates = []
+    candidates: List[Path] = []
     if start:
-        candidates.append(pathlib.Path(start).resolve())
-    candidates.append(pathlib.Path.cwd())
-    candidates.append(pathlib.Path(__file__).resolve().parent)
+        candidates.append(Path(start).resolve())
+    candidates.append(Path.cwd())
+    candidates.append(Path(__file__).resolve().parent)
 
     for base in candidates:
         p = base
         for _ in range(6):
             if p.name.lower() == "ksv":
                 return str(p)
+            if p.parent == p:
+                break
             p = p.parent
 
-    hint = pathlib.Path(__file__).resolve().parent / "ksv_path.txt"
+    hint = Path(__file__).resolve().parent / "ksv_path.txt"
     if hint.exists():
         txt = hint.read_text(encoding="utf-8").strip()
-        if txt and os.path.isdir(txt) and os.path.basename(txt).lower() == "ksv":
-            return txt
+        candidate = Path(txt) if txt else None
+        if candidate and candidate.is_dir() and candidate.name.lower() == "ksv":
+            return str(candidate.resolve())
     return None
 
-def ksv_config_path(ksv_root: str) -> str:
-    return os.path.join(ksv_root, CONFIG_NAME)
+
+def ksv_config_path(ksv_root: Union[str, Path]) -> str:
+    return str(Path(ksv_root) / CONFIG_NAME)
+
+
+def _app_config_root() -> Path:
+    if user_config_path:
+        return Path(user_config_path(APP_NAME))
+    appdata = os.getenv("APPDATA")
+    if appdata:
+        return Path(appdata) / APP_NAME
+    return Path.home() / ".config" / APP_NAME
+
 
 def default_config_path() -> str:
     # Prefer local \ksv\vfp_uploader.yaml
     ksv = find_ksv_root()
     if ksv:
-        path = ksv_config_path(ksv)
-        return path
-    # Fallback to AppData
-    base = os.getenv("APPDATA") or os.path.expanduser("~/.config")
-    path = os.path.join(base, APP_NAME)
-    os.makedirs(path, exist_ok=True)
-    return os.path.join(path, CONFIG_NAME)
+        return ksv_config_path(ksv)
+    base = _app_config_root()
+    base.mkdir(parents=True, exist_ok=True)
+    return str(base / CONFIG_NAME)
 
-def save_config(cfg: dict, path: Optional[str] = None):
-    path = path or default_config_path()
-    # Ensure directory exists
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, 'w', encoding='utf-8') as f:
+
+def save_config(cfg: dict, path: Optional[Union[str, Path]] = None) -> str:
+    resolved_path = Path(path) if path else Path(default_config_path())
+    resolved_path.parent.mkdir(parents=True, exist_ok=True)
+    with resolved_path.open('w', encoding='utf-8') as f:
         yaml.safe_dump(cfg, f, sort_keys=False)
-    debug_config_path("Saved config", path)
-    return path
+    debug_config_path("Saved config", resolved_path)
+    return str(resolved_path)
 
-def load_config(path: Optional[str] = None) -> dict:
-    path = path or default_config_path()
-    debug_config_path("Loading config", path)
-    with open(path, 'r', encoding='utf-8') as f:
+
+def load_config(path: Optional[Union[str, Path]] = None) -> dict:
+    resolved_path = Path(path) if path else Path(default_config_path())
+    debug_config_path("Loading config", resolved_path)
+    with resolved_path.open('r', encoding='utf-8') as f:
         return yaml.safe_load(f)
+
 
 def default_sync_tracking_path() -> str:
     """Get path to sync tracking file (stores last sync timestamps per table/store)."""
     ksv = find_ksv_root()
     if ksv:
-        return os.path.join(ksv, SYNC_TRACKING_NAME)
-    base = os.getenv("APPDATA") or os.path.expanduser("~/.config")
-    path = os.path.join(base, APP_NAME)
-    os.makedirs(path, exist_ok=True)
-    return os.path.join(path, SYNC_TRACKING_NAME)
+        return str(Path(ksv) / SYNC_TRACKING_NAME)
+    base = _app_config_root()
+    base.mkdir(parents=True, exist_ok=True)
+    return str(base / SYNC_TRACKING_NAME)
 
-def load_sync_tracking(path: Optional[str] = None) -> dict:
+
+def load_sync_tracking(path: Optional[Union[str, Path]] = None) -> dict:
     """Load sync tracking data (last sync timestamps per table)."""
-    path = path or default_sync_tracking_path()
-    if os.path.exists(path):
+    resolved_path = Path(path) if path else Path(default_sync_tracking_path())
+    if resolved_path.exists():
         try:
-            with open(path, 'r', encoding='utf-8') as f:
+            with resolved_path.open('r', encoding='utf-8') as f:
                 data = yaml.safe_load(f)
                 return data if data else {}
         except Exception:
             return {}
     return {}
 
-def save_sync_tracking(tracking: dict, path: Optional[str] = None):
+def save_sync_tracking(tracking: dict, path: Optional[Union[str, Path]] = None) -> str:
     """Save sync tracking data."""
-    path = path or default_sync_tracking_path()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, 'w', encoding='utf-8') as f:
+    resolved_path = Path(path) if path else Path(default_sync_tracking_path())
+    resolved_path.parent.mkdir(parents=True, exist_ok=True)
+    with resolved_path.open('w', encoding='utf-8') as f:
         yaml.safe_dump(tracking, f, sort_keys=False)
-    debug_config_path("Saved sync tracking", path)
+    debug_config_path("Saved sync tracking", resolved_path)
+    return str(resolved_path)
 
 def resolve_profile(cfg: dict, profile: Optional[str]) -> dict:
     """
@@ -286,17 +320,14 @@ def is_allowed_dbf(path: str) -> bool:
 
 def get_sync_directory(source_folder: str) -> str:
     """Get the sync directory path (vfptordssync inside ksv folder)."""
-    # Try to find ksv root from the source folder
     ksv_root = find_ksv_root(source_folder)
     if ksv_root:
-        sync_dir = os.path.join(ksv_root, "vfptordssync")
+        sync_dir = Path(ksv_root) / "vfptordssync"
     else:
-        # If no ksv root found, create sync dir next to source folder
-        sync_dir = os.path.join(os.path.dirname(source_folder), "vfptordssync")
+        sync_dir = Path(source_folder).resolve().parent / "vfptordssync"
 
-    # Ensure directory exists
-    os.makedirs(sync_dir, exist_ok=True)
-    return sync_dir
+    sync_dir.mkdir(parents=True, exist_ok=True)
+    return str(sync_dir)
 
 
 def copy_dbf_and_related_files(source_file: str, sync_dir: str) -> str:
@@ -306,18 +337,17 @@ def copy_dbf_and_related_files(source_file: str, sync_dir: str) -> str:
         Path to the copied DBF file in sync directory.
     """
 
-    source_dir = os.path.dirname(source_file)
-    base_name = os.path.basename(source_file)
-    base_name_no_ext = os.path.splitext(base_name)[0]
+    source_path = Path(source_file)
+    source_dir = source_path.parent
+    base_name = source_path.name
+    base_name_no_ext = source_path.stem
 
-    # Paths for copied files
-    dest_dbf = os.path.join(sync_dir, base_name)
-    dest_cdx = os.path.join(sync_dir, f"{base_name_no_ext}.cdx")
-    dest_fpt = os.path.join(sync_dir, f"{base_name_no_ext}.fpt")
+    dest_dbf = Path(sync_dir) / base_name
+    dest_cdx = Path(sync_dir) / f"{base_name_no_ext}.cdx"
+    dest_fpt = Path(sync_dir) / f"{base_name_no_ext}.fpt"
 
-    # Source paths
-    source_cdx = os.path.join(source_dir, f"{base_name_no_ext}.cdx")
-    source_fpt = os.path.join(source_dir, f"{base_name_no_ext}.fpt")
+    source_cdx = source_dir / f"{base_name_no_ext}.cdx"
+    source_fpt = source_dir / f"{base_name_no_ext}.fpt"
 
     # Copy DBF file
     try:
@@ -327,20 +357,20 @@ def copy_dbf_and_related_files(source_file: str, sync_dir: str) -> str:
         return source_file  # Fallback to original
 
     # Copy CDX file if it exists
-    if os.path.exists(source_cdx):
+    if source_cdx.exists():
         try:
             shutil.copy2(source_cdx, dest_cdx)
         except Exception as e:
             log_to_gui(f"WARNING: Could not copy {base_name_no_ext}.cdx: {e}")
 
     # Copy FPT file if it exists
-    if os.path.exists(source_fpt):
+    if source_fpt.exists():
         try:
             shutil.copy2(source_fpt, dest_fpt)
         except Exception as e:
             log_to_gui(f"WARNING: Could not copy {base_name_no_ext}.fpt: {e}")
 
-    return dest_dbf
+    return str(dest_dbf)
 
 
 def sync_files_to_directory(
@@ -354,10 +384,11 @@ def sync_files_to_directory(
     sync_dir = get_sync_directory(source_folder)
 
     # Get list of source DBF files
+    source_root = Path(source_folder)
     if include:
-        source_files = [os.path.join(source_folder, f) for f in include]
+        source_files = [str(source_root / f) for f in include]
     else:
-        source_files = glob.glob(os.path.join(source_folder, "*.dbf"))
+        source_files = [str(p) for p in source_root.glob("*.dbf")]
 
     # Filter to allowed DBFs
     allowed_source_files = [p for p in source_files if is_allowed_dbf(p)]
@@ -378,11 +409,12 @@ def list_allowed_dbfs(folder: str, include: Optional[List[str]] = None) -> List[
     Note: This function returns paths to original files.
     Use sync_files_to_directory() to copy files to sync directory first.
     """
+    folder_path = Path(folder)
     if include:
-        files = [os.path.join(folder, f) for f in include]
+        files = [folder_path / f for f in include]
     else:
-        files = glob.glob(os.path.join(folder, "*.dbf"))
-    return sorted([p for p in files if is_allowed_dbf(p)])
+        files = folder_path.glob("*.dbf")
+    return sorted([str(p) for p in files if is_allowed_dbf(str(p))])
 
 
 from dbfread import DBF
@@ -1584,13 +1616,12 @@ _gui_root = None
 def log_to_gui(msg: str):
     """Route log message to GUI if available, otherwise use print."""
     global _gui_log_func
+    logger.info(msg)
     if _gui_log_func:
         try:
             _gui_log_func(msg)
         except Exception:
-            print(msg)
-    else:
-        print(msg)
+            logger.debug("GUI log function failed; falling back to logger only.")
 
 
 def update_gui_progress(percent: float, status: str):
@@ -1620,6 +1651,8 @@ def run_headless(cfg_path: Optional[str] = None, profile: Optional[str] = None, 
     - Available fields are shown in the warning message for debugging
     - The date_field should be a timestamp field (e.g., 'tstamp', 'date', 'updated', 'created')
     """
+    configure_logging()
+
     raw_cfg = load_config(cfg_path) if cfg_path else load_config()
     cfg = resolve_profile(raw_cfg, profile)
 
@@ -2126,10 +2159,12 @@ def cli_init(path: Optional[str] = None):
 # ---------- DearPyGui GUI (kept, optional) ----------
 
 def run_gui():
+    configure_logging()
+
     try:
         import dearpygui.dearpygui as dpg
     except Exception:
-        print("DearPyGui not available. Install with: pip install dearpygui")
+        logger.error("DearPyGui not available. Install with: pip install dearpygui")
         sys.exit(1)
 
     dpg.create_context()
@@ -2406,7 +2441,8 @@ def bring_window_to_front():
 def run_gui_tk():
     import tkinter as tk
     from tkinter import ttk, filedialog, messagebox
-    import pathlib
+
+    configure_logging()
 
     # Add error logging to file for debugging when running as exe
     error_log_path = None
@@ -2489,7 +2525,7 @@ def run_gui_tk():
                     if getattr(sys, "frozen", False)
                     else os.path.dirname(__file__)
                 )
-                hint_path = pathlib.Path(script_dir) / "ksv_path.txt"
+                hint_path = Path(script_dir) / "ksv_path.txt"
                 hint_path.write_text(chosen, encoding="utf-8")
                 ksv = chosen
             except Exception as e:
@@ -4622,6 +4658,8 @@ def run_auto_sync(cfg_path: Optional[str] = None, profile: Optional[str] = None)
     - Updates sync timestamp after each successful sync
     - Runs continuously on configured interval
     """
+    configure_logging()
+
     raw_cfg = load_config(cfg_path) if cfg_path else load_config()
     cfg = resolve_profile(raw_cfg, profile)
 
@@ -4727,6 +4765,8 @@ def stop_auto_sync():
 
 def main():
     import argparse
+    configure_logging()
+
     ap = argparse.ArgumentParser(description="VFP DBF → RDS Uploader")
     ap.add_argument('--config', help='Path to YAML config (defaults to ksv\\vfp_uploader.yaml if found, else AppData)')
     ap.add_argument('--init', action='store_true', help='Run interactive setup wizard and save config')
@@ -4735,6 +4775,7 @@ def main():
     ap.add_argument('--profile', help='Profile name in config (when using profiles)')
     ap.add_argument('--auto-sync', action='store_true', help='Run auto-sync (periodic sync based on config interval)')
     ap.add_argument('--stop-sync', action='store_true', help='Stop running auto-sync')
+    ap.add_argument('--headless', action='store_true', help='Run without GUI using the resolved config file')
     args = ap.parse_args()
 
     if args.stop_sync:
@@ -4761,14 +4802,15 @@ def main():
         run_gui_tk()
         return
 
-    cfg_path = args.config if args.config else (default_config_path() if os.path.exists(default_config_path()) else None)
-    debug_config_path("Resolved config", cfg_path or "<none>")
-
-    if cfg_path:
+    if args.headless or args.config:
+        cfg_path = args.config or default_config_path()
+        if not Path(cfg_path).exists():
+            raise SystemExit(f"Config file not found: {cfg_path}")
+        debug_config_path("Resolved config", cfg_path)
         run_headless(cfg_path, profile=args.profile)
         return
 
-    # No config yet → show Tk GUI for first-run simplicity
+    # Default behaviour: show the GUI, even if a config already exists.
     run_gui_tk()
     return
 
