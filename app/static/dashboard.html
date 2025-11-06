@@ -201,6 +201,10 @@
     border: 1px solid rgba(255, 255, 255, 0.4);
   }
 
+  .module-nav select {
+    display: none;
+  }
+
   .module-nav button {
     border: none;
     border-radius: 0.85rem;
@@ -225,6 +229,57 @@
     background: var(--primary);
     color: #fff;
     box-shadow: 0 12px 30px rgba(14, 165, 233, 0.25);
+  }
+
+  @media (max-width: 768px) {
+    .module-nav {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .module-nav::-webkit-scrollbar {
+      display: none;
+    }
+    .module-nav button {
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .module-nav {
+      display: block;
+      padding: 0;
+      background: transparent;
+      border: none;
+      box-shadow: none;
+    }
+    .module-nav button {
+      display: none;
+    }
+    .module-nav select {
+      display: block;
+      width: 100%;
+      padding: 0.85rem 1rem;
+      border-radius: 1.1rem;
+      border: 1px solid var(--panel-border);
+      background: rgba(255, 255, 255, 0.75);
+      backdrop-filter: blur(14px);
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text);
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%230f172a' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 1rem center;
+      padding-right: 2.5rem;
+    }
+    .module-nav select:focus {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
   }
 
   .panel {
@@ -940,9 +995,6 @@
       width: 100%;
     }
 
-    .module-nav {
-      overflow-x: auto;
-    }
 
     .chart-area {
       height: 260px;
@@ -2734,48 +2786,96 @@ const HistoryModule = ({ history }) => {
   );
 };
 
-const TendersModule = ({ data, dateRange, onDateRangeChange }) => {
+const TendersModule = ({ data, gatewayData, dateRange, onDateRangeChange }) => {
   if (!data) {
     return <div className="empty-state">Loading payment methods data...</div>;
   }
 
   const tenders = data.tenders || [];
   const dailyTrends = data.daily_trends || [];
+  const creditCards = gatewayData?.credit_cards || [];
+  const gatewaySummary = gatewayData?.summary || {};
 
   return (
-    <div className="panel">
-      <div className="panel-header">
-        <h2 className="panel-title">Payment Methods</h2>
-      </div>
-      {tenders.length ? (
-        <div className="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th>Payment Type</th>
-                <th>Sale Amount</th>
-                <th>Sale Count</th>
-                <th>Reversal Amount</th>
-                <th>Reversal Count</th>
-                <th>Net Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tenders.map((tender, idx) => (
-                <tr key={idx}>
-                  <td>{tender.payment_type}</td>
-                  <td>{formatCurrency(tender.sale_amount)}</td>
-                  <td>{tender.sale_count}</td>
-                  <td>{formatCurrency(tender.reversal_amount)}</td>
-                  <td>{tender.reversal_count}</td>
-                  <td><strong>{formatCurrency(tender.net_amount)}</strong></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <div>
+      <div className="panel">
+        <div className="panel-header">
+          <h2 className="panel-title">Payment Methods</h2>
         </div>
-      ) : (
-        <div className="empty-state">No payment method data available.</div>
+        {tenders.length ? (
+          <div className="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Payment Type</th>
+                  <th>Sale Amount</th>
+                  <th>Sale Count</th>
+                  <th>Reversal Amount</th>
+                  <th>Reversal Count</th>
+                  <th>Net Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tenders.map((tender, idx) => (
+                  <tr key={idx}>
+                    <td>{tender.payment_type}</td>
+                    <td>{formatCurrency(tender.sale_amount)}</td>
+                    <td>{tender.sale_count}</td>
+                    <td>{formatCurrency(tender.reversal_amount)}</td>
+                    <td>{tender.reversal_count}</td>
+                    <td><strong>{formatCurrency(tender.net_amount)}</strong></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="empty-state">No payment method data available.</div>
+        )}
+      </div>
+
+      {creditCards.length > 0 && (
+        <div className="panel" style={{ marginTop: '1.5rem' }}>
+          <div className="panel-header">
+            <h2 className="panel-title">Credit Card & Ecommerce Breakdown</h2>
+          </div>
+          <div className="summary-grid">
+            <div className="summary-card">
+              <h3>Total Credit Card Sales</h3>
+              <strong>{formatCurrency(gatewaySummary.total_credit_card_sales || 0)}</strong>
+            </div>
+            <div className="summary-card">
+              <h3>Ecommerce Sales</h3>
+              <strong>{formatCurrency(gatewaySummary.total_ecommerce_sales || 0)}</strong>
+            </div>
+            <div className="summary-card">
+              <h3>Combined Total</h3>
+              <strong>{formatCurrency(gatewaySummary.total_combined || 0)}</strong>
+            </div>
+          </div>
+          <div className="table-wrapper" style={{ marginTop: '1.5rem' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Tender Type</th>
+                  <th>In-Store Sales</th>
+                  <th>Ecommerce Sales</th>
+                  <th>Total Sales</th>
+                </tr>
+              </thead>
+              <tbody>
+                {creditCards.map((cc, idx) => (
+                  <tr key={idx}>
+                    <td>{cc.tender_type}</td>
+                    <td>{formatCurrency(cc.in_store_sales)}</td>
+                    <td>{formatCurrency(cc.ecommerce_sales)}</td>
+                    <td><strong>{formatCurrency(cc.total_sales)}</strong></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -2998,7 +3098,6 @@ const ModuleNav = ({ active, onChange }) => {
     { id: 'inventory', label: 'Inventory' },
     { id: 'history', label: 'Sales History' },
     { id: 'tenders', label: 'Payment Methods' },
-    { id: 'gateway', label: 'Credit Cards' },
     { id: 'operations', label: 'Operations' },
   ];
 
@@ -3014,6 +3113,17 @@ const ModuleNav = ({ active, onChange }) => {
           {module.label}
         </button>
       ))}
+      <select
+        value={active}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label="Select module"
+      >
+        {modules.map((module) => (
+          <option key={module.id} value={module.id}>
+            {module.label}
+          </option>
+        ))}
+      </select>
     </nav>
   );
 };
@@ -3155,9 +3265,7 @@ const ModuleNav = ({ active, onChange }) => {
 
         {activeModule === 'history' ? <HistoryModule history={history} /> : null}
 
-        {activeModule === 'tenders' ? <TendersModule data={tendersData} dateRange={dateRange} onDateRangeChange={onDateRangeChange} /> : null}
-
-        {activeModule === 'gateway' ? <GatewayModule data={gatewayData} dateRange={dateRange} onDateRangeChange={onDateRangeChange} /> : null}
+        {activeModule === 'tenders' ? <TendersModule data={tendersData} gatewayData={gatewayData} dateRange={dateRange} onDateRangeChange={onDateRangeChange} /> : null}
 
         {activeModule === 'operations' ? <OperationsModule data={operationsData} dateRange={dateRange} onDateRangeChange={onDateRangeChange} /> : null}
       </div>
@@ -3563,11 +3671,13 @@ const ModuleNav = ({ active, onChange }) => {
           try {
             let payload = null;
             if (module === 'tenders') {
-              payload = await fetchTenders(authToken, query);
-              setTendersData(payload);
-            } else if (module === 'gateway') {
-              payload = await fetchGateway(authToken, query);
-              setGatewayData(payload);
+              // Load both tenders and gateway data for payment methods tab
+              const [tendersPayload, gatewayPayload] = await Promise.all([
+                fetchTenders(authToken, query),
+                fetchGateway(authToken, query).catch(() => null),
+              ]);
+              setTendersData(tendersPayload);
+              setGatewayData(gatewayPayload);
             } else if (module === 'operations') {
               payload = await fetchOperations(authToken, query);
               setOperationsData(payload);
@@ -3594,7 +3704,7 @@ const ModuleNav = ({ active, onChange }) => {
         useEffect(() => {
           if (!token || userRole === 'admin') return;
           if (stores.length > 1 && !selectedStore) return;
-          if (['tenders', 'gateway', 'operations'].includes(activeModule)) {
+          if (['tenders', 'operations'].includes(activeModule)) {
             loadModuleData(token, storeQueryValue, activeModule);
           }
         }, [token, storeQueryValue, stores, selectedStore, userRole, activeModule]);
