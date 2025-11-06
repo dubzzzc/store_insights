@@ -55,6 +55,11 @@ delta_sync:
       join_field_local: "sale"  # Field in current table to match on
       join_field_related: "sale" # Field in related table to match on
       date_field_related: "tstamp" # Date field in related table to check
+    sll:                        # Example: sll table has no tstamp, so use slh.tstamp
+      related_table: "slh"       # Related table name (without .dbf extension)
+      join_field_local: "listnum"  # Field in current table to match on
+      join_field_related: "listnum" # Field in related table to match on
+      date_field_related: "tstamp" # Date field in related table to check
   auto_sync_interval_seconds: 3600  # Auto-sync every hour (0 = disabled)
 
 # Multi-profile format:
@@ -718,7 +723,7 @@ def iter_dbf_rows(
 
     field_names = [f.name for f in table.fields]
 
-    # Handle related table filtering (e.g., jnl using jnh.tstamp)
+    # Handle related table filtering (e.g., jnl using jnh.tstamp, sll using slh.tstamp)
     valid_join_values = None
     join_field_local_idx = None
     if related_table_config and (since_date or date_range_start):
@@ -1011,23 +1016,13 @@ def iter_dbf_rows(
                                 log_msg = f"Related table '{related_table_name}': Found {total_valid} valid {join_field_related} values with {date_field_related} >= {effective_start}"
                                 log_to_gui(log_msg)
 
-                                # If no valid values found, provide diagnostic info
+                                # If no valid values found, this is expected when there are no new sales
                                 if total_valid == 0:
                                     log_to_gui(
-                                        f"  WARNING: No records found with {date_field_related} >= {effective_start}"
-                                    )
-                                    log_to_gui(f"  This could mean:")
-                                    log_to_gui(
-                                        f"    1. All records in '{related_table_name}' are older than the last sync time"
+                                        f"  INFO: No new records found in '{related_table_name}' with {date_field_related} >= {effective_start}"
                                     )
                                     log_to_gui(
-                                        f"    2. Date field '{date_field_related}' format is not being parsed correctly"
-                                    )
-                                    log_to_gui(
-                                        f"    3. Date field contains null/invalid values"
-                                    )
-                                    log_to_gui(
-                                        f"  Check the debug logs above for sample date values and parsing results."
+                                        f"  This is expected when there are no new sales since the last sync. Will insert 0 rows for related table."
                                     )
                     except Exception as e:
                         error_msg = f"WARNING: Could not load related table '{related_table_name}': {e}. Falling back to full sync."
@@ -1842,7 +1837,7 @@ def run_headless(cfg_path: Optional[str] = None, profile: Optional[str] = None, 
         if not table_date_field:
             table_date_field = date_fields_per_table.get(base, date_field)
 
-        # Check for related table date field config (e.g., jnl using jnh.tstamp)
+        # Check for related table date field config (e.g., jnl using jnh.tstamp, sll using slh.tstamp)
         related_table_config = related_table_date_fields.get(
             base.lower()
         ) or related_table_date_fields.get(base)
@@ -3451,6 +3446,119 @@ def run_gui_tk():
         ttk.Button(btn_frame, text="Save", command=save_yaml, style='Accent.TButton').pack(side="left", padx=5)
         ttk.Button(btn_frame, text="Cancel", command=editor.destroy, style='Modern.TButton').pack(side="left", padx=5)
 
+    def edit_sync_tracking_yaml():
+        """Open sync tracking YAML file in an editor window."""
+        tracking_path = default_sync_tracking_path()
+
+        if not os.path.exists(tracking_path):
+            # Create empty tracking file if it doesn't exist
+            try:
+                save_sync_tracking({})
+            except Exception as e:
+                messagebox.showerror(
+                    "Error", f"Could not create sync tracking file: {e}"
+                )
+                return
+
+        # Create editor window (responsive to screen size)
+        editor = tk.Toplevel(root)
+        editor.title("Edit Sync Tracking (Last Sync Times)")
+
+        # Get screen dimensions for editor
+        editor_screen_width = editor.winfo_screenwidth()
+        editor_screen_height = editor.winfo_screenheight()
+
+        # Responsive editor size
+        editor_width = max(700, min(int(editor_screen_width * 0.6), 1200))
+        editor_height = max(500, min(int(editor_screen_height * 0.7), 900))
+        editor_x = (editor_screen_width - editor_width) // 2
+        editor_y = (editor_screen_height - editor_height) // 2
+
+        editor.geometry(f"{editor_width}x{editor_height}+{editor_x}+{editor_y}")
+        editor.minsize(600, 400)
+        editor.configure(bg=bg_color)
+
+        tk.Label(
+            editor,
+            text=f"Editing: {tracking_path}",
+            font=label_font,
+            bg=bg_color,
+            fg=text_color,
+        ).pack(pady=5)
+
+        # Add help text
+        help_text = tk.Label(
+            editor,
+            text="Edit last sync timestamps (ISO format: YYYY-MM-DDTHH:MM:SS). Set to a past date to re-sync missed data.",
+            font=("Segoe UI", max(7, base_font_size - 2)),
+            bg=bg_color,
+            fg="#666",
+            wraplength=editor_width - 40,
+            justify="left",
+        )
+        help_text.pack(pady=(0, 5))
+
+        text_frame = tk.Frame(editor, bg=entry_bg, relief="flat", bd=1)
+        text_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        yaml_text = tk.Text(
+            text_frame, wrap="word", font=("Consolas", 9), bg="#fafafa", fg=text_color
+        )
+        yaml_text.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+
+        scroll = ttk.Scrollbar(text_frame, orient="vertical", command=yaml_text.yview)
+        yaml_text.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")
+
+        # Load current sync tracking
+        try:
+            with open(tracking_path, "r", encoding="utf-8") as f:
+                content = f.read()
+                if not content.strip():
+                    # Empty file - create default structure
+                    content = "# Sync tracking - Last sync timestamps per table\n# Format: YYYY-MM-DDTHH:MM:SS (ISO format)\n# Set to a past date to re-sync missed data\n"
+                yaml_text.insert("1.0", content)
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not load sync tracking: {e}")
+            editor.destroy()
+            return
+
+        def save_yaml():
+            try:
+                content = yaml_text.get("1.0", "end-1c")
+                # Validate YAML
+                data = yaml.safe_load(content)
+                if data is None:
+                    data = {}
+                # Validate date formats (basic check - should be ISO format strings)
+                for key, value in data.items():
+                    if isinstance(value, str) and key != "__last_auto_sync__":
+                        try:
+                            # Try to parse as ISO datetime
+                            datetime.fromisoformat(value)
+                        except ValueError:
+                            # Not a valid ISO datetime - warn but allow (might be a comment or other data)
+                            pass
+                # Save
+                with open(tracking_path, "w", encoding="utf-8") as f:
+                    f.write(content)
+                messagebox.showinfo("Success", "Sync tracking saved successfully!")
+                log("Sync tracking YAML saved. Changes will take effect on next sync.")
+                editor.destroy()
+            except yaml.YAMLError as e:
+                messagebox.showerror("YAML Error", f"Invalid YAML:\n{e}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Could not save sync tracking: {e}")
+
+        btn_frame = tk.Frame(editor, bg=bg_color)
+        btn_frame.pack(pady=10)
+        ttk.Button(
+            btn_frame, text="Save", command=save_yaml, style="Accent.TButton"
+        ).pack(side="left", padx=5)
+        ttk.Button(
+            btn_frame, text="Cancel", command=editor.destroy, style="Modern.TButton"
+        ).pack(side="left", padx=5)
+
     # --- Modern UI Setup ---
     try:
         root = tk.Tk()
@@ -4367,6 +4475,12 @@ def run_gui_tk():
     ttk.Button(btn_frame, text="Load Config", command=load_cfg, style='Modern.TButton').pack(side="left", padx=2, fill="x", expand=True)
     ttk.Button(btn_frame, text="Save Config", command=save_cfg, style='Modern.TButton').pack(side="left", padx=2, fill="x", expand=True)
     ttk.Button(btn_frame, text="Edit YAML", command=edit_config_yaml, style='Modern.TButton').pack(side="left", padx=2, fill="x", expand=True)
+    ttk.Button(
+        btn_frame,
+        text="Edit Sync Times",
+        command=edit_sync_tracking_yaml,
+        style="Modern.TButton",
+    ).pack(side="left", padx=2, fill="x", expand=True)
 
     action_frame = tk.Frame(right_frame, bg=entry_bg)
     action_frame.grid(row=row+1, column=0, columnspan=2, sticky="we", pady=(btn_pad, 0))
