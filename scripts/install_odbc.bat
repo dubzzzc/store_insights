@@ -1,9 +1,22 @@
 @echo off
 REM Check and install ODBC Driver 17 for SQL Server
+
+REM Check if running as administrator, if not, re-launch with admin privileges
+net session >nul 2>&1
+if %ERRORLEVEL% neq 0 (
+    echo Requesting administrator privileges...
+    echo.
+    REM Re-launch this script with admin privileges
+    powershell -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+    exit /b
+)
+
 echo Checking for ODBC Driver 17 for SQL Server...
+echo.
 
 REM Check if driver is already installed
-powershell -Command "Get-OdbcDriver | Where-Object {$_.Name -like '*SQL Server*17*'}" >nul 2>&1
+REM Check specifically for "ODBC Driver 17 for SQL Server" (exact match)
+powershell -Command "$drivers = Get-OdbcDriver; $found = $drivers | Where-Object {$_.Name -eq 'ODBC Driver 17 for SQL Server'}; if ($found) { exit 0 } else { exit 1 }" >nul 2>&1
 if %ERRORLEVEL% == 0 (
     echo ODBC Driver 17 for SQL Server is already installed.
     pause
