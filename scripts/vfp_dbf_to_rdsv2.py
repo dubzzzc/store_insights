@@ -2435,25 +2435,37 @@ def run_gui_tk():
             except Exception:
                 pass
 
+    # Check for single instance BEFORE creating any GUI elements
     try:
-        # Check for single instance
         is_first_instance, lock_handle = check_single_instance()
         if not is_first_instance:
-            # Try to bring existing window to front
+            # Another instance is running - try to bring it to front
+            log_error(
+                "Another instance is already running. Attempting to bring it to front..."
+            )
             if bring_window_to_front():
+                log_error("Existing window brought to front. Exiting this instance.")
                 return  # Existing window brought to front, exit this instance
             else:
+                # Couldn't bring to front - show message if possible, otherwise just exit
                 try:
+                    # Create a minimal Tk root just for the message box
+                    temp_root = tk.Tk()
+                    temp_root.withdraw()  # Hide the root window
                     messagebox.showinfo(
-                        "Already Running", "Another instance is already running."
+                        "Already Running",
+                        "Another instance is already running.\nCheck the system tray or taskbar.",
                     )
+                    temp_root.destroy()
                 except Exception as e:
                     log_error(f"Could not show message box: {e}")
+                log_error("Exiting duplicate instance.")
                 return
     except Exception as e:
         log_error(f"Error in single instance check: {e}")
-        # Continue anyway - might be a pywin32 issue
+        # For now, continue - might be a pywin32 issue, but log it
         lock_handle = None
+        # Don't exit - allow it to continue but log the issue
 
     try:
         # Resolve or ask for \ksv\ once; remember it next to the script
@@ -4500,7 +4512,7 @@ def run_gui_tk():
         root.quit()
         return None
 
-    # Setup system tray if available
+    # Setup system tray if available (but don't hide window immediately)
     try:
         tray_icon = setup_system_tray()
         if tray_icon:
@@ -4518,21 +4530,43 @@ def run_gui_tk():
             root.protocol("WM_DELETE_WINDOW", on_close)
 
             # Bind minimize event to hide to system tray
+            # BUT: Only hide if user explicitly minimizes (not on startup)
             def on_minimize_event(event=None):
                 """Handle minimize button - hide to system tray."""
+                # Only hide if window is actually minimized by user action
+                # Don't hide on startup
                 if tray_icon and root.state() == "iconic":
-                    root.withdraw()
+                    # Small delay to ensure it's a real minimize action
+                    root.after(
+                        100,
+                        lambda: root.withdraw() if root.state() == "iconic" else None,
+                    )
                     log("Window minimized to system tray. Click tray icon to restore.")
 
-            # Monitor for minimize events
+            # Monitor for minimize events - but only AFTER window is shown for a few seconds
+            # This prevents immediately hiding the window on startup
             def check_minimize():
                 """Periodically check if window was minimized."""
+                # Only check if window has been shown for at least 3 seconds
+                # This prevents immediately hiding the window on startup
+                if not hasattr(check_minimize, "start_time"):
+                    check_minimize.start_time = time.time()
+
+                elapsed = time.time() - check_minimize.start_time
+                if elapsed < 3.0:
+                    # Window just started - don't hide it yet, wait a bit longer
+                    root.after(1000, check_minimize)
+                    return
+
+                # After 3 seconds, it's safe to check for minimize
                 if tray_icon and root.state() == "iconic" and root.winfo_viewable():
                     on_minimize_event()
-                root.after(500, check_minimize)
+                root.after(1000, check_minimize)
 
-            root.after(500, check_minimize)
-    except Exception:
+            # Delay the minimize check significantly - give window plenty of time to show first
+            root.after(3000, check_minimize)  # Start checking after 3 seconds
+    except Exception as e:
+        log_error(f"System tray setup error: {e}")
         # System tray not available, just handle normal close
         def on_close_normal(event=None):
             cleanup_instance_lock(lock_handle)
@@ -4541,11 +4575,20 @@ def run_gui_tk():
         root.protocol("WM_DELETE_WINDOW", on_close_normal)
 
     try:
-        # Ensure window is visible before starting mainloop
+        # Force window to be visible and on top before starting mainloop
+        root.update_idletasks()  # Process all pending events
+        root.update()  # Update display
+        root.deiconify()  # Ensure window is not minimized
+        root.lift()  # Bring to front
+        root.attributes("-topmost", True)  # Force to top
         root.update()
-        root.deiconify()
-        root.lift()
-        root.focus_force()
+        root.attributes("-topmost", False)  # Remove topmost after showing
+        root.focus_force()  # Force focus
+
+        # Ensure window is actually visible
+        if not root.winfo_viewable():
+            root.deiconify()
+
         root.mainloop()
     except Exception as e:
         log_error(f"Error in mainloop: {e}")
