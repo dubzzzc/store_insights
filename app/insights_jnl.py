@@ -9,21 +9,38 @@ router = APIRouter()
 
 # Engine cache to reuse engines per database connection string
 _engine_cache: Dict[str, Any] = {}
+_MAX_CACHED_ENGINES = 20  # Limit total number of cached engines
 
 def _get_engine(db_user: str, db_pass: str, db_name: str):
     """
     Get or create a database engine with proper connection pooling.
     Reuses engines for the same connection string to avoid connection exhaustion.
+    Uses very conservative pool settings to prevent connection exhaustion.
+    Limits total number of cached engines to prevent connection exhaustion.
     """
     connection_string = f"mysql+pymysql://{db_user}:{db_pass}@spirits-db.cbuumpmfxesr.us-east-1.rds.amazonaws.com/{db_name}"
     
     if connection_string not in _engine_cache:
+        # If we've hit the limit, dispose of the oldest engine (FIFO)
+        if len(_engine_cache) >= _MAX_CACHED_ENGINES:
+            # Remove the first (oldest) entry
+            oldest_key = next(iter(_engine_cache))
+            oldest_engine = _engine_cache.pop(oldest_key)
+            try:
+                oldest_engine.dispose()
+            except Exception:
+                pass  # Ignore errors during disposal
+        
         _engine_cache[connection_string] = create_engine(
             connection_string,
-            pool_size=5,
-            max_overflow=10,
-            pool_recycle=3600,
-            pool_pre_ping=True,
+            pool_size=2,  # Very small pool - only 2 connections per engine
+            max_overflow=2,  # Maximum 2 additional connections beyond pool_size
+            pool_recycle=1800,  # Recycle connections after 30 minutes
+            pool_pre_ping=True,  # Verify connections before using them
+            pool_timeout=30,  # Timeout after 30 seconds waiting for connection
+            connect_args={
+                "connect_timeout": 10,  # Connection timeout in seconds
+            },
             echo=False
         )
     
