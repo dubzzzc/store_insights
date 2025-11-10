@@ -355,9 +355,18 @@ def _detect_sales_source(conn, db_name: str) -> Optional[Dict[str, str]]:
 
 @router.get("/sales")
 def get_sales_insights(
-    store: Optional[str] = Query(default=None, description="Store identifier (store_id or store_db)"),
+    store: Optional[str] = Query(
+        default=None, description="Store identifier (store_id or store_db)"
+    ),
     start: Optional[str] = Query(default=None, description="Start date (YYYY-MM-DD)"),
     end: Optional[str] = Query(default=None, description="End date (YYYY-MM-DD)"),
+    # New: independent filters for purchase orders tab
+    po_start: Optional[str] = Query(
+        default=None, description="Purchase orders start date (YYYY-MM-DD)"
+    ),
+    po_end: Optional[str] = Query(
+        default=None, description="Purchase orders end date (YYYY-MM-DD)"
+    ),
     user: dict = Depends(get_auth_user),
 ):
     try:
@@ -636,7 +645,7 @@ def get_sales_insights(
                     for r in rows
                 ]
 
-            # Purchase orders: today's POs grouped by vendor, with expandable order details from pod
+            # Purchase orders: POs grouped by vendor (independent date filter)
             # poh.vendor matches vnd.vendor, use vnd.lastname as vendor name
             purchase_orders: List[Dict[str, Any]] = []
             if _table_exists(conn, db_name, "poh"):
@@ -648,23 +657,43 @@ def get_sales_insights(
                 poh_ord_col = _pick_column(poh_cols, ["orddate", "order_date"]) or None
                 poh_id_col = _pick_column(poh_cols, ["id", "po_id", "poh_id", "invno"]) or None
 
-                # Use today's date from the selected date range (or default to today)
-                today_str = end if end else datetime.now().strftime('%Y-%m-%d')
-                freshness.track(today_str)
+                # Independent date filter for POs; falls back to global end/today when not provided
+                po_start_eff = po_start
+                po_end_eff = po_end or end or datetime.now().strftime("%Y-%m-%d")
+                if po_start_eff is None and start:
+                    po_start_eff = start
 
-                # Group by vendor for today's POs
+                # Group by vendor using provided PO date range
                 where_parts = [f"poh.`{poh_status_col}` IN (4, 6, 8)"]
                 params: Dict[str, Any] = {}
 
-                # Date filters: status 4,6 use rcvdate; status 8 uses orddate - filter to today only
+                # Date filters: status 4,6 use rcvdate; status 8 uses orddate
                 date_filters = []
-                if poh_rcv_col:
-                    date_filters.append(f"(poh.`{poh_status_col}` IN (4, 6) AND DATE(poh.`{poh_rcv_col}`) = :today)")
-                if poh_ord_col:
-                    date_filters.append(f"(poh.`{poh_status_col}` = 8 AND DATE(poh.`{poh_ord_col}`) = :today)")
+                if poh_rcv_col and (po_start_eff or po_end_eff):
+                    if po_start_eff:
+                        date_filters.append(
+                            f"(poh.`{poh_status_col}` IN (4, 6) AND DATE(poh.`{poh_rcv_col}`) >= :po_start)"
+                        )
+                        params["po_start"] = po_start_eff
+                    if po_end_eff:
+                        date_filters.append(
+                            f"(poh.`{poh_status_col}` IN (4, 6) AND DATE(poh.`{poh_rcv_col}`) <= :po_end)"
+                        )
+                        params["po_end"] = po_end_eff
+                if poh_ord_col and (po_start_eff or po_end_eff):
+                    if po_start_eff:
+                        date_filters.append(
+                            f"(poh.`{poh_status_col}` = 8 AND DATE(poh.`{poh_ord_col}`) >= :po2_start)"
+                        )
+                        params["po2_start"] = po_start_eff
+                    if po_end_eff:
+                        date_filters.append(
+                            f"(poh.`{poh_status_col}` = 8 AND DATE(poh.`{poh_ord_col}`) <= :po2_end)"
+                        )
+                        params["po2_end"] = po_end_eff
                 if date_filters:
+                    # Convert ORs into a combined predicate. If both bounds present, we generate both sides above.
                     where_parts.append(f"({' OR '.join(date_filters)})")
-                    params["today"] = today_str
 
                 # Join vnd: poh.vendor = vnd.vendor, use vnd.lastname
                 vnd_cols = _get_columns(conn, db_name, "vnd") if _table_exists(conn, db_name, "vnd") else []
@@ -718,13 +747,45 @@ def get_sales_insights(
                         pod_total_col = _pick_column(pod_cols, ["total", "amount", "price"]) or None
                         pod_date_col = _pick_column(pod_cols, ["date", "pdate", "created_at"]) or None
 
-                        # Get POs from poh for this vendor with today's date and matching status
+                        # Get POs from poh for this vendor within PO date range and matching status
                         poh_ids_where = [f"poh.`{poh_vendor_col}` = :vnum", f"poh.`{poh_status_col}` = :stat"]
                         poh_ids_params = {"vnum": vendor_num, "stat": status_code}
 
-                        if date_filters:
-                            poh_ids_where.append(f"({' OR '.join(date_filters)})")
-                            poh_ids_params.update(params)
+                        if po_start_eff or po_end_eff:
+                            sub_filters = []
+                            if poh_rcv_col:
+                                if po_start_eff:
+                                    sub_filters.append(
+                                        f"(poh.`{poh_status_col}` IN (4, 6) AND DATE(poh.`{poh_rcv_col}`) >= :po_start)"
+                                    )
+                                if po_end_eff:
+                                    sub_filters.append(
+                                        f"(poh.`{poh_status_col}` IN (4, 6) AND DATE(poh.`{poh_rcv_col}`) <= :po_end)"
+                                    )
+                            if poh_ord_col:
+                                if po_start_eff:
+                                    sub_filters.append(
+                                        f"(poh.`{poh_status_col}` = 8 AND DATE(poh.`{poh_ord_col}`) >= :po2_start)"
+                                    )
+                                if po_end_eff:
+                                    sub_filters.append(
+                                        f"(poh.`{poh_status_col}` = 8 AND DATE(poh.`{poh_ord_col}`) <= :po2_end)"
+                                    )
+                            if sub_filters:
+                                poh_ids_where.append(f"({' OR '.join(sub_filters)})")
+                                poh_ids_params.update(
+                                    {
+                                        k: v
+                                        for k, v in params.items()
+                                        if k
+                                        in (
+                                            "po_start",
+                                            "po_end",
+                                            "po2_start",
+                                            "po2_end",
+                                        )
+                                    }
+                                )
 
                         poh_ids_sql = f"""
                             SELECT poh.`{poh_id_col}` AS po_id
@@ -927,9 +988,24 @@ def get_sales_insights(
 
 @router.get("/operations")
 def get_operations_insights(
-    store: Optional[str] = Query(default=None, description="Store identifier (store_id or store_db)"),
+    store: Optional[str] = Query(
+        default=None, description="Store identifier (store_id or store_db)"
+    ),
     start: Optional[str] = Query(default=None, description="Start date (YYYY-MM-DD)"),
     end: Optional[str] = Query(default=None, description="End date (YYYY-MM-DD)"),
+    # New: independent filters for inventory (product creation) and supplier invoices
+    inv_start: Optional[str] = Query(
+        default=None, description="Products created start date (YYYY-MM-DD)"
+    ),
+    inv_end: Optional[str] = Query(
+        default=None, description="Products created end date (YYYY-MM-DD)"
+    ),
+    po_start: Optional[str] = Query(
+        default=None, description="Supplier invoices start date (YYYY-MM-DD)"
+    ),
+    po_end: Optional[str] = Query(
+        default=None, description="Supplier invoices end date (YYYY-MM-DD)"
+    ),
     user: dict = Depends(get_auth_user),
 ):
     """Get store operations insights: transaction counts, gift cards, products, supplier invoices."""
@@ -1065,7 +1141,7 @@ def get_operations_insights(
                                     except:
                                         pass
 
-            # Product counts from inv
+            # Product counts from inv (independent inventory date filter)
             product_count = 0
             first_product_date = None
             last_product_date = None
@@ -1079,12 +1155,25 @@ def get_operations_insights(
                     where_parts.append(f"UPPER(`{inv_deleted_col}`) != 'T'")
 
                 if inv_cdate_col:
+                    inv_start_eff = inv_start or start
+                    inv_end_eff = inv_end or end
+                    range_parts = []
+                    if inv_start_eff:
+                        range_parts.append(f"DATE(`{inv_cdate_col}`) >= :inv_start")
+                    if inv_end_eff:
+                        range_parts.append(f"DATE(`{inv_cdate_col}`) <= :inv_end")
+                    all_parts = where_parts + range_parts
+                    params_inv: Dict[str, Any] = {}
+                    if inv_start_eff:
+                        params_inv["inv_start"] = inv_start_eff
+                    if inv_end_eff:
+                        params_inv["inv_end"] = inv_end_eff
                     sql = f"""
                         SELECT COUNT(*) AS cnt,
                                MIN(DATE(`{inv_cdate_col}`)) AS first_date,
                                MAX(DATE(`{inv_cdate_col}`)) AS last_date
                         FROM inv
-                        {'WHERE ' + ' AND '.join(where_parts) if where_parts else ''}
+                        {'WHERE ' + ' AND '.join(all_parts) if all_parts else ''}
                     """
                 else:
                     sql = f"""
@@ -1092,8 +1181,11 @@ def get_operations_insights(
                         FROM inv
                         {'WHERE ' + ' AND '.join(where_parts) if where_parts else ''}
                     """
-
-                r = conn.execute(text(sql)).mappings().first()
+                r = (
+                    conn.execute(text(sql), params_inv if inv_cdate_col else {})
+                    .mappings()
+                    .first()
+                )
                 if r:
                     product_count = int(r.get("cnt", 0) or 0)
                     if inv_cdate_col:
@@ -1101,7 +1193,7 @@ def get_operations_insights(
                         last_product_date = str(r.get("last_date", "")) if r.get("last_date") else None
                         freshness.track(first_product_date, last_product_date)
 
-            # Supplier invoice counts from poh
+            # Supplier invoice counts from poh (independent PO date filter)
             supplier_invoice_count = 0
             first_supplier_date = None
             last_supplier_date = None
@@ -1117,16 +1209,15 @@ def get_operations_insights(
                 ]
 
                 if poh_rcvdate_col:
-                    if start:
-                        where_parts.append(f"DATE(`{poh_rcvdate_col}`) >= :poh_start")
-                    if end:
-                        where_parts.append(f"DATE(`{poh_rcvdate_col}`) <= :poh_end")
-
+                    po_start_eff = po_start or start
+                    po_end_eff = po_end or end
                     params_poh: Dict[str, Any] = {}
-                    if start:
-                        params_poh["poh_start"] = start
-                    if end:
-                        params_poh["poh_end"] = end
+                    if po_start_eff:
+                        where_parts.append(f"DATE(`{poh_rcvdate_col}`) >= :poh_start")
+                        params_poh["poh_start"] = po_start_eff
+                    if po_end_eff:
+                        where_parts.append(f"DATE(`{poh_rcvdate_col}`) <= :poh_end")
+                        params_poh["poh_end"] = po_end_eff
 
                     sql = f"""
                         SELECT COUNT(*) AS cnt,
