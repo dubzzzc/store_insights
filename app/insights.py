@@ -625,8 +625,11 @@ def get_sales_insights(
                     where_parts.append(f"DATE(`{hst_date}`) <= :t_end")
                     params5["t_end"] = end
 
-                # Build expressions (qty is number of packs sold; price is extended; cost is per pack)
-                qty_expr = f"SUM(COALESCE(`{hst_qty}`,0))"
+                # Build expressions (items sold = packs / pack_size when pack exists)
+                if hst_pack in hst_cols:
+                    qty_expr = f"SUM(COALESCE(`{hst_qty}`,0) / NULLIF(COALESCE(`{hst_pack}`,1),0))"
+                else:
+                    qty_expr = f"SUM(COALESCE(`{hst_qty}`,0))"
                 sales_expr = f"SUM(COALESCE(`{hst_price}`,0))"
                 cost_expr = (
                     f"SUM(COALESCE(`{hst_cost}`,0) * COALESCE(`{hst_qty}`,0))"
@@ -692,34 +695,19 @@ def get_sales_insights(
                 if po_start_eff is None and start:
                     po_start_eff = start
 
-                # Group by vendor using provided PO date range
-                where_parts = [f"poh.`{poh_status_col}` IN (4, 6, 8)"]
+                # Group by vendor using provided PO date range (posted/received only: status 3,4)
+                where_parts = [f"poh.`{poh_status_col}` IN (3, 4)"]
                 params: Dict[str, Any] = {}
 
-                # Date filters: status 4,6 use rcvdate; status 8 uses orddate
+                # Date filters: use rcvdate only (posted/received on date range)
                 date_filters = []
                 if poh_rcv_col and (po_start_eff or po_end_eff):
                     if po_start_eff:
-                        date_filters.append(
-                            f"(poh.`{poh_status_col}` IN (4, 6) AND DATE(poh.`{poh_rcv_col}`) >= :po_start)"
-                        )
+                        date_filters.append(f"(DATE(poh.`{poh_rcv_col}`) >= :po_start)")
                         params["po_start"] = po_start_eff
                     if po_end_eff:
-                        date_filters.append(
-                            f"(poh.`{poh_status_col}` IN (4, 6) AND DATE(poh.`{poh_rcv_col}`) <= :po_end)"
-                        )
+                        date_filters.append(f"(DATE(poh.`{poh_rcv_col}`) <= :po_end)")
                         params["po_end"] = po_end_eff
-                if poh_ord_col and (po_start_eff or po_end_eff):
-                    if po_start_eff:
-                        date_filters.append(
-                            f"(poh.`{poh_status_col}` = 8 AND DATE(poh.`{poh_ord_col}`) >= :po2_start)"
-                        )
-                        params["po2_start"] = po_start_eff
-                    if po_end_eff:
-                        date_filters.append(
-                            f"(poh.`{poh_status_col}` = 8 AND DATE(poh.`{poh_ord_col}`) <= :po2_end)"
-                        )
-                        params["po2_end"] = po_end_eff
                 if date_filters:
                     # Convert ORs into a combined predicate. If both bounds present, we generate both sides above.
                     where_parts.append(f"({' OR '.join(date_filters)})")
@@ -761,7 +749,7 @@ def get_sales_insights(
                 """
 
                 rows = conn.execute(text(sql), params).mappings()
-                status_map = {4: "posted", 6: "received", 8: "open"}
+                status_map = {3: "posted", 4: "received"}
 
                 # For each vendor, fetch individual order details from pod
                 for r in rows:
@@ -785,20 +773,11 @@ def get_sales_insights(
                             if poh_rcv_col:
                                 if po_start_eff:
                                     sub_filters.append(
-                                        f"(poh.`{poh_status_col}` IN (4, 6) AND DATE(poh.`{poh_rcv_col}`) >= :po_start)"
+                                        f"(DATE(poh.`{poh_rcv_col}`) >= :po_start)"
                                     )
                                 if po_end_eff:
                                     sub_filters.append(
-                                        f"(poh.`{poh_status_col}` IN (4, 6) AND DATE(poh.`{poh_rcv_col}`) <= :po_end)"
-                                    )
-                            if poh_ord_col:
-                                if po_start_eff:
-                                    sub_filters.append(
-                                        f"(poh.`{poh_status_col}` = 8 AND DATE(poh.`{poh_ord_col}`) >= :po2_start)"
-                                    )
-                                if po_end_eff:
-                                    sub_filters.append(
-                                        f"(poh.`{poh_status_col}` = 8 AND DATE(poh.`{poh_ord_col}`) <= :po2_end)"
+                                        f"(DATE(poh.`{poh_rcv_col}`) <= :po_end)"
                                     )
                             if sub_filters:
                                 poh_ids_where.append(f"({' OR '.join(sub_filters)})")
@@ -806,13 +785,7 @@ def get_sales_insights(
                                     {
                                         k: v
                                         for k, v in params.items()
-                                        if k
-                                        in (
-                                            "po_start",
-                                            "po_end",
-                                            "po2_start",
-                                            "po2_end",
-                                        )
+                                        if k in ("po_start", "po_end")
                                     }
                                 )
 
@@ -1649,10 +1622,16 @@ def get_quick_insights(
                 hst_cols = _get_columns(conn, db_name, "hst")
                 hst_date = _pick_column(hst_cols, ["date", "tdate", "sale_date", "trans_date"]) or "date"
                 hst_qty = _pick_column(hst_cols, ["qty", "quantity"]) or "qty"
+                hst_pack = _pick_column(hst_cols, ["pack", "mult", "casepack"]) or None
                 hst_sku = _pick_column(hst_cols, ["sku"]) or "sku"
 
+                if hst_pack in hst_cols:
+                    qty_expr_today = f"SUM(COALESCE(`{hst_qty}`,0) / NULLIF(COALESCE(`{hst_pack}`,1),0))"
+                else:
+                    qty_expr_today = f"SUM(COALESCE(`{hst_qty}`,0))"
+
                 sql = f"""
-                    SELECT `{hst_sku}` AS sku, SUM(`{hst_qty}`) AS total_qty
+                    SELECT `{hst_sku}` AS sku, {qty_expr_today} AS total_qty
                     FROM hst
                     WHERE DATE(`{hst_date}`) = :today AND `{hst_sku}` > 0
                     GROUP BY `{hst_sku}`
