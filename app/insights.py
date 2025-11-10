@@ -599,14 +599,24 @@ def get_sales_insights(
                     rows = conn.execute(text(cat_sql), params4).mappings()
                     categories = [{"category": str(r["category"]), "total_sales": float(r["total"]) } for r in rows]
 
-            # Top products from hst by qty
+            # Top products from hst (explicit column usage with safe fallbacks)
             top_items: List[Dict[str, Any]] = []
             if _table_exists(conn, db_name, "hst"):
                 hst_cols = _get_columns(conn, db_name, "hst")
                 hst_date = _pick_column(hst_cols, ["date", "tdate", "sale_date", "trans_date"]) or "date"
+                hst_tstamp = (
+                    _pick_column(hst_cols, ["tstamp", "timestamp", "time", "t_time"])
+                    or None
+                )
                 hst_qty = _pick_column(hst_cols, ["qty", "quantity"]) or "qty"
+                hst_price = (
+                    _pick_column(hst_cols, ["price", "amount", "total"]) or "price"
+                )
+                hst_cost = _pick_column(hst_cols, ["cost", "lcost", "acost"]) or None
+                hst_pack = _pick_column(hst_cols, ["pack", "mult", "casepack"]) or None
                 hst_sku = _pick_column(hst_cols, ["sku"]) or "sku"
-                where_parts = ["1=1"]
+
+                where_parts = [f"`{hst_sku}` > 0"]
                 params5: Dict[str, Any] = {}
                 if start:
                     where_parts.append(f"DATE(`{hst_date}`) >= :t_start")
@@ -614,18 +624,32 @@ def get_sales_insights(
                 if end:
                     where_parts.append(f"DATE(`{hst_date}`) <= :t_end")
                     params5["t_end"] = end
+
+                # Build expressions (qty is number of packs sold; price is extended; cost is per pack)
+                qty_expr = f"SUM(COALESCE(`{hst_qty}`,0))"
+                sales_expr = f"SUM(COALESCE(`{hst_price}`,0))"
+                cost_expr = (
+                    f"SUM(COALESCE(`{hst_cost}`,0) * COALESCE(`{hst_qty}`,0))"
+                    if hst_cost in hst_cols
+                    else "SUM(0)"
+                )
+
                 base_sql = f"""
-                    SELECT `{hst_sku}` AS sku, SUM(`{hst_qty}`) AS total_qty
+                    SELECT `{hst_sku}` AS sku,
+                           {qty_expr} AS total_qty,
+                           {sales_expr} AS total_sales,
+                           {cost_expr} AS total_cost
                     FROM hst
-                    WHERE {' AND '.join(where_parts)} AND `{hst_sku}` > 0
+                    WHERE {' AND '.join(where_parts) if where_parts else '1=1'}
                     GROUP BY `{hst_sku}`
-                    ORDER BY total_qty DESC
+                    ORDER BY total_sales DESC, total_qty DESC
                     LIMIT 20
                 """
-                rows = conn.execute(text(base_sql), params5).mappings()
+                list_rows = list(conn.execute(text(base_sql), params5).mappings())
+
                 # Join descriptions from inv
                 inv_names: Dict[str, str] = {}
-                skus = [str(r["sku"]) for r in rows]
+                skus = [str(r["sku"]) for r in list_rows]
                 if skus and _table_exists(conn, db_name, "inv"):
                     inv_cols = _get_columns(conn, db_name, "inv")
                     inv_sku = _pick_column(inv_cols, ["sku"]) or "sku"
@@ -634,15 +658,20 @@ def get_sales_insights(
                     inv_sql = text(f"SELECT `{inv_sku}` AS sku, `{inv_name}` AS name FROM inv WHERE `{inv_sku}` IN :skus").bindparams()
                     inv_rows = conn.execute(inv_sql, in_params).mappings()
                     for r in inv_rows:
-                        inv_names[str(r["sku"])]= str(r["name"]) if r["name"] is not None else ""
+                        inv_names[str(r["sku"])] = (
+                            str(r["name"]) if r["name"] is not None else ""
+                        )
+
+                # Map results
                 top_items = [
                     {
                         "sku": str(r["sku"]),
                         "description": inv_names.get(str(r["sku"]), ""),
-                        "total_items_sold": float(r["total_qty"]),
-                        "total_sales": 0.0,
+                        "total_items_sold": float(r.get("total_qty") or 0.0),
+                        "total_sales": float(r.get("total_sales") or 0.0),
+                        "total_cost": float(r.get("total_cost") or 0.0),
                     }
-                    for r in rows
+                    for r in list_rows
                 ]
 
             # Purchase orders: POs grouped by vendor (independent date filter)
