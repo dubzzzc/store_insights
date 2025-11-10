@@ -403,14 +403,22 @@ def get_sales_insights(
                 where_clauses.append("`rflag` = 0")
             if detected.get("has_sku"):
                 where_clauses.append("`sku` > 0")
-            # Date range filters on DATE(date_col)
+            # Date range filters using half-open interval for index usage
             params = {}
             if start:
-                where_clauses.append("DATE(`{}`) >= :start".format(date_col))
-                params["start"] = start
+                where_clauses.append(f"`{date_col}` >= :start_dt")
+                params["start_dt"] = f"{start} 00:00:00"
             if end:
-                where_clauses.append("DATE(`{}`) <= :end".format(date_col))
-                params["end"] = end
+                try:
+                    from datetime import timedelta
+
+                    end_next = (
+                        datetime.fromisoformat(end) + timedelta(days=1)
+                    ).strftime("%Y-%m-%d 00:00:00")
+                except Exception:
+                    end_next = f"{end} 23:59:59"
+                where_clauses.append(f"`{date_col}` < :end_dt")
+                params["end_dt"] = end_next
             where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
             sql = f"""
@@ -422,7 +430,7 @@ def get_sales_insights(
                 {where_sql}
                 GROUP BY DATE(`{date_col}`)
                 ORDER BY DATE(`{date_col}`) DESC
-                LIMIT 7
+                {"LIMIT 7" if not (start or end) else ""}
             """
 
             result = conn.execute(text(sql), params).mappings()
@@ -472,11 +480,19 @@ def get_sales_insights(
                 params2: Dict[str, Any] = {}
                 # Filter by date using jnl's date column (jnh.tstamp is time-only on many schemas)
                 if jnl_date_filter_col and start:
-                    where_parts.append(f"DATE(jnl.`{jnl_date_filter_col}`) >= :h_start")
-                    params2["h_start"] = start
+                    where_parts.append(f"jnl.`{jnl_date_filter_col}` >= :h_start_dt")
+                    params2["h_start_dt"] = f"{start} 00:00:00"
                 if jnl_date_filter_col and end:
-                    where_parts.append(f"DATE(jnl.`{jnl_date_filter_col}`) <= :h_end")
-                    params2["h_end"] = end
+                    try:
+                        from datetime import timedelta
+
+                        h_end_next = (
+                            datetime.fromisoformat(end) + timedelta(days=1)
+                        ).strftime("%Y-%m-%d 00:00:00")
+                    except Exception:
+                        h_end_next = f"{end} 23:59:59"
+                    where_parts.append(f"jnl.`{jnl_date_filter_col}` < :h_end_dt")
+                    params2["h_end_dt"] = h_end_next
                 if jnl_rflag:
                     where_parts.append(f"jnl.`{jnl_rflag}` = 0")
                 if jnl_sku:
@@ -515,11 +531,19 @@ def get_sales_insights(
                 where_parts = ["1=1"]
                 params3: Dict[str, Any] = {}
                 if jnl_date_filter_col and start:
-                    where_parts.append(f"DATE(`{jnl_date_filter_col}`) >= :p_start")
-                    params3["p_start"] = start
+                    where_parts.append(f"`{jnl_date_filter_col}` >= :p_start_dt")
+                    params3["p_start_dt"] = f"{start} 00:00:00"
                 if jnl_date_filter_col and end:
-                    where_parts.append(f"DATE(`{jnl_date_filter_col}`) <= :p_end")
-                    params3["p_end"] = end
+                    try:
+                        from datetime import timedelta
+
+                        p_end_next = (
+                            datetime.fromisoformat(end) + timedelta(days=1)
+                        ).strftime("%Y-%m-%d 00:00:00")
+                    except Exception:
+                        p_end_next = f"{end} 23:59:59"
+                    where_parts.append(f"`{jnl_date_filter_col}` < :p_end_dt")
+                    params3["p_end_dt"] = p_end_next
                 if cat_col and amt_col:
                     tender_sql = f"""
                         SELECT `{cat_col}` AS code, SUM(`{amt_col}`) AS total
@@ -559,11 +583,19 @@ def get_sales_insights(
                     where_parts = ["1=1", "jnl.`sku` > 0", "jnl.`rflag` = 0", "jnl.`cat` LIKE 'P%'"]
                     params4: Dict[str, Any] = {}
                     if start and jnl_date_col:
-                        where_parts.append(f"DATE(jnl.`{jnl_date_col}`) >= :c_start")
-                        params4["c_start"] = start
+                        where_parts.append(f"jnl.`{jnl_date_col}` >= :c_start_dt")
+                        params4["c_start_dt"] = f"{start} 00:00:00"
                     if end and jnl_date_col:
-                        where_parts.append(f"DATE(jnl.`{jnl_date_col}`) <= :c_end")
-                        params4["c_end"] = end
+                        try:
+                            from datetime import timedelta
+
+                            c_end_next = (
+                                datetime.fromisoformat(end) + timedelta(days=1)
+                            ).strftime("%Y-%m-%d 00:00:00")
+                        except Exception:
+                            c_end_next = f"{end} 23:59:59"
+                        where_parts.append(f"jnl.`{jnl_date_col}` < :c_end_dt")
+                        params4["c_end_dt"] = c_end_next
 
                     # Compute amount expression specific to jnl
                     if jnl_price_col and jnl_qty_col:
@@ -619,11 +651,19 @@ def get_sales_insights(
                 where_parts = [f"`{hst_sku}` > 0"]
                 params5: Dict[str, Any] = {}
                 if start:
-                    where_parts.append(f"DATE(`{hst_date}`) >= :t_start")
-                    params5["t_start"] = start
+                    where_parts.append(f"`{hst_date}` >= :t_start_dt")
+                    params5["t_start_dt"] = f"{start} 00:00:00"
                 if end:
-                    where_parts.append(f"DATE(`{hst_date}`) <= :t_end")
-                    params5["t_end"] = end
+                    try:
+                        from datetime import timedelta
+
+                        t_end_next = (
+                            datetime.fromisoformat(end) + timedelta(days=1)
+                        ).strftime("%Y-%m-%d 00:00:00")
+                    except Exception:
+                        t_end_next = f"{end} 23:59:59"
+                    where_parts.append(f"`{hst_date}` < :t_end_dt")
+                    params5["t_end_dt"] = t_end_next
 
                 # Build expressions (items sold = packs / pack_size when pack exists)
                 if hst_pack in hst_cols:
@@ -703,11 +743,19 @@ def get_sales_insights(
                 date_filters = []
                 if poh_rcv_col and (po_start_eff or po_end_eff):
                     if po_start_eff:
-                        date_filters.append(f"(DATE(poh.`{poh_rcv_col}`) >= :po_start)")
-                        params["po_start"] = po_start_eff
+                        date_filters.append(f"(poh.`{poh_rcv_col}` >= :po_start_dt)")
+                        params["po_start_dt"] = f"{po_start_eff} 00:00:00"
                     if po_end_eff:
-                        date_filters.append(f"(DATE(poh.`{poh_rcv_col}`) <= :po_end)")
-                        params["po_end"] = po_end_eff
+                        try:
+                            from datetime import timedelta
+
+                            po_end_next = (
+                                datetime.fromisoformat(po_end_eff) + timedelta(days=1)
+                            ).strftime("%Y-%m-%d 00:00:00")
+                        except Exception:
+                            po_end_next = f"{po_end_eff} 23:59:59"
+                        date_filters.append(f"(poh.`{poh_rcv_col}` < :po_end_dt)")
+                        params["po_end_dt"] = po_end_next
                 if date_filters:
                     # Convert ORs into a combined predicate. If both bounds present, we generate both sides above.
                     where_parts.append(f"({' OR '.join(date_filters)})")
@@ -773,11 +821,11 @@ def get_sales_insights(
                             if poh_rcv_col:
                                 if po_start_eff:
                                     sub_filters.append(
-                                        f"(DATE(poh.`{poh_rcv_col}`) >= :po_start)"
+                                        f"(poh.`{poh_rcv_col}` >= :po_start_dt)"
                                     )
                                 if po_end_eff:
                                     sub_filters.append(
-                                        f"(DATE(poh.`{poh_rcv_col}`) <= :po_end)"
+                                        f"(poh.`{poh_rcv_col}` < :po_end_dt)"
                                     )
                             if sub_filters:
                                 poh_ids_where.append(f"({' OR '.join(sub_filters)})")
@@ -785,7 +833,7 @@ def get_sales_insights(
                                     {
                                         k: v
                                         for k, v in params.items()
-                                        if k in ("po_start", "po_end")
+                                        if k in ("po_start_dt", "po_end_dt")
                                     }
                                 )
 
@@ -1161,15 +1209,23 @@ def get_operations_insights(
                     inv_end_eff = inv_end or end
                     range_parts = []
                     if inv_start_eff:
-                        range_parts.append(f"DATE(`{inv_cdate_col}`) >= :inv_start")
+                        range_parts.append(f"`{inv_cdate_col}` >= :inv_start_dt")
                     if inv_end_eff:
-                        range_parts.append(f"DATE(`{inv_cdate_col}`) <= :inv_end")
+                        try:
+                            from datetime import timedelta
+
+                            inv_end_next = (
+                                datetime.fromisoformat(inv_end_eff) + timedelta(days=1)
+                            ).strftime("%Y-%m-%d 00:00:00")
+                        except Exception:
+                            inv_end_next = f"{inv_end_eff} 23:59:59"
+                        range_parts.append(f"`{inv_cdate_col}` < :inv_end_dt")
                     all_parts = where_parts + range_parts
                     params_inv: Dict[str, Any] = {}
                     if inv_start_eff:
-                        params_inv["inv_start"] = inv_start_eff
+                        params_inv["inv_start_dt"] = f"{inv_start_eff} 00:00:00"
                     if inv_end_eff:
-                        params_inv["inv_end"] = inv_end_eff
+                        params_inv["inv_end_dt"] = inv_end_next
                     sql = f"""
                         SELECT COUNT(*) AS cnt,
                                MIN(DATE(`{inv_cdate_col}`)) AS first_date,
@@ -1215,11 +1271,19 @@ def get_operations_insights(
                     po_end_eff = po_end or end
                     params_poh: Dict[str, Any] = {}
                     if po_start_eff:
-                        where_parts.append(f"DATE(`{poh_rcvdate_col}`) >= :poh_start")
-                        params_poh["poh_start"] = po_start_eff
+                        where_parts.append(f"`{poh_rcvdate_col}` >= :poh_start_dt")
+                        params_poh["poh_start_dt"] = f"{po_start_eff} 00:00:00"
                     if po_end_eff:
-                        where_parts.append(f"DATE(`{poh_rcvdate_col}`) <= :poh_end")
-                        params_poh["poh_end"] = po_end_eff
+                        try:
+                            from datetime import timedelta
+
+                            poh_end_next = (
+                                datetime.fromisoformat(po_end_eff) + timedelta(days=1)
+                            ).strftime("%Y-%m-%d 00:00:00")
+                        except Exception:
+                            poh_end_next = f"{po_end_eff} 23:59:59"
+                        where_parts.append(f"`{poh_rcvdate_col}` < :poh_end_dt")
+                        params_poh["poh_end_dt"] = poh_end_next
 
                     sql = f"""
                         SELECT COUNT(*) AS cnt,

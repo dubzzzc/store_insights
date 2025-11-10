@@ -2708,7 +2708,7 @@ const AdminView = ({
   );
 };
 
-const PurchaseOrdersModule = ({ orders }) => {
+const PurchaseOrdersModule = ({ orders, dateRange, onDateRangeChange }) => {
   const [expandedVendor, setExpandedVendor] = useState(null);
 
   const toggleVendor = (vendorKey) => {
@@ -2718,7 +2718,19 @@ const PurchaseOrdersModule = ({ orders }) => {
   return (
     <div className="panel">
       <div className="panel-header">
-        <h2 className="panel-title">Today's Purchase Orders</h2>
+        <h2 className="panel-title">Purchase Orders</h2>
+        <div className="inline-actions">
+          <input
+            type="date"
+            value={dateRange?.start || ''}
+            onChange={(e) => onDateRangeChange({ ...(dateRange || {}), start: e.target.value })}
+          />
+          <input
+            type="date"
+            value={dateRange?.end || ''}
+            onChange={(e) => onDateRangeChange({ ...(dateRange || {}), end: e.target.value })}
+          />
+        </div>
       </div>
       {orders?.length ? (
         <div className="table-wrapper">
@@ -2793,18 +2805,30 @@ const PurchaseOrdersModule = ({ orders }) => {
           </table>
         </div>
       ) : (
-        <div className="empty-state">No purchase orders for today.</div>
+        <div className="empty-state">No purchase orders in the selected range.</div>
       )}
     </div>
   );
 };
 
-const InventoryModule = ({ snapshot }) => {
+const InventoryModule = ({ snapshot, dateRange, onDateRangeChange }) => {
   const segments = snapshot?.segments || [];
   return (
     <div className="panel">
       <div className="panel-header">
         <h2 className="panel-title">Inventory Value</h2>
+        <div className="inline-actions">
+          <input
+            type="date"
+            value={dateRange?.start || ''}
+            onChange={(e) => onDateRangeChange({ ...(dateRange || {}), start: e.target.value })}
+          />
+          <input
+            type="date"
+            value={dateRange?.end || ''}
+            onChange={(e) => onDateRangeChange({ ...(dateRange || {}), end: e.target.value })}
+          />
+        </div>
       </div>
       <div className="summary-grid">
         <div className="summary-card">
@@ -3343,6 +3367,10 @@ const ModuleNav = ({ active, onChange }) => {
   error,
         dateRange,
         onDateRangeChange,
+        poRange,
+        onPoRangeChange,
+        invRange,
+        onInvRangeChange,
 }) => {
   const storeLabel = useMemo(() => {
     if (storeInfo?.store_name) return storeInfo.store_name;
@@ -3388,9 +3416,9 @@ const ModuleNav = ({ active, onChange }) => {
           />
         ) : null}
 
-        {activeModule === 'purchase' ? <PurchaseOrdersModule orders={purchaseOrders} /> : null}
+        {activeModule === 'purchase' ? <PurchaseOrdersModule orders={purchaseOrders} dateRange={poRange} onDateRangeChange={onPoRangeChange} /> : null}
 
-        {activeModule === 'inventory' ? <InventoryModule snapshot={inventory} /> : null}
+        {activeModule === 'inventory' ? <InventoryModule snapshot={inventory} dateRange={invRange} onDateRangeChange={onInvRangeChange} /> : null}
 
         {activeModule === 'history' ? <HistoryModule history={history} /> : null}
 
@@ -3440,6 +3468,25 @@ const ModuleNav = ({ active, onChange }) => {
           return `${y}-${m}-${dd}`;
         };
         const [dateRange, setDateRange] = useState({ start: todayYmd(), end: todayYmd() });
+        const [poRange, setPoRange] = useState({ start: '', end: '' });
+        const [invRange, setInvRange] = useState({ start: '', end: '' });
+
+        // Auto-set end date to start date when end is empty
+        useEffect(() => {
+          if (dateRange?.start && !dateRange?.end) {
+            setDateRange((prev) => ({ ...(prev || {}), end: prev.start }));
+          }
+        }, [dateRange?.start]);
+        useEffect(() => {
+          if (poRange?.start && !poRange?.end) {
+            setPoRange((prev) => ({ ...(prev || {}), end: prev.start }));
+          }
+        }, [poRange?.start]);
+        useEffect(() => {
+          if (invRange?.start && !invRange?.end) {
+            setInvRange((prev) => ({ ...(prev || {}), end: prev.start }));
+          }
+        }, [invRange?.start]);
 
         const [adminKey, setAdminKey] = useState(() => storage.get(STORAGE_KEYS.adminKey, ''));
         const [adminUsers, setAdminUsers] = useState([]);
@@ -3457,8 +3504,12 @@ const ModuleNav = ({ active, onChange }) => {
           if (identifier) params.push(`store=${encodeURIComponent(identifier)}`);
           if (dateRange?.start) params.push(`start=${encodeURIComponent(dateRange.start)}`);
           if (dateRange?.end) params.push(`end=${encodeURIComponent(dateRange.end)}`);
+          if (poRange?.start) params.push(`po_start=${encodeURIComponent(poRange.start)}`);
+          if (poRange?.end) params.push(`po_end=${encodeURIComponent(poRange.end)}`);
+          if (invRange?.start) params.push(`inv_start=${encodeURIComponent(invRange.start)}`);
+          if (invRange?.end) params.push(`inv_end=${encodeURIComponent(invRange.end)}`);
           return params.length ? `?${params.join('&')}` : '';
-        }, [selectedStore, dateRange]);
+        }, [selectedStore, dateRange, poRange, invRange]);
 
         const handleAdminLogout = useCallback(
           (message = '') => {
@@ -3633,9 +3684,10 @@ const ModuleNav = ({ active, onChange }) => {
           }
         }, [stores, selectedStore]);
 
-        const fetchSales = async (authToken, query) => {
+        const fetchSales = async (authToken, query, signal) => {
           const response = await fetch(`${API_BASE}/insights/sales${query}`, {
             headers: { Authorization: `Bearer ${authToken}` },
+            signal,
           });
           let payload = {};
           try {
@@ -3660,9 +3712,10 @@ const ModuleNav = ({ active, onChange }) => {
           };
         };
 
-        const fetchSyncLogs = async (authToken, query) => {
+        const fetchSyncLogs = async (authToken, query, signal) => {
           const response = await fetch(`${API_BASE}/sync/status${query}`, {
             headers: { Authorization: `Bearer ${authToken}` },
+            signal,
           });
           let payload = {};
           try {
@@ -3678,9 +3731,10 @@ const ModuleNav = ({ active, onChange }) => {
           return payload.logs || [];
         };
 
-        const fetchTenders = async (authToken, query) => {
+        const fetchTenders = async (authToken, query, signal) => {
           const response = await fetch(`${API_BASE}/insights/tenders${query}`, {
             headers: { Authorization: `Bearer ${authToken}` },
+            signal,
           });
           let payload = {};
           try {
@@ -3696,9 +3750,10 @@ const ModuleNav = ({ active, onChange }) => {
           return payload;
         };
 
-        const fetchGateway = async (authToken, query) => {
+        const fetchGateway = async (authToken, query, signal) => {
           const response = await fetch(`${API_BASE}/insights/gateway${query}`, {
             headers: { Authorization: `Bearer ${authToken}` },
+            signal,
           });
           let payload = {};
           try {
@@ -3714,9 +3769,10 @@ const ModuleNav = ({ active, onChange }) => {
           return payload;
         };
 
-        const fetchOperations = async (authToken, query) => {
+        const fetchOperations = async (authToken, query, signal) => {
           const response = await fetch(`${API_BASE}/insights/operations${query}`, {
             headers: { Authorization: `Bearer ${authToken}` },
+            signal,
           });
           let payload = {};
           try {
@@ -3732,9 +3788,10 @@ const ModuleNav = ({ active, onChange }) => {
           return payload;
         };
 
-        const fetchQuick = async (authToken, query) => {
+        const fetchQuick = async (authToken, query, signal) => {
           const response = await fetch(`${API_BASE}/insights/quick${query}`, {
             headers: { Authorization: `Bearer ${authToken}` },
+            signal,
           });
           let payload = {};
           try {
@@ -3750,14 +3807,22 @@ const ModuleNav = ({ active, onChange }) => {
           return payload;
         };
 
+        const controllerRef = useRef(null);
+        const debounceRef = useRef(null);
+
         const loadInsights = async (authToken, query) => {
           if (!authToken) return;
           setIsLoadingData(true);
+          if (controllerRef.current) {
+            try { controllerRef.current.abort(); } catch {}
+          }
+          controllerRef.current = new AbortController();
+          const { signal } = controllerRef.current;
           try {
             const [salesPayload, syncData, quickPayload] = await Promise.all([
-              fetchSales(authToken, query),
-              fetchSyncLogs(authToken, query),
-              fetchQuick(authToken, query).catch(() => null),
+              fetchSales(authToken, query, signal),
+              fetchSyncLogs(authToken, query, signal),
+              fetchQuick(authToken, query, signal).catch(() => null),
             ]);
             if (authToken !== tokenRef.current) {
               return;
@@ -4187,9 +4252,12 @@ const ModuleNav = ({ active, onChange }) => {
         };
 
         const refresh = () => {
-          if (token && userRole !== 'admin') {
-            loadInsights(token, storeQueryValue);
-          }
+          if (debounceRef.current) clearTimeout(debounceRef.current);
+          debounceRef.current = setTimeout(() => {
+            if (token && userRole !== 'admin') {
+              loadInsights(token, storeQueryValue);
+            }
+          }, 400);
         };
 
         if (!token) {
