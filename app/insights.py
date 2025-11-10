@@ -842,11 +842,10 @@ def get_sales_insights(
                 poh_ord_col = _pick_column(poh_cols, ["orddate", "order_date"]) or None
                 poh_id_col = _pick_column(poh_cols, ["id", "po_id", "poh_id", "invno"]) or None
 
-                # Independent date filter for POs; falls back to global end/today when not provided
+                # Independent date filter for POs - ONLY use po_start/po_end, never fall back to start/end
+                # This prevents cross-contamination between sales date selector and PO date selector
                 po_start_eff = po_start
-                po_end_eff = po_end or end or datetime.now().strftime("%Y-%m-%d")
-                if po_start_eff is None and start:
-                    po_start_eff = start
+                po_end_eff = po_end
 
                 # Group by vendor using provided PO date range (posted/received only: status 3,4)
                 where_parts = [f"poh.`{poh_status_col}` IN (3, 4)"]
@@ -1318,8 +1317,10 @@ def get_operations_insights(
                     where_parts.append(f"UPPER(`{inv_deleted_col}`) != 'T'")
 
                 if inv_cdate_col:
-                    inv_start_eff = inv_start or start
-                    inv_end_eff = inv_end or end
+                    # Independent date filter for inventory - ONLY use inv_start/inv_end, never fall back to start/end
+                    # This prevents cross-contamination between sales date selector and inventory date selector
+                    inv_start_eff = inv_start
+                    inv_end_eff = inv_end
                     range_parts = []
                     if inv_start_eff:
                         range_parts.append(f"`{inv_cdate_col}` >= :inv_start_dt")
@@ -1380,8 +1381,10 @@ def get_operations_insights(
                 ]
 
                 if poh_rcvdate_col:
-                    po_start_eff = po_start or start
-                    po_end_eff = po_end or end
+                    # Independent date filter for supplier invoices - ONLY use po_start/po_end, never fall back to start/end
+                    # This prevents cross-contamination between sales date selector and supplier invoice date selector
+                    po_start_eff = po_start
+                    po_end_eff = po_end
                     params_poh: Dict[str, Any] = {}
                     if po_start_eff:
                         where_parts.append(f"`{poh_rcvdate_col}` >= :poh_start_dt")
