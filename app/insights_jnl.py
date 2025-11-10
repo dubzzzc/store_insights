@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from app.auth import get_auth_user
 from sqlalchemy import create_engine, text
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date as date_type
 from typing import Optional, Dict, Any, List
 from collections import OrderedDict
 import os
@@ -11,6 +11,53 @@ router = APIRouter()
 
 # Engine cache to reuse engines per database connection string
 _engine_cache: "OrderedDict[str, Any]" = OrderedDict()
+
+
+def _coerce_datetime(value: Any) -> Optional[datetime]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=None) if value.tzinfo else value
+    if isinstance(value, date_type):
+        return datetime.combine(value, datetime.min.time())
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(value)
+        except Exception:
+            return None
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%m/%d/%Y", "%m/%d/%Y %H:%M:%S"):
+            try:
+                return datetime.strptime(text, fmt)
+            except ValueError:
+                continue
+        try:
+            return datetime.fromisoformat(text)
+        except ValueError:
+            pass
+    return None
+
+
+class FreshnessTracker:
+    def __init__(self) -> None:
+        self._latest: Optional[datetime] = None
+
+    def track(self, *values: Any) -> None:
+        for value in values:
+            dt = _coerce_datetime(value)
+            if dt and (self._latest is None or dt > self._latest):
+                self._latest = dt
+
+    def to_payload(self) -> Optional[Dict[str, str]]:
+        if not self._latest:
+            return None
+        iso = self._latest.isoformat()
+        display = self._latest.strftime("%Y-%m-%d %H:%M:%S")
+        return {"iso": iso, "display": display}
+
 
 _MAX_CACHED_ENGINES = int(os.getenv("STORE_INSIGHTS_MAX_CACHED_ENGINES", "10"))
 _POOL_SIZE = int(os.getenv("STORE_INSIGHTS_POOL_SIZE", "12"))
@@ -123,6 +170,7 @@ def get_sales_insights(
         print(f"📅 Filtering from: {seven_days_ago}")
 
         with engine.connect() as conn:
+            freshness = FreshnessTracker()
             columns = _resolve_jnl_columns(conn, db_name)
 
             sale_column = _quote_identifier(columns["sale"])
@@ -182,6 +230,7 @@ def get_sales_insights(
 
             for row in items:
                 date_value = row.get("sale_date")
+                freshness.track(date_value)
                 if isinstance(date_value, datetime):
                     date_str = date_value.strftime('%Y-%m-%d')
                 elif isinstance(date_value, date_type):
@@ -299,7 +348,7 @@ def get_sales_insights(
                     for label, amount in sorted(category_totals.items(), key=lambda item: item[1], reverse=True)
                 ]
 
-            return {
+            payload = {
                 "store": {
                     "store_db": db_name,
                     "store_id": selected_store.get("store_id"),
@@ -329,6 +378,10 @@ def get_sales_insights(
                 "inventory": None,
                 "sales_history": [],
             }
+            freshness_info = freshness.to_payload()
+            if freshness_info:
+                payload["data_freshness"] = freshness_info
+            return payload
 
     except Exception as e:
         print(f"💥 Error: {str(e)}")

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.auth import get_auth_user
 from sqlalchemy import create_engine, text
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, date
 from collections import OrderedDict
 import os
 import atexit
@@ -18,6 +18,58 @@ router = APIRouter()
 
 # Engine cache to reuse engines per database connection string
 _engine_cache: "OrderedDict[str, Any]" = OrderedDict()
+
+
+def _coerce_datetime(value: Any) -> Optional[datetime]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=None) if value.tzinfo else value
+    if isinstance(value, date):
+        return datetime.combine(value, datetime.min.time())
+    if isinstance(value, (int, float)):
+        # treat as unix timestamp
+        try:
+            return datetime.fromtimestamp(value)
+        except Exception:
+            return None
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%m/%d/%Y", "%m/%d/%Y %H:%M:%S"):
+            try:
+                return datetime.strptime(text, fmt)
+            except ValueError:
+                continue
+        try:
+            return datetime.fromisoformat(text)
+        except ValueError:
+            pass
+    return None
+
+
+class FreshnessTracker:
+    def __init__(self) -> None:
+        self._latest: Optional[datetime] = None
+
+    def track(self, *values: Any) -> None:
+        for value in values:
+            dt = _coerce_datetime(value)
+            if dt and (self._latest is None or dt > self._latest):
+                self._latest = dt
+
+    @property
+    def latest(self) -> Optional[datetime]:
+        return self._latest
+
+    def to_payload(self) -> Optional[Dict[str, str]]:
+        if not self._latest:
+            return None
+        iso = self._latest.isoformat()
+        display = self._latest.strftime("%Y-%m-%d %H:%M:%S")
+        return {"iso": iso, "display": display}
+
 
 _MAX_CACHED_ENGINES = int(os.getenv("STORE_INSIGHTS_MAX_CACHED_ENGINES", "10"))
 _POOL_SIZE = int(os.getenv("STORE_INSIGHTS_POOL_SIZE", "12"))
@@ -318,6 +370,7 @@ def get_sales_insights(
         engine = _get_engine(db_user, db_pass, db_name)
 
         with engine.connect() as conn:
+            freshness = FreshnessTracker()
             detected = _detect_sales_source(conn, db_name)
 
             if not detected:
@@ -367,6 +420,7 @@ def get_sales_insights(
 
             sales_data = []
             for row in result:
+                freshness.track(row.get("date"))
                 sales_data.append({
                     "date": row["date"].strftime('%Y-%m-%d'),
                     "total_items_sold": int(row["total_items_sold"]),
@@ -596,6 +650,7 @@ def get_sales_insights(
 
                 # Use today's date from the selected date range (or default to today)
                 today_str = end if end else datetime.now().strftime('%Y-%m-%d')
+                freshness.track(today_str)
 
                 # Group by vendor for today's POs
                 where_parts = [f"poh.`{poh_status_col}` IN (4, 6, 8)"]
@@ -618,7 +673,7 @@ def get_sales_insights(
 
                 select_parts = [f"poh.`{poh_status_col}` AS status", f"poh.`{poh_vendor_col}` AS vendor_num"]
                 join_part = ""
-                
+
                 if vnd_cols and vnd_vendor_col and vnd_lastname_col:
                     select_parts.append(f"COALESCE(vnd.`{vnd_lastname_col}`, CONCAT('Vendor ', poh.`{poh_vendor_col}`)) AS vendor_name")
                     join_part = f"LEFT JOIN vnd ON vnd.`{vnd_vendor_col}` = poh.`{poh_vendor_col}`"
@@ -649,12 +704,12 @@ def get_sales_insights(
 
                 rows = conn.execute(text(sql), params).mappings()
                 status_map = {4: "posted", 6: "received", 8: "open"}
-                
+
                 # For each vendor, fetch individual order details from pod
                 for r in rows:
                     vendor_num = str(r.get("vendor_num", ""))
                     status_code = int(r.get("status", 0))
-                    
+
                     # Fetch order details from pod for this vendor
                     order_details = []
                     if _table_exists(conn, db_name, "pod") and poh_id_col:
@@ -662,15 +717,15 @@ def get_sales_insights(
                         pod_po_col = _pick_column(pod_cols, ["po", "po_id", "poh_id", "invno"]) or poh_id_col
                         pod_total_col = _pick_column(pod_cols, ["total", "amount", "price"]) or None
                         pod_date_col = _pick_column(pod_cols, ["date", "pdate", "created_at"]) or None
-                        
+
                         # Get POs from poh for this vendor with today's date and matching status
                         poh_ids_where = [f"poh.`{poh_vendor_col}` = :vnum", f"poh.`{poh_status_col}` = :stat"]
                         poh_ids_params = {"vnum": vendor_num, "stat": status_code}
-                        
+
                         if date_filters:
                             poh_ids_where.append(f"({' OR '.join(date_filters)})")
                             poh_ids_params.update(params)
-                        
+
                         poh_ids_sql = f"""
                             SELECT poh.`{poh_id_col}` AS po_id
                             FROM poh
@@ -678,11 +733,11 @@ def get_sales_insights(
                         """
                         poh_id_rows = conn.execute(text(poh_ids_sql), poh_ids_params).mappings()
                         po_ids = [str(row.get("po_id")) for row in poh_id_rows if row.get("po_id")]
-                        
+
                         if po_ids and pod_po_col:
                             pod_where = [f"`{pod_po_col}` IN :poids"]
                             pod_params = {"poids": tuple(po_ids)}
-                            
+
                             pod_select = [f"`{pod_po_col}` AS po_id"]
                             if pod_total_col:
                                 pod_select.append(f"SUM(`{pod_total_col}`) AS order_total")
@@ -690,7 +745,7 @@ def get_sales_insights(
                                 pod_select.append("0 AS order_total")
                             if pod_date_col:
                                 pod_select.append(f"MIN(DATE(`{pod_date_col}`)) AS order_date")
-                            
+
                             pod_sql = f"""
                                 SELECT {', '.join(pod_select)}
                                 FROM pod
@@ -705,7 +760,8 @@ def get_sales_insights(
                                     "order_total": float(pod_row.get("order_total", 0) or 0),
                                     "order_date": str(pod_row.get("order_date", "")) if pod_row.get("order_date") else None,
                                 })
-                    
+                                freshness.track(pod_row.get("order_date"))
+
                     purchase_orders.append({
                         "vendor_name": str(r.get("vendor_name", "")),
                         "vendor_num": vendor_num,
@@ -723,21 +779,21 @@ def get_sales_insights(
                 lcost_col = _pick_column(inv_cols, ["lcost", "last_cost"]) or None
                 acost_col = _pick_column(inv_cols, ["acost", "avg_cost"]) or None
                 inv_cat_col = _pick_column(inv_cols, ["cat", "category", "catcode"]) or None
-                
+
                 if qty_col and (lcost_col or acost_col):
                     parts = []
                     if lcost_col:
                         parts.append(f"SUM(COALESCE(`{qty_col}`,0) * COALESCE(`{lcost_col}`,0)) AS total_lcost")
                     if acost_col:
                         parts.append(f"SUM(COALESCE(`{qty_col}`,0) * COALESCE(`{acost_col}`,0)) AS total_acost")
-                    
+
                     # Try to get category breakdown if cat table exists
                     segments = []
                     if inv_cat_col and _table_exists(conn, db_name, "cat"):
                         cat_cols = _get_columns(conn, db_name, "cat")
                         cat_code = _pick_column(cat_cols, ["cat", "code", "id"]) or "cat"
                         cat_label = _pick_column(cat_cols, ["desc", "description", "name", "label"]) or cat_code
-                        
+
                         cost_expr = f"SUM(COALESCE(inv.`{qty_col}`,0) * COALESCE(inv.`{lcost_col or acost_col}`,0))"
                         cat_sql = f"""
                             SELECT COALESCE(cat.`{cat_label}`, inv.`{inv_cat_col}`) AS category_label,
@@ -777,7 +833,7 @@ def get_sales_insights(
                             }
                             for r in cat_rows
                         ]
-                    
+
                     inv_sql = f"SELECT {', '.join(parts)} FROM inv"
                     r = conn.execute(text(inv_sql)).mappings().first()
                     inventory = {
@@ -838,6 +894,11 @@ def get_sales_insights(
                     }
                     for r in rows
                 ]
+                for r in rows:
+                    try:
+                        freshness.track(datetime(int(r["year"]), 1, 1))
+                    except Exception:
+                        continue
 
             payload = {
                 "store": response_meta,
@@ -853,6 +914,10 @@ def get_sales_insights(
                 "inventory": inventory,
                 "sales_history": history,
             }
+
+            freshness_info = freshness.to_payload()
+            if freshness_info:
+                payload["data_freshness"] = freshness_info
 
             return payload
 
@@ -877,6 +942,7 @@ def get_operations_insights(
         engine = _get_engine(db_user, db_pass, db_name)
 
         with engine.connect() as conn:
+            freshness = FreshnessTracker()
             response_meta = {
                 "store_db": db_name,
                 "store_id": selected_store.get("store_id"),
@@ -923,20 +989,22 @@ def get_operations_insights(
                     # Get all rows for grouping by sale
                     sql = f"""
                         SELECT `{jnl_sale_col}` AS sale_id, `{jnl_line_col}` AS line_code,
-                               `{jnl_price_col}` AS price, `{jnl_descript_col}` AS descript
+                               `{jnl_price_col}` AS price, `{jnl_descript_col}` AS descript,
+                               DATE(`{jnl_date_col}`) AS sale_date
                         FROM jnl
                         WHERE {' AND '.join(where_parts) if where_parts else '1=1'}
                         ORDER BY `{jnl_sale_col}`, `{jnl_line_col}`
                     """
                     rows = conn.execute(text(sql), params).mappings()
-                    
+
                     # Group by sale_id to find valid transactions
                     current_sale = None
                     current_group = []
                     for row in rows:
+                        freshness.track(row.get("sale_date"))
                         sale_id = str(row.get("sale_id", ""))
                         line_code = str(row.get("line_code", ""))
-                        
+
                         if sale_id != current_sale:
                             # Process previous group
                             if current_group:
@@ -952,7 +1020,7 @@ def get_operations_insights(
                                                     total_till += price_val
                                             except:
                                                 pass
-                                    
+
                                     # Check for gift card patterns in line 980 (tender line)
                                     if jnl_descript_col:
                                         has_gift_pattern = False
@@ -962,7 +1030,7 @@ def get_operations_insights(
                                                 if any(pattern in desc for pattern in ["gift card", "giftcard", "gc", "gift cert", "giftcert", "gift certificate", "giftcertificate", "gift crd", "giftcrd"]):
                                                     has_gift_pattern = True
                                                     break
-                                        
+
                                         if has_gift_pattern:
                                             # Check if it's a redemption (negative price) or purchase (positive)
                                             for r in current_group:
@@ -977,12 +1045,12 @@ def get_operations_insights(
                                                             gift_purchase_amount += price_val
                                                     except:
                                                         pass
-                            
+
                             current_sale = sale_id
                             current_group = [row]
                         else:
                             current_group.append(row)
-                    
+
                     # Process last group
                     if current_group:
                         lines = {r.get("line_code", "") for r in current_group}
@@ -1005,11 +1073,11 @@ def get_operations_insights(
                 inv_cols = _get_columns(conn, db_name, "inv")
                 inv_deleted_col = _pick_column(inv_cols, ["deleted", "del", "is_deleted"]) or None
                 inv_cdate_col = _pick_column(inv_cols, ["cdate", "created_date", "created_at", "date"]) or None
-                
+
                 where_parts = []
                 if inv_deleted_col:
                     where_parts.append(f"UPPER(`{inv_deleted_col}`) != 'T'")
-                
+
                 if inv_cdate_col:
                     sql = f"""
                         SELECT COUNT(*) AS cnt,
@@ -1024,13 +1092,14 @@ def get_operations_insights(
                         FROM inv
                         {'WHERE ' + ' AND '.join(where_parts) if where_parts else ''}
                     """
-                
+
                 r = conn.execute(text(sql)).mappings().first()
                 if r:
                     product_count = int(r.get("cnt", 0) or 0)
                     if inv_cdate_col:
                         first_product_date = str(r.get("first_date", "")) if r.get("first_date") else None
                         last_product_date = str(r.get("last_date", "")) if r.get("last_date") else None
+                        freshness.track(first_product_date, last_product_date)
 
             # Supplier invoice counts from poh
             supplier_invoice_count = 0
@@ -1041,24 +1110,24 @@ def get_operations_insights(
                 poh_status_col = _pick_column(poh_cols, ["status", "stat"]) or "status"
                 poh_vendor_col = _pick_column(poh_cols, ["vendor", "vcode"]) or "vendor"
                 poh_rcvdate_col = _pick_column(poh_cols, ["rcvdate", "received_date", "rcv_date"]) or None
-                
+
                 where_parts = [
                     f"`{poh_status_col}` IN ('3', '4', 3, 4)",
                     f"`{poh_vendor_col}` NOT IN ('9998', '9999', 9998, 9999)"
                 ]
-                
+
                 if poh_rcvdate_col:
                     if start:
                         where_parts.append(f"DATE(`{poh_rcvdate_col}`) >= :poh_start")
                     if end:
                         where_parts.append(f"DATE(`{poh_rcvdate_col}`) <= :poh_end")
-                    
+
                     params_poh: Dict[str, Any] = {}
                     if start:
                         params_poh["poh_start"] = start
                     if end:
                         params_poh["poh_end"] = end
-                    
+
                     sql = f"""
                         SELECT COUNT(*) AS cnt,
                                MIN(DATE(`{poh_rcvdate_col}`)) AS first_date,
@@ -1071,6 +1140,7 @@ def get_operations_insights(
                         supplier_invoice_count = int(r.get("cnt", 0) or 0)
                         first_supplier_date = str(r.get("first_date", "")) if r.get("first_date") else None
                         last_supplier_date = str(r.get("last_date", "")) if r.get("last_date") else None
+                        freshness.track(first_supplier_date, last_supplier_date)
                 else:
                     sql = f"""
                         SELECT COUNT(*) AS cnt
@@ -1081,31 +1151,36 @@ def get_operations_insights(
                     if r:
                         supplier_invoice_count = int(r.get("cnt", 0) or 0)
 
-            return {
+            payload = {
                 "store": response_meta,
                 "transaction_count": tx_count,
                 "total_till": round(total_till, 2),
                 "gift_cards": {
                     "redemptions": {
                         "count": gift_redeem_count,
-                        "amount": round(gift_redeem_amount, 2)
+                        "amount": round(gift_redeem_amount, 2),
                     },
                     "purchases": {
                         "count": gift_purchase_count,
-                        "amount": round(gift_purchase_amount, 2)
-                    }
+                        "amount": round(gift_purchase_amount, 2),
+                    },
                 },
                 "products": {
                     "count": product_count,
                     "first_created": first_product_date,
-                    "last_created": last_product_date
+                    "last_created": last_product_date,
                 },
                 "supplier_invoices": {
                     "count": supplier_invoice_count,
                     "first_date": first_supplier_date,
-                    "last_date": last_supplier_date
-                }
+                    "last_date": last_supplier_date,
+                },
             }
+
+            freshness_info = freshness.to_payload()
+            if freshness_info:
+                payload["data_freshness"] = freshness_info
+            return payload
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get operations insights: {str(e)}")
@@ -1128,6 +1203,7 @@ def get_tenders_insights(
         engine = _get_engine(db_user, db_pass, db_name)
 
         with engine.connect() as conn:
+            freshness = FreshnessTracker()
             response_meta = {
                 "store_db": db_name,
                 "store_id": selected_store.get("store_id"),
@@ -1168,20 +1244,21 @@ def get_tenders_insights(
                         ORDER BY DATE(`{jnl_date_col}`), `{jnl_descript_col}`
                     """
                     rows = conn.execute(text(sql), params).mappings()
-                    
+
                     # Group by date and payment type
                     from collections import defaultdict
                     by_type = defaultdict(lambda: {"sale_amount": 0.0, "sale_count": 0, "reversal_amount": 0.0, "reversal_count": 0})
                     by_date_type = defaultdict(lambda: {"sale_amount": 0.0, "sale_count": 0, "reversal_amount": 0.0, "reversal_count": 0})
-                    
+
                     for row in rows:
                         try:
                             price = float(row.get("price") or 0)
                             descript = str(row.get("descript", "") or "")
                             date_str = str(row.get("date", "")) if row.get("date") else ""
-                            
+                            freshness.track(date_str)
+
                             payment_type = _normalize_payment_type(descript)
-                            
+
                             if price >= 0:
                                 by_type[payment_type]["sale_amount"] += price
                                 by_type[payment_type]["sale_count"] += 1
@@ -1196,7 +1273,7 @@ def get_tenders_insights(
                                     by_date_type[(date_str, payment_type)]["reversal_count"] += 1
                         except:
                             continue
-                    
+
                     # Build tenders summary
                     for payment_type, stats in by_type.items():
                         tenders_data.append({
@@ -1207,7 +1284,7 @@ def get_tenders_insights(
                             "reversal_count": stats["reversal_count"],
                             "net_amount": round(stats["sale_amount"] - stats["reversal_amount"], 2)
                         })
-                    
+
                     # Build daily trends
                     daily_by_date = defaultdict(lambda: defaultdict(lambda: {"sale_amount": 0.0, "reversal_amount": 0.0}))
                     for (date_str, payment_type), stats in by_date_type.items():
@@ -1215,7 +1292,7 @@ def get_tenders_insights(
                             "sale_amount": stats["sale_amount"],
                             "reversal_amount": stats["reversal_amount"]
                         }
-                    
+
                     for date_str in sorted(daily_by_date.keys()):
                         daily_trends.append({
                             "date": date_str,
@@ -1228,11 +1305,17 @@ def get_tenders_insights(
                             }
                         })
 
-            return {
+            payload = {
                 "store": response_meta,
-                "tenders": sorted(tenders_data, key=lambda x: x["net_amount"], reverse=True),
-                "daily_trends": daily_trends
+                "tenders": sorted(
+                    tenders_data, key=lambda x: x["net_amount"], reverse=True
+                ),
+                "daily_trends": daily_trends,
             }
+            freshness_info = freshness.to_payload()
+            if freshness_info:
+                payload["data_freshness"] = freshness_info
+            return payload
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get tenders insights: {str(e)}")
@@ -1255,6 +1338,7 @@ def get_gateway_insights(
         engine = _get_engine(db_user, db_pass, db_name)
 
         with engine.connect() as conn:
+            freshness = FreshnessTracker()
             response_meta = {
                 "store_db": db_name,
                 "store_id": selected_store.get("store_id"),
@@ -1289,29 +1373,31 @@ def get_gateway_insights(
                         params["end"] = end
 
                     sql = f"""
-                        SELECT `{jnl_price_col}` AS price, `{jnl_descript_col}` AS descript
+                        SELECT `{jnl_price_col}` AS price, `{jnl_descript_col}` AS descript,
+                               DATE(`{jnl_date_col}`) AS txn_date
                         FROM jnl
                         WHERE {' AND '.join(where_parts)}
                     """
                     rows = conn.execute(text(sql), params).mappings()
-                    
+
                     from collections import defaultdict
                     by_type_ecom = defaultdict(lambda: {"in_store": 0.0, "ecommerce": 0.0})
-                    
+
                     for row in rows:
                         try:
                             price = float(row.get("price") or 0)
                             if price < 0:
                                 continue  # Skip reversals
-                            
+                            freshness.track(row.get("txn_date"))
+
                             descript = str(row.get("descript", "") or "").lower()
-                            
+
                             # Check if it's a credit card
                             payment_type = _normalize_payment_type(descript)
                             if payment_type in ["Visa", "MasterCard", "AmEx", "Discover", "Debit"]:
                                 # Check if ecommerce
                                 is_ecom = any(x in descript for x in ["web", "ecommerce", "online", "ecom", "e-commerce", "internet", "online order", "web order", "online sale"])
-                                
+
                                 if is_ecom:
                                     by_type_ecom[payment_type]["ecommerce"] += price
                                     total_ecom_sales += price
@@ -1320,7 +1406,7 @@ def get_gateway_insights(
                                     total_cc_sales += price
                         except:
                             continue
-                    
+
                     for payment_type, stats in by_type_ecom.items():
                         credit_card_data.append({
                             "tender_type": payment_type,
@@ -1329,15 +1415,21 @@ def get_gateway_insights(
                             "total_sales": round(stats["in_store"] + stats["ecommerce"], 2)
                         })
 
-            return {
+            payload = {
                 "store": response_meta,
-                "credit_cards": sorted(credit_card_data, key=lambda x: x["total_sales"], reverse=True),
+                "credit_cards": sorted(
+                    credit_card_data, key=lambda x: x["total_sales"], reverse=True
+                ),
                 "summary": {
                     "total_credit_card_sales": round(total_cc_sales, 2),
                     "total_ecommerce_sales": round(total_ecom_sales, 2),
-                    "total_combined": round(total_cc_sales + total_ecom_sales, 2)
-                }
+                    "total_combined": round(total_cc_sales + total_ecom_sales, 2),
+                },
             }
+            freshness_info = freshness.to_payload()
+            if freshness_info:
+                payload["data_freshness"] = freshness_info
+            return payload
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get gateway insights: {str(e)}")
@@ -1358,8 +1450,10 @@ def get_quick_insights(
         engine = _get_engine(db_user, db_pass, db_name)
 
         today = datetime.now().strftime('%Y-%m-%d')
-        
+
         with engine.connect() as conn:
+            freshness = FreshnessTracker()
+            freshness.track(today)
             response_meta = {
                 "store_db": db_name,
                 "store_id": selected_store.get("store_id"),
@@ -1371,7 +1465,7 @@ def get_quick_insights(
             today_sales = 0.0
             today_items = 0
             today_tx_count = 0
-            
+
             if detected and _table_exists(conn, db_name, "jnl"):
                 jnl_cols = _get_columns(conn, db_name, "jnl")
                 jnl_date_col = _pick_column(jnl_cols, ["sale_date", "trans_date", "transaction_date", "tdate", "date"]) or None
@@ -1379,12 +1473,12 @@ def get_quick_insights(
                 jnl_sale_col = _pick_column(jnl_cols, ["sale", "sale_id", "invno"]) or "sale"
                 jnl_price_col = _pick_column(jnl_cols, ["amount", "price", "total"]) or None
                 jnl_rflag_col = _pick_column(jnl_cols, ["rflag"]) or None
-                
+
                 if jnl_date_col and jnl_line_col and jnl_sale_col:
                     where_parts = [f"DATE(`{jnl_date_col}`) = :today"]
                     if jnl_rflag_col:
                         where_parts.append(f"`{jnl_rflag_col}` = 0")
-                    
+
                     sql = f"""
                         SELECT `{jnl_sale_col}` AS sale_id, `{jnl_line_col}` AS line_code,
                                `{jnl_price_col}` AS price
@@ -1393,7 +1487,7 @@ def get_quick_insights(
                         ORDER BY `{jnl_sale_col}`, `{jnl_line_col}`
                     """
                     rows = conn.execute(text(sql), {"today": today}).mappings()
-                    
+
                     current_sale = None
                     current_group = []
                     for row in rows:
@@ -1415,7 +1509,7 @@ def get_quick_insights(
                             current_group = [row]
                         else:
                             current_group.append(row)
-                    
+
                     if current_group:
                         lines = {r.get("line_code", "") for r in current_group}
                         if "950" in lines and "980" in lines:
@@ -1436,7 +1530,7 @@ def get_quick_insights(
                 hst_date = _pick_column(hst_cols, ["date", "tdate", "sale_date", "trans_date"]) or "date"
                 hst_qty = _pick_column(hst_cols, ["qty", "quantity"]) or "qty"
                 hst_sku = _pick_column(hst_cols, ["sku"]) or "sku"
-                
+
                 sql = f"""
                     SELECT `{hst_sku}` AS sku, SUM(`{hst_qty}`) AS total_qty
                     FROM hst
@@ -1447,7 +1541,7 @@ def get_quick_insights(
                 """
                 rows = conn.execute(text(sql), {"today": today}).mappings()
                 skus = [str(r["sku"]) for r in rows]
-                
+
                 inv_names = {}
                 if skus and _table_exists(conn, db_name, "inv"):
                     inv_cols = _get_columns(conn, db_name, "inv")
@@ -1458,7 +1552,7 @@ def get_quick_insights(
                     inv_rows = conn.execute(inv_sql, in_params).mappings()
                     for r in inv_rows:
                         inv_names[str(r["sku"])] = str(r["name"]) if r["name"] is not None else ""
-                
+
                 top_items_today = [
                     {
                         "sku": str(r["sku"]),
@@ -1476,7 +1570,7 @@ def get_quick_insights(
                 jnl_line_col = _pick_column(jnl_cols, ["line", "line_code"]) or "line"
                 jnl_price_col = _pick_column(jnl_cols, ["amount", "price", "total"]) or None
                 jnl_descript_col = _pick_column(jnl_cols, ["descript", "description", "desc"]) or None
-                
+
                 if jnl_date_col and jnl_line_col and jnl_price_col and jnl_descript_col:
                     sql = f"""
                         SELECT `{jnl_price_col}` AS price, `{jnl_descript_col}` AS descript
@@ -1485,7 +1579,7 @@ def get_quick_insights(
                           AND `{jnl_line_col}` BETWEEN 980 AND 989
                     """
                     rows = conn.execute(text(sql), {"today": today}).mappings()
-                    
+
                     from collections import defaultdict
                     by_type = defaultdict(lambda: 0.0)
                     for row in rows:
@@ -1497,7 +1591,7 @@ def get_quick_insights(
                                 by_type[payment_type] += price
                         except:
                             continue
-                    
+
                     payment_methods_today = [
                         {"method": pt, "amount": round(amt, 2)}
                         for pt, amt in sorted(by_type.items(), key=lambda x: x[1], reverse=True)
@@ -1512,7 +1606,7 @@ def get_quick_insights(
                 jnl_sale_col = _pick_column(jnl_cols, ["sale", "sale_id", "invno"]) or "sale"
                 jnl_price_col = _pick_column(jnl_cols, ["amount", "price", "total"]) or None
                 jnl_descript_col = _pick_column(jnl_cols, ["descript", "description", "desc"]) or None
-                
+
                 if jnl_date_col and jnl_line_col and jnl_sale_col and jnl_price_col and jnl_descript_col:
                     sql = f"""
                         SELECT `{jnl_sale_col}` AS sale_id, `{jnl_line_col}` AS line_code,
@@ -1522,7 +1616,7 @@ def get_quick_insights(
                         ORDER BY `{jnl_sale_col}`, `{jnl_line_col}`
                     """
                     rows = conn.execute(text(sql), {"today": today}).mappings()
-                    
+
                     current_sale = None
                     current_group = []
                     for row in rows:
@@ -1537,7 +1631,7 @@ def get_quick_insights(
                                         if any(pattern in desc for pattern in ["gift card", "giftcard", "gc", "gift cert", "giftcert", "gift certificate", "giftcertificate", "gift crd", "giftcrd"]):
                                             has_gift = True
                                             break
-                                
+
                                 if "950" in lines and "980" in lines and has_gift:
                                     for r in current_group:
                                         if r.get("line_code") == "950":
@@ -1555,7 +1649,7 @@ def get_quick_insights(
                             current_group = [row]
                         else:
                             current_group.append(row)
-                    
+
                     if current_group:
                         lines = {r.get("line_code", "") for r in current_group}
                         has_gift = False
@@ -1565,7 +1659,7 @@ def get_quick_insights(
                                 if any(pattern in desc for pattern in ["gift card", "giftcard", "gc", "gift cert", "giftcert", "gift certificate", "giftcertificate", "gift crd", "giftcrd"]):
                                     has_gift = True
                                     break
-                        
+
                         if "950" in lines and "980" in lines and has_gift:
                             for r in current_group:
                                 if r.get("line_code") == "950":
@@ -1579,7 +1673,7 @@ def get_quick_insights(
                                             gift_card_activity["purchase_amount"] += price_val
                                     except:
                                         pass
-                    
+
                     gift_card_activity["redemption_amount"] = round(gift_card_activity["redemption_amount"], 2)
                     gift_card_activity["purchase_amount"] = round(gift_card_activity["purchase_amount"], 2)
 
@@ -1592,10 +1686,10 @@ def get_quick_insights(
                 poh_total_col = _pick_column(poh_cols, ["total"]) or None
                 poh_rcv_col = _pick_column(poh_cols, ["rcvdate", "received_date", "rcv_date"]) or None
                 poh_ord_col = _pick_column(poh_cols, ["orddate", "order_date"]) or None
-                
+
                 from datetime import timedelta
                 three_days_ago = (datetime.now() - timedelta(days=3)).strftime('%Y-%m-%d')
-                
+
                 where_parts = [f"poh.`{poh_status_col}` IN (4, 6, 8)"]
                 date_filters = []
                 if poh_rcv_col:
@@ -1604,11 +1698,11 @@ def get_quick_insights(
                     date_filters.append(f"(poh.`{poh_status_col}` = 8 AND DATE(poh.`{poh_ord_col}`) >= :three_days_ago)")
                 if date_filters:
                     where_parts.append(f"({' OR '.join(date_filters)})")
-                
+
                 vnd_cols = _get_columns(conn, db_name, "vnd") if _table_exists(conn, db_name, "vnd") else []
                 vnd_vendor_col = _pick_column(vnd_cols, ["vendor"])
                 vnd_lastname_col = _pick_column(vnd_cols, ["lastname", "last_name", "lname"])
-                
+
                 select_parts = [f"poh.`{poh_vendor_col}` AS vendor_num"]
                 if vnd_cols and vnd_vendor_col and vnd_lastname_col:
                     select_parts.append(f"COALESCE(vnd.`{vnd_lastname_col}`, CONCAT('Vendor ', poh.`{poh_vendor_col}`)) AS vendor_name")
@@ -1616,12 +1710,12 @@ def get_quick_insights(
                 else:
                     select_parts.append(f"CONCAT('Vendor ', poh.`{poh_vendor_col}`) AS vendor_name")
                     join_part = ""
-                
+
                 if poh_total_col:
                     select_parts.append(f"SUM(poh.`{poh_total_col}`) AS po_total")
                 else:
                     select_parts.append("0 AS po_total")
-                
+
                 sql = f"""
                     SELECT {', '.join(select_parts)}
                     FROM poh
@@ -1640,18 +1734,23 @@ def get_quick_insights(
                     for r in rows
                 ]
 
-            return {
+            payload = {
                 "store": response_meta,
                 "date": today,
                 "sales_summary": {
                     "total_sales": round(today_sales, 2),
-                    "transaction_count": today_tx_count
+                    "transaction_count": today_tx_count,
                 },
                 "top_items": top_items_today,
                 "payment_methods": payment_methods_today,
                 "gift_card_activity": gift_card_activity,
-                "recent_purchase_orders": recent_pos
+                "recent_purchase_orders": recent_pos,
             }
+
+            freshness_info = freshness.to_payload()
+            if freshness_info:
+                payload["data_freshness"] = freshness_info
+            return payload
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get quick insights: {str(e)}")

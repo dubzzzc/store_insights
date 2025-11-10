@@ -23,10 +23,9 @@ app.add_middleware(
 )
 
 
-
 @app.get("/")
 def root():
-    return {"message": "Store Insights API is running"}
+    return {"message": "Spirit Store Insights API is running"}
 
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(insights_router, prefix="/insights", tags=["insights"])
