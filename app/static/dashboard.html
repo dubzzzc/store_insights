@@ -239,6 +239,43 @@
     color: rgba(226, 232, 240, 0.5);
   }
 
+  .spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: rgba(255, 255, 255, 0.9);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(248, 250, 252, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    border-radius: 0.75rem;
+  }
+
+  .loading-overlay .spinner {
+    width: 32px;
+    height: 32px;
+    border-width: 3px;
+    margin-right: 0;
+  }
+
   .app-main {
     flex: 1;
     background: #f8fafc;
@@ -2570,12 +2607,26 @@ const AdminView = ({
               onChange={(e) => onDateRangeChange({ ...(dateRange || {}), end: e.target.value })}
             />
             <button type="button" className="secondary" onClick={onRefresh} disabled={isLoading}>
-              {isLoading ? 'Refreshing…' : 'Refresh'}
+              {isLoading ? (
+                <>
+                  <span className="spinner"></span>
+                  Refreshing…
+                </>
+              ) : (
+                'Refresh'
+              )}
             </button>
           </div>
         </div>
         <div className={`sales-chart-grid${activeMeta.hasLegend ? ' with-legend' : ''}`}>
-          <div className="chart-area">{activeMeta.chart}</div>
+          <div className="chart-area" style={{ position: 'relative' }}>
+            {activeMeta.chart}
+            {isLoading && (
+              <div className="loading-overlay">
+                <span className="spinner"></span>
+              </div>
+            )}
+          </div>
           {activeMeta.hasLegend ? activeMeta.legend : null}
         </div>
         <div className="sales-view-tabs">
@@ -3416,9 +3467,9 @@ const ModuleNav = ({ active, onChange }) => {
           />
         ) : null}
 
-        {activeModule === 'purchase' ? <PurchaseOrdersModule orders={purchaseOrders} dateRange={poRange} onDateRangeChange={onPoRangeChange} /> : null}
+        {activeModule === 'purchase' ? <PurchaseOrdersModule orders={purchaseOrders} dateRange={poRange} onDateRangeChange={handlePoRangeChange} /> : null}
 
-        {activeModule === 'inventory' ? <InventoryModule snapshot={inventory} dateRange={invRange} onDateRangeChange={onInvRangeChange} /> : null}
+        {activeModule === 'inventory' ? <InventoryModule snapshot={inventory} dateRange={invRange} onDateRangeChange={handleInvRangeChange} /> : null}
 
         {activeModule === 'history' ? <HistoryModule history={history} /> : null}
 
@@ -3468,25 +3519,66 @@ const ModuleNav = ({ active, onChange }) => {
           return `${y}-${m}-${dd}`;
         };
         const [dateRange, setDateRange] = useState({ start: todayYmd(), end: todayYmd() });
+        const [dateRangeEndManual, setDateRangeEndManual] = useState(false);
         const [poRange, setPoRange] = useState({ start: '', end: '' });
+        const [poRangeEndManual, setPoRangeEndManual] = useState(false);
         const [invRange, setInvRange] = useState({ start: '', end: '' });
+        const [invRangeEndManual, setInvRangeEndManual] = useState(false);
 
-        // Auto-set end date to start date when end is empty
-        useEffect(() => {
-          if (dateRange?.start && !dateRange?.end) {
-            setDateRange((prev) => ({ ...(prev || {}), end: prev.start }));
+        // Auto-set end date to start date when start changes (unless end was manually set)
+        const handleDateRangeChange = useCallback((newRange) => {
+          setDateRange((prev) => {
+            const updated = { ...(prev || {}), ...newRange };
+            // If start changed and end wasn't manually set, update end to match start
+            if (newRange.start && newRange.start !== prev?.start && !dateRangeEndManual) {
+              updated.end = newRange.start;
+              setDateRangeEndManual(false); // Reset manual flag when auto-updating
+            }
+            // If both dates match, reset manual flag (user might be resetting)
+            if (updated.start && updated.end && updated.start === updated.end) {
+              setDateRangeEndManual(false);
+            }
+            return updated;
+          });
+          // Track if end was manually changed (only if it's different from start)
+          if (newRange.end !== undefined && newRange.end !== newRange.start) {
+            setDateRangeEndManual(true);
           }
-        }, [dateRange?.start]);
-        useEffect(() => {
-          if (poRange?.start && !poRange?.end) {
-            setPoRange((prev) => ({ ...(prev || {}), end: prev.start }));
+        }, [dateRangeEndManual]);
+
+        const handlePoRangeChange = useCallback((newRange) => {
+          setPoRange((prev) => {
+            const updated = { ...(prev || {}), ...newRange };
+            if (newRange.start && newRange.start !== prev?.start && !poRangeEndManual) {
+              updated.end = newRange.start;
+              setPoRangeEndManual(false);
+            }
+            if (updated.start && updated.end && updated.start === updated.end) {
+              setPoRangeEndManual(false);
+            }
+            return updated;
+          });
+          if (newRange.end !== undefined && newRange.end !== newRange.start) {
+            setPoRangeEndManual(true);
           }
-        }, [poRange?.start]);
-        useEffect(() => {
-          if (invRange?.start && !invRange?.end) {
-            setInvRange((prev) => ({ ...(prev || {}), end: prev.start }));
+        }, [poRangeEndManual]);
+
+        const handleInvRangeChange = useCallback((newRange) => {
+          setInvRange((prev) => {
+            const updated = { ...(prev || {}), ...newRange };
+            if (newRange.start && newRange.start !== prev?.start && !invRangeEndManual) {
+              updated.end = newRange.start;
+              setInvRangeEndManual(false);
+            }
+            if (updated.start && updated.end && updated.start === updated.end) {
+              setInvRangeEndManual(false);
+            }
+            return updated;
+          });
+          if (newRange.end !== undefined && newRange.end !== newRange.start) {
+            setInvRangeEndManual(true);
           }
-        }, [invRange?.start]);
+        }, [invRangeEndManual]);
 
         const [adminKey, setAdminKey] = useState(() => storage.get(STORAGE_KEYS.adminKey, ''));
         const [adminUsers, setAdminUsers] = useState([]);
@@ -4324,7 +4416,7 @@ const ModuleNav = ({ active, onChange }) => {
                 loading={isLoadingData}
                 error={authError}
                 dateRange={dateRange}
-                onDateRangeChange={setDateRange}
+                onDateRangeChange={handleDateRangeChange}
               />
             );
 
