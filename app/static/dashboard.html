@@ -3467,9 +3467,9 @@ const ModuleNav = ({ active, onChange }) => {
           />
         ) : null}
 
-        {activeModule === 'purchase' ? <PurchaseOrdersModule orders={purchaseOrders} dateRange={poRange} onDateRangeChange={handlePoRangeChange} /> : null}
+        {activeModule === 'purchase' ? <PurchaseOrdersModule orders={purchaseOrders} dateRange={poRange} onDateRangeChange={onPoRangeChange} /> : null}
 
-        {activeModule === 'inventory' ? <InventoryModule snapshot={inventory} dateRange={invRange} onDateRangeChange={handleInvRangeChange} /> : null}
+        {activeModule === 'inventory' ? <InventoryModule snapshot={inventory} dateRange={invRange} onDateRangeChange={onInvRangeChange} /> : null}
 
         {activeModule === 'history' ? <HistoryModule history={history} /> : null}
 
@@ -4417,6 +4417,10 @@ const ModuleNav = ({ active, onChange }) => {
                 error={authError}
                 dateRange={dateRange}
                 onDateRangeChange={handleDateRangeChange}
+                poRange={poRange}
+                onPoRangeChange={handlePoRangeChange}
+                invRange={invRange}
+                onInvRangeChange={handleInvRangeChange}
               />
             );
 
