@@ -2600,6 +2600,17 @@ const AdminView = ({
               type="date"
               value={dateRange?.start || ''}
               onChange={(e) => onDateRangeChange({ ...(dateRange || {}), start: e.target.value })}
+              onBlur={(e) => {
+                // Ensure end date is set when user finishes typing start date
+                if (e.target.value) {
+                  const newRange = { ...(dateRange || {}), start: e.target.value };
+                  if (!dateRange?.end || dateRange.end === dateRange.start) {
+                    onDateRangeChange({ ...newRange, end: e.target.value });
+                  } else {
+                    onDateRangeChange(newRange);
+                  }
+                }
+              }}
             />
             <input
               type="date"
@@ -3529,8 +3540,11 @@ const ModuleNav = ({ active, onChange }) => {
         const handleDateRangeChange = useCallback((newRange) => {
           setDateRange((prev) => {
             const updated = { ...(prev || {}), ...newRange };
+            const startChanged = newRange.start !== undefined && newRange.start !== prev?.start;
+            const endChanged = newRange.end !== undefined && newRange.end !== prev?.end;
+            
             // If start changed and end wasn't manually set, update end to match start
-            if (newRange.start && newRange.start !== prev?.start && !dateRangeEndManual) {
+            if (startChanged && !dateRangeEndManual) {
               updated.end = newRange.start;
               setDateRangeEndManual(false); // Reset manual flag when auto-updating
             }
@@ -4011,34 +4025,41 @@ const ModuleNav = ({ active, onChange }) => {
             return;
           }
           
+          // Compare date strings directly to catch all changes (including manual typing)
           const dateRangeChanged = 
-            prevDateRangeRef.current?.start !== dateRange?.start ||
-            prevDateRangeRef.current?.end !== dateRange?.end;
+            (prevDateRangeRef.current?.start || '') !== (dateRange?.start || '') ||
+            (prevDateRangeRef.current?.end || '') !== (dateRange?.end || '');
           const poRangeChanged =
-            prevPoRangeRef.current?.start !== poRange?.start ||
-            prevPoRangeRef.current?.end !== poRange?.end;
+            (prevPoRangeRef.current?.start || '') !== (poRange?.start || '') ||
+            (prevPoRangeRef.current?.end || '') !== (poRange?.end || '');
           const invRangeChanged =
-            prevInvRangeRef.current?.start !== invRange?.start ||
-            prevInvRangeRef.current?.end !== invRange?.end;
+            (prevInvRangeRef.current?.start || '') !== (invRange?.start || '') ||
+            (prevInvRangeRef.current?.end || '') !== (invRange?.end || '');
           
           if (dateRangeChanged || poRangeChanged || invRangeChanged) {
             prevDateRangeRef.current = dateRange;
             prevPoRangeRef.current = poRange;
             prevInvRangeRef.current = invRange;
             
-            // Debounce the refresh to avoid too many requests
-            if (debounceRef.current) clearTimeout(debounceRef.current);
-            debounceRef.current = setTimeout(() => {
-              if (activeModule === 'sales' || activeModule === 'purchase' || activeModule === 'inventory') {
+            // Only refresh if we have valid dates and are on the relevant tab
+            const shouldRefresh = 
+              (activeModule === 'sales' && dateRange?.start) ||
+              (activeModule === 'purchase' && (poRange?.start || poRangeChanged)) ||
+              (activeModule === 'inventory' && (invRange?.start || invRangeChanged));
+            
+            if (shouldRefresh) {
+              // Debounce the refresh to avoid too many requests
+              if (debounceRef.current) clearTimeout(debounceRef.current);
+              debounceRef.current = setTimeout(() => {
                 loadInsights(token, storeQueryValue);
-              }
-            }, 300);
+              }, 400);
+            }
           }
           
           return () => {
             if (debounceRef.current) clearTimeout(debounceRef.current);
           };
-        }, [token, dateRange, poRange, invRange, activeModule, stores, selectedStore, userRole, storeQueryValue]);
+        }, [token, dateRange?.start, dateRange?.end, poRange?.start, poRange?.end, invRange?.start, invRange?.end, activeModule, stores, selectedStore, userRole, storeQueryValue]);
 
         useEffect(() => {
           if (!token || userRole === 'admin') return;
