@@ -544,11 +544,14 @@ def get_sales_insights(
                     ]
 
             # Payment methods from jnl tenders 980-989 (filter dates using jnl's date column)
+            # For cash (980), subtract CASH CHANGE (LINE 999) from the total
             payment_methods: List[Dict[str, Any]] = []
             if _table_exists(conn, db_name, "jnl"):
                 cols = _get_columns(conn, db_name, "jnl")
                 cat_col = "cat" if "cat" in cols else None
+                line_col = _pick_column(cols, ["line", "line_code"]) or None
                 jnl_date_filter_col = _pick_column(cols, ["sale_date", "trans_date", "transaction_date", "tdate", "date"]) or None
+                jnl_rflag = "rflag" if "rflag" in cols else None
                 amt_col = None
                 for c in ["amount", "total", "price"]:
                     if c in cols:
@@ -570,6 +573,10 @@ def get_sales_insights(
                         p_end_next = f"{end} 23:59:59"
                     where_parts.append(f"`{jnl_date_filter_col}` < :p_end_dt")
                     params3["p_end_dt"] = p_end_next
+                # Filter: RFLAG <= 0 (matches process_prefix)
+                if jnl_rflag:
+                    where_parts.append(f"`{jnl_rflag}` <= 0")
+
                 if cat_col and amt_col:
                     tender_sql = f"""
                         SELECT `{cat_col}` AS code, SUM(`{amt_col}`) AS total
@@ -583,11 +590,33 @@ def get_sales_insights(
                         984: "AmEx", 985: "Discover", 986: "Debit", 987: "Gift Card",
                         988: "House", 989: "EBT",
                     }
+
+                    # Get CASH CHANGE total (LINE 999) to subtract from cash
+                    cash_change_total = 0.0
+                    if line_col:
+                        cash_change_where = where_parts.copy()
+                        cash_change_where.append(f"`{line_col}` = 999")
+                        cash_change_sql = f"""
+                            SELECT SUM(`{amt_col}`) AS total
+                            FROM jnl
+                            WHERE {' AND '.join(cash_change_where)}
+                        """
+                        cash_change_row = (
+                            conn.execute(text(cash_change_sql), params3)
+                            .mappings()
+                            .first()
+                        )
+                        if cash_change_row:
+                            cash_change_total = float(cash_change_row.get("total") or 0)
+
                     total_sum = 0.0
                     tmp = []
                     for r in rows:
                         code = int(r["code"]) if r["code"] is not None else None
                         amount = float(r["total"] or 0)
+                        # Subtract CASH CHANGE from cash (code 980)
+                        if code == 980:
+                            amount = amount - cash_change_total
                         total_sum += amount
                         tmp.append({"method": label_map.get(code, str(code)), "total_sales": amount})
                     # add percentages
