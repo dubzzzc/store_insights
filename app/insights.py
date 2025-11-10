@@ -6,6 +6,8 @@ from datetime import datetime, date
 from collections import OrderedDict
 import os
 import atexit
+import time
+import logging
 
 """
 This module re-exports the sales insights router that dynamically adapts to
@@ -139,6 +141,41 @@ def _dispose_engines():
 
 
 atexit.register(_dispose_engines)
+
+# Configure logging for slow queries
+_logger = logging.getLogger(__name__)
+_SLOW_QUERY_THRESHOLD = float(
+    os.getenv("STORE_INSIGHTS_SLOW_QUERY_THRESHOLD", "2.0")
+)  # seconds
+
+
+def _execute_with_timing(conn, query, params=None, query_name="query"):
+    """
+    Execute a query with timing and log slow queries for performance monitoring.
+    """
+    start_time = time.time()
+    try:
+        result = conn.execute(text(query), params or {})
+        execution_time = time.time() - start_time
+
+        # Log slow queries
+        if execution_time > _SLOW_QUERY_THRESHOLD:
+            _logger.warning(
+                f"SLOW QUERY detected: {query_name} took {execution_time:.2f}s\n"
+                f"Query: {query[:200]}...\n"
+                f"Params: {params}"
+            )
+
+        return result
+    except Exception as e:
+        execution_time = time.time() - start_time
+        _logger.error(
+            f"QUERY ERROR after {execution_time:.2f}s: {query_name}\n"
+            f"Query: {query[:200]}...\n"
+            f"Error: {str(e)}"
+        )
+        raise
+
 
 def _table_exists(conn, db_name: str, table: str) -> bool:
     res = conn.execute(
@@ -550,12 +587,17 @@ def get_sales_insights(
                     ]
 
             # Payment methods from jnl tenders LINE 980-989 (filter dates using jnl's date column)
-            # For cash (LINE 980), subtract CASH CHANGE (LINE 999) from the total
-            # Tenders are identified by LINE number, not CAT
+            # Shows ALL payment types/tenders for the selected date range, including gift cards
+            # LINE 980-989 are just tender slots (order received), payment type is identified by CAT column
+            # For cash payments, subtract CASH CHANGE (LINE 999) from the total
             payment_methods: List[Dict[str, Any]] = []
             if _table_exists(conn, db_name, "jnl"):
                 cols = _get_columns(conn, db_name, "jnl")
                 line_col = _pick_column(cols, ["line", "line_code"]) or None
+                cat_col = "cat" if "cat" in cols else None
+                descript_col = (
+                    _pick_column(cols, ["descript", "description", "desc"]) or None
+                )
                 jnl_date_filter_col = _pick_column(cols, ["sale_date", "trans_date", "transaction_date", "tdate", "date"]) or None
                 jnl_rflag = "rflag" if "rflag" in cols else None
                 amt_col = None
@@ -563,10 +605,11 @@ def get_sales_insights(
                     if c in cols:
                         amt_col = c
                         break
-                where_parts = ["1=1"]
+                where_parts = []
                 params3: Dict[str, Any] = {}
+                # Date filter: show ALL tenders for the selected date range
                 if jnl_date_filter_col and start:
-                    where_parts.append(f"`{jnl_date_filter_col}` >= :p_start_dt")
+                    where_parts.append(f"jnl.`{jnl_date_filter_col}` >= :p_start_dt")
                     params3["p_start_dt"] = f"{start} 00:00:00"
                 if jnl_date_filter_col and end:
                     try:
@@ -577,11 +620,11 @@ def get_sales_insights(
                         ).strftime("%Y-%m-%d 00:00:00")
                     except Exception:
                         p_end_next = f"{end} 23:59:59"
-                    where_parts.append(f"`{jnl_date_filter_col}` < :p_end_dt")
+                    where_parts.append(f"jnl.`{jnl_date_filter_col}` < :p_end_dt")
                     params3["p_end_dt"] = p_end_next
-                # Filter: RFLAG <= 0 (matches process_prefix)
+                # Filter: RFLAG <= 0 (excludes returns/voids, includes all valid tenders)
                 if jnl_rflag:
-                    where_parts.append(f"`{jnl_rflag}` <= 0")
+                    where_parts.append(f"jnl.`{jnl_rflag}` <= 0")
 
                 if line_col and amt_col:
                     # Get sale identifier column to match CASH CHANGE to sales with cash tenders
@@ -589,24 +632,106 @@ def get_sales_insights(
                         _pick_column(cols, ["sale", "sale_id", "invno"]) or "sale"
                     )
 
-                    # Tenders are identified by LINE number: 980=Cash, 981=Check, 982=Visa, etc.
-                    tender_sql = f"""
-                        SELECT `{line_col}` AS code, SUM(`{amt_col}`) AS total
-                        FROM jnl
-                        WHERE {' AND '.join(where_parts)} AND `{line_col}` BETWEEN 980 AND 989
-                        GROUP BY `{line_col}`
-                    """
-                    rows = conn.execute(text(tender_sql), params3).mappings()
-                    label_map = {
-                        980: "Cash", 981: "Check", 982: "Visa", 983: "MasterCard",
-                        984: "AmEx", 985: "Discover", 986: "Debit", 987: "Gift Card",
-                        988: "House", 989: "EBT",
-                    }
+                    # Get ALL tenders (LINE 980-989) - payment type is identified by jnl.cat
+                    # Join to cat table to get cat.name for payment method names
+                    if cat_col:
+                        # Check if cat table exists and get column names
+                        cat_table_exists = _table_exists(conn, db_name, "cat")
+                        if cat_table_exists:
+                            cat_table_cols = _get_columns(conn, db_name, "cat")
+                            cat_code_col = (
+                                _pick_column(cat_table_cols, ["cat", "code", "id"])
+                                or "cat"
+                            )
+                            cat_name_col = (
+                                _pick_column(
+                                    cat_table_cols,
+                                    ["name", "desc", "description", "label"],
+                                )
+                                or "name"
+                            )
 
-                    # Get CASH CHANGE total (LINE 999) only for sales that have cash tenders (980)
+                            # Join jnl to cat table: jnl.cat = cat.cat to get cat.name
+                            # Use cat.name, fallback to descript, then cat code
+                            descript_fallback = (
+                                f"jnl.`{descript_col}`" if descript_col else "NULL"
+                            )
+                            descript_group = (
+                                f", jnl.`{descript_col}`" if descript_col else ""
+                            )
+                            tender_sql = f"""
+                                SELECT 
+                                    jnl.`{cat_col}` AS code,
+                                    COALESCE(cat.`{cat_name_col}`, {descript_fallback}, CAST(jnl.`{cat_col}` AS CHAR)) AS method_name,
+                                    SUM(jnl.`{amt_col}`) AS total
+                                FROM jnl
+                                LEFT JOIN cat ON cat.`{cat_code_col}` = jnl.`{cat_col}`
+                                WHERE {' AND '.join(where_parts) if where_parts else '1=1'} 
+                                  AND jnl.`{line_col}` BETWEEN 980 AND 989
+                                GROUP BY jnl.`{cat_col}`, cat.`{cat_name_col}`{descript_group}
+                                ORDER BY jnl.`{cat_col}`
+                            """
+                        else:
+                            # No cat table: use DESCRIPT as fallback
+                            if descript_col:
+                                tender_sql = f"""
+                                    SELECT 
+                                        jnl.`{cat_col}` AS code,
+                                        jnl.`{descript_col}` AS method_name,
+                                        SUM(jnl.`{amt_col}`) AS total
+                                    FROM jnl
+                                    WHERE {' AND '.join(where_parts) if where_parts else '1=1'} 
+                                      AND jnl.`{line_col}` BETWEEN 980 AND 989
+                                    GROUP BY jnl.`{cat_col}`, jnl.`{descript_col}`
+                                    ORDER BY jnl.`{cat_col}`
+                                """
+                            else:
+                                # Last resort: just use CAT code
+                                tender_sql = f"""
+                                    SELECT 
+                                        jnl.`{cat_col}` AS code,
+                                        CAST(jnl.`{cat_col}` AS CHAR) AS method_name,
+                                        SUM(jnl.`{amt_col}`) AS total
+                                    FROM jnl
+                                    WHERE {' AND '.join(where_parts) if where_parts else '1=1'} 
+                                      AND jnl.`{line_col}` BETWEEN 980 AND 989
+                                    GROUP BY jnl.`{cat_col}`
+                                    ORDER BY jnl.`{cat_col}`
+                                """
+                    else:
+                        # No CAT column: use DESCRIPT
+                        if descript_col:
+                            tender_sql = f"""
+                                SELECT 
+                                    jnl.`{descript_col}` AS code,
+                                    jnl.`{descript_col}` AS method_name,
+                                    SUM(jnl.`{amt_col}`) AS total
+                                FROM jnl
+                                WHERE {' AND '.join(where_parts) if where_parts else '1=1'} 
+                                  AND jnl.`{line_col}` BETWEEN 980 AND 989
+                                GROUP BY jnl.`{descript_col}`
+                                ORDER BY jnl.`{descript_col}`
+                            """
+                        else:
+                            # Last resort: group by LINE (not ideal)
+                            tender_sql = f"""
+                                SELECT 
+                                    jnl.`{line_col}` AS code,
+                                    CAST(jnl.`{line_col}` AS CHAR) AS method_name,
+                                    SUM(jnl.`{amt_col}`) AS total
+                                FROM jnl
+                                WHERE {' AND '.join(where_parts) if where_parts else '1=1'} 
+                                  AND jnl.`{line_col}` BETWEEN 980 AND 989
+                                GROUP BY jnl.`{line_col}`
+                                ORDER BY jnl.`{line_col}`
+                            """
+                    rows = conn.execute(text(tender_sql), params3).mappings()
+
+                    # Get CASH CHANGE total (LINE 999) only for sales that have cash tenders (CAT 980)
                     # This ensures we only subtract change from sales that actually had cash payments
+                    # Cash payments are identified by CAT = 980, not LINE (LINE is just the tender slot)
                     cash_change_total = 0.0
-                    if line_col:
+                    if line_col and cat_col:
                         # Build where clause for cash sales EXISTS subquery
                         cash_sales_where = []
                         cash_sales_params = {}
@@ -622,8 +747,11 @@ def get_sales_insights(
                             cash_sales_params["cs_end_dt"] = params3["p_end_dt"]
                         if jnl_rflag:
                             cash_sales_where.append(f"jnl_cash.`{jnl_rflag}` <= 0")
-                        # Cash tenders are LINE 980 (not CAT)
-                        cash_sales_where.append(f"jnl_cash.`{line_col}` = 980")
+                        # Cash tenders are identified by CAT = 980 (payment type), LINE is just the slot
+                        cash_sales_where.append(f"jnl_cash.`{cat_col}` = 980")
+                        cash_sales_where.append(
+                            f"jnl_cash.`{line_col}` BETWEEN 980 AND 989"
+                        )
 
                         # Build where clause for CASH CHANGE main query
                         cash_change_where = []
@@ -641,12 +769,12 @@ def get_sales_insights(
                         if jnl_rflag:
                             cash_change_where.append(f"jnl_change.`{jnl_rflag}` <= 0")
 
-                        # Get CASH CHANGE only for sales that have cash tenders (LINE 980)
+                        # Get CASH CHANGE only for sales that have cash tenders (CAT 980)
                         # Use EXISTS with optimized subquery - more efficient than JOIN for this case
                         all_cash_change_where = [
                             f"jnl_change.`{line_col}` = 999"
                         ] + cash_change_where
-                        # Optimize: Filter cash sales first, then check for matching change
+                        # Optimize: Filter cash sales first (by CAT = 980), then check for matching change
                         cash_change_sql = f"""
                             SELECT SUM(jnl_change.`{amt_col}`) AS total
                             FROM jnl jnl_change
@@ -655,7 +783,6 @@ def get_sales_insights(
                                   SELECT 1
                                   FROM jnl jnl_cash
                                   WHERE jnl_cash.`{jnl_sale_col}` = jnl_change.`{jnl_sale_col}`
-                                    AND jnl_cash.`{line_col}` = 980
                                     {' AND ' + ' AND '.join(cash_sales_where) if cash_sales_where else ''}
                                   LIMIT 1
                               )
@@ -675,24 +802,41 @@ def get_sales_insights(
                     total_sum = 0.0
                     tmp = []
                     for r in rows:
-                        code = int(r["code"]) if r["code"] is not None else None
-                        amount = float(r["total"] or 0)
-                        # Subtract CASH CHANGE from cash (code 980) only - this does NOT affect other tenders
-                        if code == 980:
+                        code_raw = r.get("code")
+                        method_name = r.get("method_name") or str(code_raw) or "Unknown"
+                        # Try to convert to int for CAT values
+                        try:
+                            code = int(code_raw) if code_raw is not None else None
+                        except (ValueError, TypeError):
+                            code = code_raw
+
+                        amount = float(r.get("total") or 0)
+                        # Subtract CASH CHANGE from cash (CAT 980) only - this does NOT affect other tenders
+                        # Check if it's cash by CAT code (980) or by method name
+                        is_cash = (
+                            code == 980
+                            or (isinstance(code, str) and str(code).strip() == "980")
+                            or (
+                                isinstance(method_name, str)
+                                and "cash" in method_name.lower()
+                            )
+                        )
+                        if is_cash:
                             amount = max(
                                 0.0, amount - cash_change_total
                             )  # Ensure cash doesn't go negative
                         # Add this tender's amount to the total (cash already adjusted above)
                         total_sum += amount
-                        tmp.append({"method": label_map.get(code, str(code)), "total_sales": amount})
+                        # Use method_name from query (from cat.name or descript)
+                        tmp.append({"method": str(method_name), "total_sales": amount})
                     # Calculate percentages based on total_sum (which includes adjusted cash, not raw cash)
                     if total_sum:
                         payment_methods = [
                             {**item, "percentage": round((item["total_sales"]/total_sum)*100, 2)} for item in tmp
                         ]
 
-            # Categories: aggregate by jnl.cat for product sales (sku > 0), join to cat table for category names
-            # Use same date filter and RFLAG logic as payment methods to match the sales being queried
+            # Categories: aggregate by jnl.cat for ALL product sales (sku > 0) in the selected date range
+            # Shows ALL categories with sales for the date range, joined to cat table for category names
             categories: List[Dict[str, Any]] = []
             if _table_exists(conn, db_name, "jnl"):
                 cols = _get_columns(conn, db_name, "jnl")
@@ -711,7 +855,7 @@ def get_sales_insights(
 
                     where_parts = []
                     params4: Dict[str, Any] = {}
-                    # Use same date filter as payment methods (matches sales by hour date range)
+                    # Date filter: show ALL product sales for the selected date range
                     if jnl_date_col and start:
                         where_parts.append(f"jnl.`{jnl_date_col}` >= :c_start_dt")
                         params4["c_start_dt"] = f"{start} 00:00:00"
@@ -726,10 +870,10 @@ def get_sales_insights(
                             c_end_next = f"{end} 23:59:59"
                         where_parts.append(f"jnl.`{jnl_date_col}` < :c_end_dt")
                         params4["c_end_dt"] = c_end_next
-                    # Use same RFLAG filter as payment methods (RFLAG <= 0)
+                    # Filter: RFLAG <= 0 (excludes returns/voids, includes all valid product sales)
                     if jnl_rflag:
                         where_parts.append(f"jnl.`{jnl_rflag}` <= 0")
-                    # Only product sales (sku > 0)
+                    # Only product sales (sku > 0) - excludes tender lines, includes all actual products
                     where_parts.append(f"jnl.`{jnl_sku_col}` > 0")
 
                     if amt_col:
@@ -2069,3 +2213,156 @@ def get_quick_insights(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get quick insights: {str(e)}")
+
+
+@router.get("/diagnostics")
+def get_diagnostics(
+    store: Optional[str] = Query(
+        default=None, description="Store identifier (store_id or store_db)"
+    ),
+    user: dict = Depends(get_auth_user),
+):
+    """
+    Diagnostic endpoint to check database performance and identify slow queries.
+    Shows active processes, slow queries, and connection pool status.
+    """
+    try:
+        selected_store = _select_store(user, store)
+        db_name = selected_store["store_db"]
+        db_user = selected_store["db_user"]
+        db_pass = selected_store["db_pass"]
+
+        engine = _get_engine(db_user, db_pass, db_name)
+
+        diagnostics = {
+            "database": db_name,
+            "connection_pool": {
+                "pool_size": _POOL_SIZE,
+                "max_overflow": _POOL_MAX_OVERFLOW,
+                "pool_timeout": _POOL_TIMEOUT,
+                "query_timeout": _QUERY_TIMEOUT,
+            },
+            "active_queries": [],
+            "slow_queries": [],
+            "process_list": [],
+        }
+
+        with engine.connect() as conn:
+            # Get active processes/queries
+            try:
+                process_list = (
+                    conn.execute(
+                        text(
+                            """
+                    SELECT 
+                        ID,
+                        USER,
+                        HOST,
+                        DB,
+                        COMMAND,
+                        TIME,
+                        STATE,
+                        LEFT(INFO, 200) AS QUERY
+                    FROM information_schema.PROCESSLIST
+                    WHERE DB = :db_name AND COMMAND != 'Sleep'
+                    ORDER BY TIME DESC
+                    LIMIT 20
+                """
+                        ),
+                        {"db_name": db_name},
+                    )
+                    .mappings()
+                    .all()
+                )
+
+                diagnostics["process_list"] = [
+                    {
+                        "id": int(p.get("ID", 0)),
+                        "user": str(p.get("USER", "")),
+                        "host": str(p.get("HOST", "")),
+                        "command": str(p.get("COMMAND", "")),
+                        "time": int(p.get("TIME", 0)),
+                        "state": str(p.get("STATE", "")),
+                        "query": str(p.get("QUERY", ""))[:200],
+                    }
+                    for p in process_list
+                ]
+            except Exception as e:
+                diagnostics["process_list_error"] = str(e)
+
+            # Get slow query log (if enabled)
+            try:
+                slow_queries = (
+                    conn.execute(
+                        text(
+                            """
+                    SELECT 
+                        start_time,
+                        user_host,
+                        query_time,
+                        lock_time,
+                        rows_sent,
+                        rows_examined,
+                        LEFT(sql_text, 500) AS sql_text
+                    FROM mysql.slow_log
+                    WHERE start_time >= DATE_SUB(NOW(), INTERVAL 1 HOUR)
+                    ORDER BY start_time DESC
+                    LIMIT 10
+                """
+                        )
+                    )
+                    .mappings()
+                    .all()
+                )
+
+                diagnostics["slow_queries"] = [
+                    {
+                        "start_time": str(s.get("start_time", "")),
+                        "query_time": float(s.get("query_time", 0)),
+                        "lock_time": float(s.get("lock_time", 0)),
+                        "rows_examined": int(s.get("rows_examined", 0)),
+                        "sql_text": str(s.get("sql_text", ""))[:500],
+                    }
+                    for s in slow_queries
+                ]
+            except Exception as e:
+                diagnostics["slow_log_error"] = str(e)
+                diagnostics["slow_log_note"] = "Slow query log may not be enabled"
+
+            # Get connection pool status
+            try:
+                pool_status = (
+                    conn.execute(
+                        text(
+                            """
+                    SELECT 
+                        VARIABLE_NAME,
+                        VARIABLE_VALUE
+                    FROM information_schema.GLOBAL_STATUS
+                    WHERE VARIABLE_NAME IN (
+                        'Threads_connected',
+                        'Threads_running',
+                        'Max_used_connections',
+                        'Questions',
+                        'Slow_queries'
+                    )
+                """
+                        )
+                    )
+                    .mappings()
+                    .all()
+                )
+
+                diagnostics["database_status"] = {
+                    str(p.get("VARIABLE_NAME", "")): str(p.get("VARIABLE_VALUE", ""))
+                    for p in pool_status
+                }
+            except Exception as e:
+                diagnostics["status_error"] = str(e)
+
+        return diagnostics
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get diagnostics: {str(e)}"
+        )
