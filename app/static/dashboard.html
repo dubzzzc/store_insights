@@ -3991,6 +3991,28 @@ const ModuleNav = ({ active, onChange }) => {
           loadInsights(token, storeQueryValue);
         }, [token, storeQueryValue, stores, selectedStore, userRole]);
 
+        // Refresh data when date ranges change (with debouncing)
+        useEffect(() => {
+          if (!token || userRole === 'admin') return;
+          if (stores.length > 1 && !selectedStore) return;
+          // Only refresh if we're on the sales tab or if dates are set
+          if (activeModule === 'sales' || dateRange?.start || poRange?.start || invRange?.start) {
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+            debounceRef.current = setTimeout(() => {
+              if (activeModule === 'sales') {
+                loadInsights(token, storeQueryValue);
+              } else if (activeModule === 'purchase' && (poRange?.start || poRange?.end)) {
+                loadInsights(token, storeQueryValue);
+              } else if (activeModule === 'inventory' && (invRange?.start || invRange?.end)) {
+                loadInsights(token, storeQueryValue);
+              }
+            }, 400);
+          }
+          return () => {
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+          };
+        }, [token, dateRange, poRange, invRange, activeModule, stores, selectedStore, userRole, storeQueryValue]);
+
         useEffect(() => {
           if (!token || userRole === 'admin') return;
           if (stores.length > 1 && !selectedStore) return;
