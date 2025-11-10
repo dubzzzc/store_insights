@@ -153,15 +153,28 @@ def debug_config_path(msg: str, path: Union[str, Path]) -> None:
 
 def find_ksv_root(start: Optional[Union[str, Path]] = None) -> Optional[str]:
     r"""
-    Try to locate a folder literally named 'ksv' (C:\\ksv or ancestor).
+    Try to locate a base folder for ksv/data-style structures.
     Priority:
-      1) current working dir or its parents
-      2) script dir or its parents
-      3) hint file 'ksv_path.txt' next to this script
+      1) explicit start path or its parents
+      2) current working dir or its parents
+      3) script dir or its parents
+      4) hint file 'ksv_path.txt' next to this script
+
+    Historically this required the folder name to literally be 'ksv'. For
+    backwards compatibility we still prefer that, but fall back to whatever
+    path the user selected if no such folder is found.
     """
-    candidates: List[Path] = []
+    start_path: Optional[Path] = None
     if start:
-        candidates.append(Path(start).resolve())
+        resolved = Path(start).resolve()
+        if resolved.is_file():
+            resolved = resolved.parent
+        if resolved.exists():
+            start_path = resolved
+
+    candidates: List[Path] = []
+    if start_path:
+        candidates.append(start_path)
     candidates.append(Path.cwd())
     candidates.append(Path(__file__).resolve().parent)
 
@@ -174,11 +187,14 @@ def find_ksv_root(start: Optional[Union[str, Path]] = None) -> Optional[str]:
                 break
             p = p.parent
 
+    if start_path:
+        return str(start_path)
+
     hint = Path(__file__).resolve().parent / "ksv_path.txt"
     if hint.exists():
         txt = hint.read_text(encoding="utf-8").strip()
         candidate = Path(txt) if txt else None
-        if candidate and candidate.is_dir() and candidate.name.lower() == "ksv":
+        if candidate and candidate.is_dir():
             return str(candidate.resolve())
     return None
 
@@ -1586,14 +1602,14 @@ def iter_dbf_rows(
                 if effective_start and date_val < effective_start:
                     continue
 
-                # Check end date
+                range_end = None
                 if date_range_end:
                     range_end = (
                         date_range_end.replace(tzinfo=None)
                         if date_range_end.tzinfo
                         else date_range_end
                     )
-                if date_val > range_end:
+                if range_end and date_val > range_end:
                     continue
 
             # Apply related table filtering if configured
@@ -2733,20 +2749,20 @@ def run_gui_tk():
         # Don't exit - allow it to continue but log the issue
 
     try:
-        # Resolve or ask for \ksv\ once; remember it next to the script
+        # Resolve or ask for a data folder once; remember it next to the script
         ksv = find_ksv_root()
         if not ksv:
             try:
                 messagebox.showinfo(
-                    "Select ksv Folder",
-                    "Please select your 'ksv' folder once. We'll remember it.",
+                    "Select Data Folder",
+                    "Please select the folder that contains your DBF files. We'll remember it.",
                 )
                 chosen = filedialog.askdirectory(
-                    title="Select the 'ksv' folder (e.g., C:\\ksv)"
+                    title="Select the folder that contains your DBF files"
                 )
-                if not chosen or os.path.basename(chosen).lower() != "ksv":
+                if not chosen:
                     messagebox.showerror(
-                        "ksv folder", "You must select a folder literally named 'ksv'."
+                        "Folder required", "You must select a folder to continue."
                     )
                     return
                 script_dir = (
@@ -2758,18 +2774,18 @@ def run_gui_tk():
                 hint_path.write_text(chosen, encoding="utf-8")
                 ksv = chosen
             except Exception as e:
-                log_error(f"Error selecting ksv folder: {e}")
+                log_error(f"Error selecting data folder: {e}")
                 # Try a default
                 ksv = "C:\\ksv"
                 if not os.path.isdir(ksv):
-                    log_error(f"Default ksv folder not found: {ksv}")
+                    log_error(f"Default data folder not found: {ksv}")
                     return
     except Exception as e:
-        log_error(f"Error finding ksv root: {e}")
+        log_error(f"Error finding data folder: {e}")
         # Try a default
         ksv = "C:\\ksv"
         if not os.path.isdir(ksv):
-            log_error(f"Default ksv folder not found: {ksv}")
+            log_error(f"Default data folder not found: {ksv}")
             return
 
     state = {"files": [], "folder": ""}
@@ -4850,7 +4866,7 @@ def run_gui_tk():
     def _apply_admin_toggle(*_):
         use_admin = bool(admin_enabled_var.get())
         state = "disabled" if use_admin else "normal"
-        # Engine menu is a ttk OptionMenu which doesn’t support state directly; skip it
+        # Engine menu is a ttk OptionMenu which doesn't support state directly; skip it
         for w in manual_db_widgets:
             try:
                 w.configure(state=state)
