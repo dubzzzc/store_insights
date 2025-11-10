@@ -72,11 +72,14 @@ class FreshnessTracker:
 
 
 _MAX_CACHED_ENGINES = int(os.getenv("STORE_INSIGHTS_MAX_CACHED_ENGINES", "10"))
-_POOL_SIZE = int(os.getenv("STORE_INSIGHTS_POOL_SIZE", "20"))
-_POOL_MAX_OVERFLOW = int(os.getenv("STORE_INSIGHTS_POOL_MAX_OVERFLOW", "30"))
-_POOL_TIMEOUT = int(os.getenv("STORE_INSIGHTS_POOL_TIMEOUT", "60"))
+# Reduced pool size to prevent CPU overload on m5.large
+_POOL_SIZE = int(os.getenv("STORE_INSIGHTS_POOL_SIZE", "10"))
+_POOL_MAX_OVERFLOW = int(os.getenv("STORE_INSIGHTS_POOL_MAX_OVERFLOW", "10"))
+_POOL_TIMEOUT = int(os.getenv("STORE_INSIGHTS_POOL_TIMEOUT", "30"))
 _POOL_RECYCLE = int(os.getenv("STORE_INSIGHTS_POOL_RECYCLE", "1200"))
 _CONNECT_TIMEOUT = int(os.getenv("STORE_INSIGHTS_CONNECT_TIMEOUT", "10"))
+# Query execution timeout (seconds) - prevents runaway queries
+_QUERY_TIMEOUT = int(os.getenv("STORE_INSIGHTS_QUERY_TIMEOUT", "30"))
 
 
 def _get_engine(db_user: str, db_pass: str, db_name: str):
@@ -105,6 +108,8 @@ def _get_engine(db_user: str, db_pass: str, db_name: str):
         except Exception:
             pass  # Ignore errors during disposal
 
+    # Set query timeout via MySQL session variable to prevent runaway queries
+    init_command = f"SET SESSION max_execution_time = {_QUERY_TIMEOUT * 1000}"  # MySQL uses milliseconds
     engine = create_engine(
         connection_string,
         pool_size=_POOL_SIZE,
@@ -114,6 +119,7 @@ def _get_engine(db_user: str, db_pass: str, db_name: str):
         pool_timeout=_POOL_TIMEOUT,
         connect_args={
             "connect_timeout": _CONNECT_TIMEOUT,
+            "init_command": init_command,
         },
         echo=False,
     )
@@ -636,10 +642,11 @@ def get_sales_insights(
                             cash_change_where.append(f"jnl_change.`{jnl_rflag}` <= 0")
 
                         # Get CASH CHANGE only for sales that have cash tenders (LINE 980)
-                        # Use EXISTS for better performance than subquery + join
+                        # Use EXISTS with optimized subquery - more efficient than JOIN for this case
                         all_cash_change_where = [
                             f"jnl_change.`{line_col}` = 999"
                         ] + cash_change_where
+                        # Optimize: Filter cash sales first, then check for matching change
                         cash_change_sql = f"""
                             SELECT SUM(jnl_change.`{amt_col}`) AS total
                             FROM jnl jnl_change
@@ -650,6 +657,7 @@ def get_sales_insights(
                                   WHERE jnl_cash.`{jnl_sale_col}` = jnl_change.`{jnl_sale_col}`
                                     AND jnl_cash.`{line_col}` = 980
                                     {' AND ' + ' AND '.join(cash_sales_where) if cash_sales_where else ''}
+                                  LIMIT 1
                               )
                         """
 
@@ -751,6 +759,7 @@ def get_sales_insights(
                                 WHERE {' AND '.join(where_parts)}
                                 GROUP BY jnl.`cat`, cat.`{cl}`
                                 ORDER BY total DESC
+                                LIMIT 50
                             """
                         else:
                             cat_sql = f"""
@@ -760,6 +769,7 @@ def get_sales_insights(
                                 WHERE {' AND '.join(where_parts)}
                                 GROUP BY jnl.`cat`
                                 ORDER BY total DESC
+                                LIMIT 50
                             """
                         rows = conn.execute(text(cat_sql), params4).mappings()
                         categories = [
