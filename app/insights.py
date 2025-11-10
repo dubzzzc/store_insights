@@ -461,79 +461,87 @@ def get_sales_insights(
                 "average_daily_sales": round(gross_total / days_captured, 2) if days_captured else 0.0,
             }
 
-            # Hourly breakdown (header-driven): use jnh.tstamp and jnh.total
-            # Only include sales that have at least one item line (sku > 0 with rflag > 0)
-            # and at least one tender line (cat between 980 and 989). This aligns hour totals
-            # with posted transactions and tendered sales.
+            # Hourly breakdown: use jnl tender lines (LINE 980-989) with RFLAG <= 0, filter by jnl.DATE,
+            # join to jnh to get hour from jnh.tstamp, sum jnl.PRICE. Matches process_prefix logic.
             hourly: List[Dict[str, Any]] = []
-            if _table_exists(conn, db_name, "jnh"):
-                jnh_cols = _get_columns(conn, db_name, "jnh")
-                jnh_time = _pick_column(jnh_cols, ["tstamp", "timestamp", "time", "t_time"]) or "tstamp"
-                jnh_sale = _pick_column(jnh_cols, ["sale", "sale_id", "invno"]) or "sale"
-                jnh_total = (
+            if _table_exists(conn, db_name, "jnl") and _table_exists(
+                conn, db_name, "jnh"
+            ):
+                jnl_cols = _get_columns(conn, db_name, "jnl")
+                jnl_sale = (
+                    _pick_column(jnl_cols, ["sale", "sale_id", "invno"]) or "sale"
+                )
+                jnl_date_col = (
                     _pick_column(
-                        jnh_cols, ["total", "amount", "net_total", "net", "grand_total"]
+                        jnl_cols,
+                        [
+                            "sale_date",
+                            "trans_date",
+                            "transaction_date",
+                            "tdate",
+                            "date",
+                        ],
                     )
-                    or "total"
+                    or None
                 )
-
-                jnl_cols = _get_columns(conn, db_name, "jnl") if _table_exists(conn, db_name, "jnl") else []
-                jnl_sale = _pick_column(jnl_cols, ["sale", "sale_id", "invno"]) or jnh_sale
+                jnl_line_col = _pick_column(jnl_cols, ["line", "line_code"]) or "line"
+                jnl_price_col = (
+                    _pick_column(jnl_cols, ["price", "amount", "total"]) or None
+                )
                 jnl_rflag = "rflag" if "rflag" in jnl_cols else None
-                jnl_sku = "sku" if "sku" in jnl_cols else None
-                jnl_cat = "cat" if "cat" in jnl_cols else None
 
-                where_parts = ["1=1"]
-                params2: Dict[str, Any] = {}
-                # Filter by date using jnh's timestamp (half-open interval)
-                if start:
-                    where_parts.append(f"jnh.`{jnh_time}` >= :h_start_dt")
-                    params2["h_start_dt"] = f"{start} 00:00:00"
-                if end:
-                    try:
-                        from datetime import timedelta
-
-                        h_end_next = (
-                            datetime.fromisoformat(end) + timedelta(days=1)
-                        ).strftime("%Y-%m-%d 00:00:00")
-                    except Exception:
-                        h_end_next = f"{end} 23:59:59"
-                    where_parts.append(f"jnh.`{jnh_time}` < :h_end_dt")
-                    params2["h_end_dt"] = h_end_next
-
-                # Must have at least one item line (sku > 0, rflag > 0 if present)
-                item_exists = []
-                item_exists.append(
-                    f"EXISTS (SELECT 1 FROM jnl i WHERE i.`{jnl_sale}` = jnh.`{jnh_sale}`"
+                jnh_cols = _get_columns(conn, db_name, "jnh")
+                jnh_time = (
+                    _pick_column(jnh_cols, ["tstamp", "timestamp", "time", "t_time"])
+                    or "tstamp"
                 )
-                if jnl_sku:
-                    item_exists.append("AND i.`sku` > 0")
-                if jnl_rflag:
-                    item_exists.append("AND i.`rflag` > 0")
-                item_exists.append(")")
-
-                # Must have at least one tender line (cat 980-989) to count as sold
-                tender_exists = []
-                if jnl_cat:
-                    tender_exists.append(
-                        f"EXISTS (SELECT 1 FROM jnl t WHERE t.`{jnl_sale}` = jnh.`{jnh_sale}` AND t.`{jnl_cat}` BETWEEN 980 AND 989)"
-                    )
-
-                exists_filters = " AND ".join(
-                    [part for part in [" ".join(item_exists)] + tender_exists if part]
+                jnh_sale = (
+                    _pick_column(jnh_cols, ["sale", "sale_id", "invno"]) or jnl_sale
                 )
-                if exists_filters:
-                    where_parts.append(exists_filters)
 
-                hourly_sql = f"""
-                    SELECT HOUR(jnh.`{jnh_time}`) AS hour, SUM(jnh.`{jnh_total}`) AS total_sales
-                    FROM jnh
-                    WHERE {' AND '.join(where_parts)}
-                    GROUP BY HOUR(jnh.`{jnh_time}`)
-                    ORDER BY hour
-                """
-                rows = conn.execute(text(hourly_sql), params2).mappings()
-                hourly = [{"hour": f"{int(r['hour']):02d}:00", "total_sales": float(r["total_sales"]) } for r in rows]
+                if jnl_date_col and jnl_line_col and jnl_price_col:
+                    where_parts = []
+                    params2: Dict[str, Any] = {}
+
+                    # Filter by date using jnl's date column (half-open interval)
+                    if start:
+                        where_parts.append(f"jnl.`{jnl_date_col}` >= :h_start_dt")
+                        params2["h_start_dt"] = f"{start} 00:00:00"
+                    if end:
+                        try:
+                            from datetime import timedelta
+
+                            h_end_next = (
+                                datetime.fromisoformat(end) + timedelta(days=1)
+                            ).strftime("%Y-%m-%d 00:00:00")
+                        except Exception:
+                            h_end_next = f"{end} 23:59:59"
+                        where_parts.append(f"jnl.`{jnl_date_col}` < :h_end_dt")
+                        params2["h_end_dt"] = h_end_next
+
+                    # Filter: RFLAG <= 0 (matches process_prefix)
+                    if jnl_rflag:
+                        where_parts.append(f"jnl.`{jnl_rflag}` <= 0")
+
+                    # Filter: LINE between 980-989 (tender lines, matches process_prefix)
+                    where_parts.append(f"jnl.`{jnl_line_col}` BETWEEN 980 AND 989")
+
+                    hourly_sql = f"""
+                        SELECT HOUR(jnh.`{jnh_time}`) AS hour, SUM(jnl.`{jnl_price_col}`) AS total_sales
+                        FROM jnl
+                        JOIN jnh ON jnl.`{jnl_sale}` = jnh.`{jnh_sale}`
+                        WHERE {' AND '.join(where_parts)}
+                        GROUP BY HOUR(jnh.`{jnh_time}`)
+                        ORDER BY hour
+                    """
+                    rows = conn.execute(text(hourly_sql), params2).mappings()
+                    hourly = [
+                        {
+                            "hour": f"{int(r['hour']):02d}:00",
+                            "total_sales": float(r["total_sales"]),
+                        }
+                        for r in rows
+                    ]
 
             # Payment methods from jnl tenders 980-989 (filter dates using jnl's date column)
             payment_methods: List[Dict[str, Any]] = []
