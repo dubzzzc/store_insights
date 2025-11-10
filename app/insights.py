@@ -683,22 +683,31 @@ def get_sales_insights(
                             {**item, "percentage": round((item["total_sales"]/total_sum)*100, 2)} for item in tmp
                         ]
 
-            # Categories: jnl.cat like 'P%' joined to cat table if present
+            # Categories: aggregate by jnl.cat for product sales (sku > 0), join to cat table for category names
+            # Use same date filter and RFLAG logic as payment methods to match the sales being queried
             categories: List[Dict[str, Any]] = []
             if _table_exists(conn, db_name, "jnl"):
                 cols = _get_columns(conn, db_name, "jnl")
                 if "cat" in cols:
-                    # Determine jnl date/qty/price columns
+                    # Use same date column and filters as payment methods
                     jnl_date_col = _pick_column(cols, ["sale_date", "trans_date", "transaction_date", "tdate", "date"]) or None
-                    jnl_qty_col = _pick_column(cols, ["qty", "quantity"]) or None
-                    jnl_price_col = _pick_column(cols, ["amount", "total", "price"]) or None
+                    jnl_rflag = "rflag" if "rflag" in cols else None
+                    jnl_sku_col = (
+                        _pick_column(cols, ["sku", "item", "item_id"]) or "sku"
+                    )
+                    amt_col = None
+                    for c in ["amount", "total", "price"]:
+                        if c in cols:
+                            amt_col = c
+                            break
 
-                    where_parts = ["1=1", "jnl.`sku` > 0", "jnl.`rflag` = 0", "jnl.`cat` LIKE 'P%'"]
+                    where_parts = []
                     params4: Dict[str, Any] = {}
-                    if start and jnl_date_col:
+                    # Use same date filter as payment methods (matches sales by hour date range)
+                    if jnl_date_col and start:
                         where_parts.append(f"jnl.`{jnl_date_col}` >= :c_start_dt")
                         params4["c_start_dt"] = f"{start} 00:00:00"
-                    if end and jnl_date_col:
+                    if jnl_date_col and end:
                         try:
                             from datetime import timedelta
 
@@ -709,40 +718,57 @@ def get_sales_insights(
                             c_end_next = f"{end} 23:59:59"
                         where_parts.append(f"jnl.`{jnl_date_col}` < :c_end_dt")
                         params4["c_end_dt"] = c_end_next
+                    # Use same RFLAG filter as payment methods (RFLAG <= 0)
+                    if jnl_rflag:
+                        where_parts.append(f"jnl.`{jnl_rflag}` <= 0")
+                    # Only product sales (sku > 0)
+                    where_parts.append(f"jnl.`{jnl_sku_col}` > 0")
 
-                    # Compute amount expression specific to jnl
-                    if jnl_price_col and jnl_qty_col:
-                        amt_expr = f"SUM(jnl.`{jnl_qty_col}` * jnl.`{jnl_price_col}`)"
-                    elif jnl_price_col:
-                        amt_expr = f"SUM(jnl.`{jnl_price_col}`)"
-                    else:
-                        amt_expr = "SUM(0)"
+                    if amt_col:
+                        # Join to cat table to get category name (cat.name)
+                        cat_join_label = None
+                        if _table_exists(conn, db_name, "cat"):
+                            cat_cols = _get_columns(conn, db_name, "cat")
+                            cat_code = (
+                                _pick_column(cat_cols, ["cat", "code", "id"]) or "cat"
+                            )
+                            # Prefer "name" as specified by user, fallback to desc/description
+                            cat_label = (
+                                _pick_column(
+                                    cat_cols, ["name", "desc", "description", "label"]
+                                )
+                                or cat_code
+                            )
+                            cat_join_label = (cat_code, cat_label)
 
-                    cat_join_label = None
-                    if _table_exists(conn, db_name, "cat"):
-                        cat_cols = _get_columns(conn, db_name, "cat")
-                        cat_code = _pick_column(cat_cols, ["cat", "code", "id"]) or "cat"
-                        cat_label = _pick_column(cat_cols, ["desc", "description", "name", "label"]) or cat_code
-                        cat_join_label = (cat_code, cat_label)
-                    if cat_join_label:
-                        cc, cl = cat_join_label
-                        cat_sql = f"""
-                            SELECT COALESCE(cat.`{cl}`, jnl.`cat`) AS category, {amt_expr} AS total
-                            FROM jnl LEFT JOIN cat ON cat.`{cc}` = jnl.`cat`
-                            WHERE {' AND '.join(where_parts)}
-                            GROUP BY COALESCE(cat.`{cl}`, jnl.`cat`)
-                            ORDER BY total DESC
-                        """
-                    else:
-                        cat_sql = f"""
-                            SELECT jnl.`cat` AS category, {amt_expr} AS total
-                            FROM jnl
-                            WHERE {' AND '.join(where_parts)}
-                            GROUP BY jnl.`cat`
-                            ORDER BY total DESC
-                        """
-                    rows = conn.execute(text(cat_sql), params4).mappings()
-                    categories = [{"category": str(r["category"]), "total_sales": float(r["total"]) } for r in rows]
+                        if cat_join_label:
+                            cc, cl = cat_join_label
+                            cat_sql = f"""
+                                SELECT COALESCE(cat.`{cl}`, CAST(jnl.`cat` AS CHAR)) AS category, 
+                                       SUM(jnl.`{amt_col}`) AS total
+                                FROM jnl
+                                LEFT JOIN cat ON cat.`{cc}` = jnl.`cat`
+                                WHERE {' AND '.join(where_parts)}
+                                GROUP BY jnl.`cat`, cat.`{cl}`
+                                ORDER BY total DESC
+                            """
+                        else:
+                            cat_sql = f"""
+                                SELECT CAST(jnl.`cat` AS CHAR) AS category, 
+                                       SUM(jnl.`{amt_col}`) AS total
+                                FROM jnl
+                                WHERE {' AND '.join(where_parts)}
+                                GROUP BY jnl.`cat`
+                                ORDER BY total DESC
+                            """
+                        rows = conn.execute(text(cat_sql), params4).mappings()
+                        categories = [
+                            {
+                                "category": str(r["category"]),
+                                "total_sales": float(r["total"]),
+                            }
+                            for r in rows
+                        ]
 
             # Top products from hst (explicit column usage with safe fallbacks)
             top_items: List[Dict[str, Any]] = []
