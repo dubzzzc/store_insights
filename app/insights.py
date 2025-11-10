@@ -72,9 +72,9 @@ class FreshnessTracker:
 
 
 _MAX_CACHED_ENGINES = int(os.getenv("STORE_INSIGHTS_MAX_CACHED_ENGINES", "10"))
-_POOL_SIZE = int(os.getenv("STORE_INSIGHTS_POOL_SIZE", "12"))
-_POOL_MAX_OVERFLOW = int(os.getenv("STORE_INSIGHTS_POOL_MAX_OVERFLOW", "18"))
-_POOL_TIMEOUT = int(os.getenv("STORE_INSIGHTS_POOL_TIMEOUT", "45"))
+_POOL_SIZE = int(os.getenv("STORE_INSIGHTS_POOL_SIZE", "20"))
+_POOL_MAX_OVERFLOW = int(os.getenv("STORE_INSIGHTS_POOL_MAX_OVERFLOW", "30"))
+_POOL_TIMEOUT = int(os.getenv("STORE_INSIGHTS_POOL_TIMEOUT", "60"))
 _POOL_RECYCLE = int(os.getenv("STORE_INSIGHTS_POOL_RECYCLE", "1200"))
 _CONNECT_TIMEOUT = int(os.getenv("STORE_INSIGHTS_CONNECT_TIMEOUT", "10"))
 
@@ -601,25 +601,25 @@ def get_sales_insights(
                     # This ensures we only subtract change from sales that actually had cash payments
                     cash_change_total = 0.0
                     if line_col:
-                        # Build where clause for cash sales subquery
+                        # Build where clause for cash sales EXISTS subquery
                         cash_sales_where = []
                         cash_sales_params = {}
                         if jnl_date_filter_col and start:
                             cash_sales_where.append(
-                                f"`{jnl_date_filter_col}` >= :cs_start_dt"
+                                f"jnl_cash.`{jnl_date_filter_col}` >= :cs_start_dt"
                             )
                             cash_sales_params["cs_start_dt"] = params3["p_start_dt"]
                         if jnl_date_filter_col and end:
                             cash_sales_where.append(
-                                f"`{jnl_date_filter_col}` < :cs_end_dt"
+                                f"jnl_cash.`{jnl_date_filter_col}` < :cs_end_dt"
                             )
                             cash_sales_params["cs_end_dt"] = params3["p_end_dt"]
                         if jnl_rflag:
-                            cash_sales_where.append(f"`{jnl_rflag}` <= 0")
+                            cash_sales_where.append(f"jnl_cash.`{jnl_rflag}` <= 0")
                         # Cash tenders are LINE 980 (not CAT)
-                        cash_sales_where.append(f"`{line_col}` = 980")
+                        cash_sales_where.append(f"jnl_cash.`{line_col}` = 980")
 
-                        # Build where clause for CASH CHANGE join
+                        # Build where clause for CASH CHANGE main query
                         cash_change_where = []
                         cash_change_params = {}
                         if jnl_date_filter_col and start:
@@ -634,18 +634,23 @@ def get_sales_insights(
                             cash_change_params["cc_end_dt"] = params3["p_end_dt"]
                         if jnl_rflag:
                             cash_change_where.append(f"jnl_change.`{jnl_rflag}` <= 0")
-                        cash_change_where.append(f"jnl_change.`{line_col}` = 999")
 
-                        # Get all sales with cash tenders, then get CASH CHANGE for those same sales
+                        # Get CASH CHANGE only for sales that have cash tenders (LINE 980)
+                        # Use EXISTS for better performance than subquery + join
+                        all_cash_change_where = [
+                            f"jnl_change.`{line_col}` = 999"
+                        ] + cash_change_where
                         cash_change_sql = f"""
                             SELECT SUM(jnl_change.`{amt_col}`) AS total
-                            FROM (
-                                SELECT DISTINCT `{jnl_sale_col}` AS sale_id
-                                FROM jnl
-                                WHERE {' AND '.join(cash_sales_where)}
-                            ) cash_sales
-                            INNER JOIN jnl jnl_change ON cash_sales.sale_id = jnl_change.`{jnl_sale_col}`
-                            WHERE {' AND '.join(cash_change_where)}
+                            FROM jnl jnl_change
+                            WHERE {' AND '.join(all_cash_change_where)}
+                              AND EXISTS (
+                                  SELECT 1
+                                  FROM jnl jnl_cash
+                                  WHERE jnl_cash.`{jnl_sale_col}` = jnl_change.`{jnl_sale_col}`
+                                    AND jnl_cash.`{line_col}` = 980
+                                    {' AND ' + ' AND '.join(cash_sales_where) if cash_sales_where else ''}
+                              )
                         """
 
                         cash_change_row = (
