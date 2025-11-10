@@ -461,28 +461,35 @@ def get_sales_insights(
                 "average_daily_sales": round(gross_total / days_captured, 2) if days_captured else 0.0,
             }
 
-            # Hourly breakdown: prefer jnh.tstamp joined by jnl sale id, but filter dates using jnl's date column
+            # Hourly breakdown (header-driven): use jnh.tstamp and jnh.total
+            # Only include sales that have at least one item line (sku > 0 with rflag > 0)
+            # and at least one tender line (cat between 980 and 989). This aligns hour totals
+            # with posted transactions and tendered sales.
             hourly: List[Dict[str, Any]] = []
             if _table_exists(conn, db_name, "jnh"):
                 jnh_cols = _get_columns(conn, db_name, "jnh")
                 jnh_time = _pick_column(jnh_cols, ["tstamp", "timestamp", "time", "t_time"]) or "tstamp"
                 jnh_sale = _pick_column(jnh_cols, ["sale", "sale_id", "invno"]) or "sale"
+                jnh_total = (
+                    _pick_column(
+                        jnh_cols, ["total", "amount", "net_total", "net", "grand_total"]
+                    )
+                    or "total"
+                )
 
                 jnl_cols = _get_columns(conn, db_name, "jnl") if _table_exists(conn, db_name, "jnl") else []
                 jnl_sale = _pick_column(jnl_cols, ["sale", "sale_id", "invno"]) or jnh_sale
                 jnl_rflag = "rflag" if "rflag" in jnl_cols else None
                 jnl_sku = "sku" if "sku" in jnl_cols else None
-                jnl_qty = _pick_column(jnl_cols, ["qty", "quantity"]) or None
-                jnl_price = _pick_column(jnl_cols, ["amount", "price", "total"]) or None
-                jnl_date_filter_col = _pick_column(jnl_cols, ["sale_date", "trans_date", "transaction_date", "tdate", "date"]) or None
+                jnl_cat = "cat" if "cat" in jnl_cols else None
 
                 where_parts = ["1=1"]
                 params2: Dict[str, Any] = {}
-                # Filter by date using jnl's date column (jnh.tstamp is time-only on many schemas)
-                if jnl_date_filter_col and start:
-                    where_parts.append(f"jnl.`{jnl_date_filter_col}` >= :h_start_dt")
+                # Filter by date using jnh's timestamp (half-open interval)
+                if start:
+                    where_parts.append(f"jnh.`{jnh_time}` >= :h_start_dt")
                     params2["h_start_dt"] = f"{start} 00:00:00"
-                if jnl_date_filter_col and end:
+                if end:
                     try:
                         from datetime import timedelta
 
@@ -491,25 +498,36 @@ def get_sales_insights(
                         ).strftime("%Y-%m-%d 00:00:00")
                     except Exception:
                         h_end_next = f"{end} 23:59:59"
-                    where_parts.append(f"jnl.`{jnl_date_filter_col}` < :h_end_dt")
+                    where_parts.append(f"jnh.`{jnh_time}` < :h_end_dt")
                     params2["h_end_dt"] = h_end_next
-                if jnl_rflag:
-                    where_parts.append(f"jnl.`{jnl_rflag}` = 0")
-                if jnl_sku:
-                    where_parts.append(f"jnl.`{jnl_sku}` > 0")
 
-                amount_expr_h = None
-                if jnl_price and jnl_qty:
-                    amount_expr_h = f"SUM(jnl.`{jnl_qty}` * jnl.`{jnl_price}`)"
-                elif jnl_price:
-                    amount_expr_h = f"SUM(jnl.`{jnl_price}`)"
-                else:
-                    amount_expr_h = "SUM(0)"
+                # Must have at least one item line (sku > 0, rflag > 0 if present)
+                item_exists = []
+                item_exists.append(
+                    f"EXISTS (SELECT 1 FROM jnl i WHERE i.`{jnl_sale}` = jnh.`{jnh_sale}`"
+                )
+                if jnl_sku:
+                    item_exists.append("AND i.`sku` > 0")
+                if jnl_rflag:
+                    item_exists.append("AND i.`rflag` > 0")
+                item_exists.append(")")
+
+                # Must have at least one tender line (cat 980-989) to count as sold
+                tender_exists = []
+                if jnl_cat:
+                    tender_exists.append(
+                        f"EXISTS (SELECT 1 FROM jnl t WHERE t.`{jnl_sale}` = jnh.`{jnh_sale}` AND t.`{jnl_cat}` BETWEEN 980 AND 989)"
+                    )
+
+                exists_filters = " AND ".join(
+                    [part for part in [" ".join(item_exists)] + tender_exists if part]
+                )
+                if exists_filters:
+                    where_parts.append(exists_filters)
 
                 hourly_sql = f"""
-                    SELECT HOUR(jnh.`{jnh_time}`) AS hour, {amount_expr_h} AS total_sales
+                    SELECT HOUR(jnh.`{jnh_time}`) AS hour, SUM(jnh.`{jnh_total}`) AS total_sales
                     FROM jnh
-                    JOIN jnl ON jnh.`{jnh_sale}` = jnl.`{jnl_sale}`
                     WHERE {' AND '.join(where_parts)}
                     GROUP BY HOUR(jnh.`{jnh_time}`)
                     ORDER BY hour
