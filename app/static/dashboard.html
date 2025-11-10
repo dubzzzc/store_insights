@@ -3901,6 +3901,9 @@ const ModuleNav = ({ active, onChange }) => {
 
         const controllerRef = useRef(null);
         const debounceRef = useRef(null);
+        const prevDateRangeRef = useRef(null);
+        const prevPoRangeRef = useRef(null);
+        const prevInvRangeRef = useRef(null);
 
         const loadInsights = async (authToken, query) => {
           if (!authToken) return;
@@ -3988,26 +3991,50 @@ const ModuleNav = ({ active, onChange }) => {
         useEffect(() => {
           if (!token || userRole === 'admin') return;
           if (stores.length > 1 && !selectedStore) return;
+          // Always load insights when storeQueryValue changes (includes date changes)
+          // This handles initial load and date range changes
           loadInsights(token, storeQueryValue);
         }, [token, storeQueryValue, stores, selectedStore, userRole]);
 
-        // Refresh data when date ranges change (with debouncing)
+        // Additional refresh trigger when date ranges change while on sales tab
+        // This ensures data refreshes immediately when dates change (the first useEffect
+        // should handle it via storeQueryValue, but this adds a safeguard)
         useEffect(() => {
           if (!token || userRole === 'admin') return;
           if (stores.length > 1 && !selectedStore) return;
-          // Only refresh if we're on the sales tab or if dates are set
-          if (activeModule === 'sales' || dateRange?.start || poRange?.start || invRange?.start) {
+          
+          // Initialize refs on first run (skip refresh on initial mount)
+          if (prevDateRangeRef.current === null) {
+            prevDateRangeRef.current = dateRange;
+            prevPoRangeRef.current = poRange;
+            prevInvRangeRef.current = invRange;
+            return;
+          }
+          
+          const dateRangeChanged = 
+            prevDateRangeRef.current?.start !== dateRange?.start ||
+            prevDateRangeRef.current?.end !== dateRange?.end;
+          const poRangeChanged =
+            prevPoRangeRef.current?.start !== poRange?.start ||
+            prevPoRangeRef.current?.end !== poRange?.end;
+          const invRangeChanged =
+            prevInvRangeRef.current?.start !== invRange?.start ||
+            prevInvRangeRef.current?.end !== invRange?.end;
+          
+          if (dateRangeChanged || poRangeChanged || invRangeChanged) {
+            prevDateRangeRef.current = dateRange;
+            prevPoRangeRef.current = poRange;
+            prevInvRangeRef.current = invRange;
+            
+            // Debounce the refresh to avoid too many requests
             if (debounceRef.current) clearTimeout(debounceRef.current);
             debounceRef.current = setTimeout(() => {
-              if (activeModule === 'sales') {
-                loadInsights(token, storeQueryValue);
-              } else if (activeModule === 'purchase' && (poRange?.start || poRange?.end)) {
-                loadInsights(token, storeQueryValue);
-              } else if (activeModule === 'inventory' && (invRange?.start || invRange?.end)) {
+              if (activeModule === 'sales' || activeModule === 'purchase' || activeModule === 'inventory') {
                 loadInsights(token, storeQueryValue);
               }
-            }, 400);
+            }, 300);
           }
+          
           return () => {
             if (debounceRef.current) clearTimeout(debounceRef.current);
           };

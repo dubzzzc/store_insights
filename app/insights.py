@@ -543,12 +543,12 @@ def get_sales_insights(
                         for r in rows
                     ]
 
-            # Payment methods from jnl tenders 980-989 (filter dates using jnl's date column)
-            # For cash (980), subtract CASH CHANGE (LINE 999) from the total
+            # Payment methods from jnl tenders LINE 980-989 (filter dates using jnl's date column)
+            # For cash (LINE 980), subtract CASH CHANGE (LINE 999) from the total
+            # Tenders are identified by LINE number, not CAT
             payment_methods: List[Dict[str, Any]] = []
             if _table_exists(conn, db_name, "jnl"):
                 cols = _get_columns(conn, db_name, "jnl")
-                cat_col = "cat" if "cat" in cols else None
                 line_col = _pick_column(cols, ["line", "line_code"]) or None
                 jnl_date_filter_col = _pick_column(cols, ["sale_date", "trans_date", "transaction_date", "tdate", "date"]) or None
                 jnl_rflag = "rflag" if "rflag" in cols else None
@@ -577,12 +577,18 @@ def get_sales_insights(
                 if jnl_rflag:
                     where_parts.append(f"`{jnl_rflag}` <= 0")
 
-                if cat_col and amt_col:
+                if line_col and amt_col:
+                    # Get sale identifier column to match CASH CHANGE to sales with cash tenders
+                    jnl_sale_col = (
+                        _pick_column(cols, ["sale", "sale_id", "invno"]) or "sale"
+                    )
+
+                    # Tenders are identified by LINE number: 980=Cash, 981=Check, 982=Visa, etc.
                     tender_sql = f"""
-                        SELECT `{cat_col}` AS code, SUM(`{amt_col}`) AS total
+                        SELECT `{line_col}` AS code, SUM(`{amt_col}`) AS total
                         FROM jnl
-                        WHERE {' AND '.join(where_parts)} AND `{cat_col}` BETWEEN 980 AND 989
-                        GROUP BY `{cat_col}`
+                        WHERE {' AND '.join(where_parts)} AND `{line_col}` BETWEEN 980 AND 989
+                        GROUP BY `{line_col}`
                     """
                     rows = conn.execute(text(tender_sql), params3).mappings()
                     label_map = {
@@ -591,18 +597,62 @@ def get_sales_insights(
                         988: "House", 989: "EBT",
                     }
 
-                    # Get CASH CHANGE total (LINE 999) to subtract from cash
+                    # Get CASH CHANGE total (LINE 999) only for sales that have cash tenders (980)
+                    # This ensures we only subtract change from sales that actually had cash payments
                     cash_change_total = 0.0
                     if line_col:
-                        cash_change_where = where_parts.copy()
-                        cash_change_where.append(f"`{line_col}` = 999")
+                        # Build where clause for cash sales subquery
+                        cash_sales_where = []
+                        cash_sales_params = {}
+                        if jnl_date_filter_col and start:
+                            cash_sales_where.append(
+                                f"`{jnl_date_filter_col}` >= :cs_start_dt"
+                            )
+                            cash_sales_params["cs_start_dt"] = params3["p_start_dt"]
+                        if jnl_date_filter_col and end:
+                            cash_sales_where.append(
+                                f"`{jnl_date_filter_col}` < :cs_end_dt"
+                            )
+                            cash_sales_params["cs_end_dt"] = params3["p_end_dt"]
+                        if jnl_rflag:
+                            cash_sales_where.append(f"`{jnl_rflag}` <= 0")
+                        # Cash tenders are LINE 980 (not CAT)
+                        cash_sales_where.append(f"`{line_col}` = 980")
+
+                        # Build where clause for CASH CHANGE join
+                        cash_change_where = []
+                        cash_change_params = {}
+                        if jnl_date_filter_col and start:
+                            cash_change_where.append(
+                                f"jnl_change.`{jnl_date_filter_col}` >= :cc_start_dt"
+                            )
+                            cash_change_params["cc_start_dt"] = params3["p_start_dt"]
+                        if jnl_date_filter_col and end:
+                            cash_change_where.append(
+                                f"jnl_change.`{jnl_date_filter_col}` < :cc_end_dt"
+                            )
+                            cash_change_params["cc_end_dt"] = params3["p_end_dt"]
+                        if jnl_rflag:
+                            cash_change_where.append(f"jnl_change.`{jnl_rflag}` <= 0")
+                        cash_change_where.append(f"jnl_change.`{line_col}` = 999")
+
+                        # Get all sales with cash tenders, then get CASH CHANGE for those same sales
                         cash_change_sql = f"""
-                            SELECT SUM(`{amt_col}`) AS total
-                            FROM jnl
+                            SELECT SUM(jnl_change.`{amt_col}`) AS total
+                            FROM (
+                                SELECT DISTINCT `{jnl_sale_col}` AS sale_id
+                                FROM jnl
+                                WHERE {' AND '.join(cash_sales_where)}
+                            ) cash_sales
+                            INNER JOIN jnl jnl_change ON cash_sales.sale_id = jnl_change.`{jnl_sale_col}`
                             WHERE {' AND '.join(cash_change_where)}
                         """
+
                         cash_change_row = (
-                            conn.execute(text(cash_change_sql), params3)
+                            conn.execute(
+                                text(cash_change_sql),
+                                {**cash_sales_params, **cash_change_params},
+                            )
                             .mappings()
                             .first()
                         )
@@ -614,12 +664,15 @@ def get_sales_insights(
                     for r in rows:
                         code = int(r["code"]) if r["code"] is not None else None
                         amount = float(r["total"] or 0)
-                        # Subtract CASH CHANGE from cash (code 980)
+                        # Subtract CASH CHANGE from cash (code 980) only - this does NOT affect other tenders
                         if code == 980:
-                            amount = amount - cash_change_total
+                            amount = max(
+                                0.0, amount - cash_change_total
+                            )  # Ensure cash doesn't go negative
+                        # Add this tender's amount to the total (cash already adjusted above)
                         total_sum += amount
                         tmp.append({"method": label_map.get(code, str(code)), "total_sales": amount})
-                    # add percentages
+                    # Calculate percentages based on total_sum (which includes adjusted cash, not raw cash)
                     if total_sum:
                         payment_methods = [
                             {**item, "percentage": round((item["total_sales"]/total_sum)*100, 2)} for item in tmp
