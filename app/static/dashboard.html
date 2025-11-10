@@ -3844,6 +3844,10 @@ const ModuleNav = ({ active, onChange }) => {
             setQuickData(quickPayload);
             setAuthError('');
           } catch (error) {
+            // Ignore expected aborts from canceled in-flight requests
+            if (error && (error.name === 'AbortError' || (typeof error.message === 'string' && error.message.toLowerCase().includes('aborted')))) {
+              return;
+            }
             console.error(error);
             setSales([]);
             setSalesSummary(null);
