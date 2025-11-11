@@ -710,20 +710,20 @@ def get_sales_insights(
                         params2["h_end_dt"] = h_end_next
 
                     # Exclude void sales: sales where any SKU line (sku > 0) has rflag = 4
+                    # Note: Using 'jnl' as table alias in subqueries
                     void_sales_where = []
                     if jnl_rflag:
-                        void_sales_where.append(f"jnl_void.`{jnl_rflag}` = 4")
+                        void_sales_where.append(f"jnl.`{jnl_rflag}` = 4")
                     jnl_sku_col = (
                         _pick_column(jnl_cols, ["sku", "item", "item_id"]) or "sku"
                     )
-                    void_sales_where.append(f"jnl_void.`{jnl_sku_col}` > 0")
+                    void_sales_where.append(f"jnl.`{jnl_sku_col}` > 0")
 
                     # Sales must have at least one tender line (980-989) with rflag <= 0
-                    tender_check_where = [
-                        f"jnl_tender.`{jnl_line_col}` BETWEEN 980 AND 989"
-                    ]
+                    # Note: Using 'jnl' as table alias in subqueries
+                    tender_check_where = [f"jnl.`{jnl_line_col}` BETWEEN 980 AND 989"]
                     if jnl_rflag:
-                        tender_check_where.append(f"jnl_tender.`{jnl_rflag}` <= 0")
+                        tender_check_where.append(f"jnl.`{jnl_rflag}` <= 0")
 
                     # Optimize: Use INNER JOIN instead of EXISTS for better index usage
                     # Join to get sales with valid tenders, then LEFT JOIN to exclude void sales
