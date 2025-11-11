@@ -1292,6 +1292,11 @@
         role: 'store-insights/role',
         profile: 'store-insights/profile',
         operationsCache: 'store-insights/operations-cache',
+        salesCache: 'store-insights/sales-cache',
+        quickCache: 'store-insights/quick-cache',
+        tendersCache: 'store-insights/tenders-cache',
+        gatewayCache: 'store-insights/gateway-cache',
+        syncCache: 'store-insights/sync-cache',
       };
 
       const getStorage = () => {
@@ -1399,6 +1404,72 @@
       const toNumber = (value, fallback = 0) => {
         const numeric = Number(value);
         return Number.isNaN(numeric) ? fallback : numeric;
+      };
+
+      // Generic caching utility for API calls
+      const createCacheKey = (type, query, options = {}) => {
+        const queryParams = new URLSearchParams(query.replace('?', ''));
+        const storeParam = queryParams.get('store') || 'default';
+        const startParam = queryParams.get('start') || '';
+        const endParam = queryParams.get('end') || '';
+        const poStartParam = queryParams.get('po_start') || '';
+        const poEndParam = queryParams.get('po_end') || '';
+        const invStartParam = queryParams.get('inv_start') || '';
+        const invEndParam = queryParams.get('inv_end') || '';
+        
+        // For operations, use month-based key
+        if (type === 'operations') {
+          const now = new Date();
+          return `${type}_${storeParam}_${now.getFullYear()}_${now.getMonth()}`;
+        }
+        
+        // For other types, include date ranges in key
+        const parts = [type, storeParam];
+        if (startParam) parts.push(`s:${startParam}`);
+        if (endParam) parts.push(`e:${endParam}`);
+        if (poStartParam) parts.push(`pos:${poStartParam}`);
+        if (poEndParam) parts.push(`poe:${poEndParam}`);
+        if (invStartParam) parts.push(`is:${invStartParam}`);
+        if (invEndParam) parts.push(`ie:${invEndParam}`);
+        
+        // Include any additional query params that affect the result
+        if (options.includeParams) {
+          options.includeParams.forEach(param => {
+            const value = queryParams.get(param);
+            if (value) parts.push(`${param}:${value}`);
+          });
+        }
+        
+        return parts.join('_');
+      };
+
+      const getCachedData = (cacheKey, storageKey, ttlMinutes = 5) => {
+        try {
+          const cached = storage.get(storageKey, {});
+          if (cached[cacheKey] && cached[cacheKey].data) {
+            const cacheAge = Date.now() - (cached[cacheKey].timestamp || 0);
+            const ttlMs = ttlMinutes * 60 * 1000;
+            if (cacheAge < ttlMs) {
+              return cached[cacheKey].data;
+            }
+          }
+        } catch (e) {
+          // If cache read fails, return null to fetch fresh data
+        }
+        return null;
+      };
+
+      const setCachedData = (cacheKey, storageKey, data) => {
+        try {
+          const cached = storage.get(storageKey, {});
+          cached[cacheKey] = {
+            data: data,
+            timestamp: Date.now(),
+          };
+          storage.set(storageKey, cached);
+        } catch (e) {
+          // If cache write fails, continue - data is still returned
+        }
       };
 
       const getStoreIdentifier = (store) => {
@@ -3972,6 +4043,13 @@ const ModuleNav = ({ active, onChange }) => {
         }, [stores, selectedStore]);
 
         const fetchSales = async (authToken, query, signal) => {
+          // Check cache first
+          const cacheKey = createCacheKey('sales', query);
+          const cached = getCachedData(cacheKey, STORAGE_KEYS.salesCache, 5);
+          if (cached) {
+            return cached;
+          }
+
           const response = await fetch(`${API_BASE}/insights/sales${query}`, {
             headers: { Authorization: `Bearer ${authToken}` },
             signal,
@@ -3987,7 +4065,7 @@ const ModuleNav = ({ active, onChange }) => {
             requestError.status = response.status;
             throw requestError;
           }
-          return {
+          const result = {
             sales: payload.sales || [],
             summary: payload.summary || null,
             topItems: payload.top_items || [],
@@ -3997,9 +4075,21 @@ const ModuleNav = ({ active, onChange }) => {
             inventory: payload.inventory || null,
             history: payload.sales_history || [],
           };
+          
+          // Cache the result
+          setCachedData(cacheKey, STORAGE_KEYS.salesCache, result);
+          
+          return result;
         };
 
         const fetchSyncLogs = async (authToken, query, signal) => {
+          // Check cache first - sync logs have shorter TTL (2 minutes) since they're status data
+          const cacheKey = createCacheKey('sync', query);
+          const cached = getCachedData(cacheKey, STORAGE_KEYS.syncCache, 2);
+          if (cached) {
+            return cached;
+          }
+
           const response = await fetch(`${API_BASE}/sync/status${query}`, {
             headers: { Authorization: `Bearer ${authToken}` },
             signal,
@@ -4015,10 +4105,22 @@ const ModuleNav = ({ active, onChange }) => {
             requestError.status = response.status;
             throw requestError;
           }
-          return payload.logs || [];
+          const result = payload.logs || [];
+          
+          // Cache the result
+          setCachedData(cacheKey, STORAGE_KEYS.syncCache, result);
+          
+          return result;
         };
 
         const fetchTenders = async (authToken, query, signal) => {
+          // Check cache first
+          const cacheKey = createCacheKey('tenders', query);
+          const cached = getCachedData(cacheKey, STORAGE_KEYS.tendersCache, 5);
+          if (cached) {
+            return cached;
+          }
+
           const response = await fetch(`${API_BASE}/insights/tenders${query}`, {
             headers: { Authorization: `Bearer ${authToken}` },
             signal,
@@ -4034,10 +4136,21 @@ const ModuleNav = ({ active, onChange }) => {
             requestError.status = response.status;
             throw requestError;
           }
+          
+          // Cache the result
+          setCachedData(cacheKey, STORAGE_KEYS.tendersCache, payload);
+          
           return payload;
         };
 
         const fetchGateway = async (authToken, query, signal) => {
+          // Check cache first
+          const cacheKey = createCacheKey('gateway', query);
+          const cached = getCachedData(cacheKey, STORAGE_KEYS.gatewayCache, 5);
+          if (cached) {
+            return cached;
+          }
+
           const response = await fetch(`${API_BASE}/insights/gateway${query}`, {
             headers: { Authorization: `Bearer ${authToken}` },
             signal,
@@ -4053,27 +4166,19 @@ const ModuleNav = ({ active, onChange }) => {
             requestError.status = response.status;
             throw requestError;
           }
+          
+          // Cache the result
+          setCachedData(cacheKey, STORAGE_KEYS.gatewayCache, payload);
+          
           return payload;
         };
 
         const fetchOperations = async (authToken, query, signal) => {
           // Check cache first - operations data is cached per store and month
-          const queryParams = new URLSearchParams(query.replace('?', ''));
-          const storeParam = queryParams.get('store') || 'default';
-          const now = new Date();
-          const cacheKey = `ops_${storeParam}_${now.getFullYear()}_${now.getMonth()}`;
-          
-          try {
-            const cached = storage.get(STORAGE_KEYS.operationsCache, {});
-            if (cached[cacheKey] && cached[cacheKey].data) {
-              const cacheAge = Date.now() - (cached[cacheKey].timestamp || 0);
-              // Use cache if less than 5 minutes old
-              if (cacheAge < 5 * 60 * 1000) {
-                return cached[cacheKey].data;
-              }
-            }
-          } catch (e) {
-            // If cache read fails, continue to fetch
+          const cacheKey = createCacheKey('operations', query);
+          const cached = getCachedData(cacheKey, STORAGE_KEYS.operationsCache, 5);
+          if (cached) {
+            return cached;
           }
 
           const response = await fetch(`${API_BASE}/insights/operations${query}`, {
@@ -4093,21 +4198,19 @@ const ModuleNav = ({ active, onChange }) => {
           }
           
           // Cache the result
-          try {
-            const cached = storage.get(STORAGE_KEYS.operationsCache, {});
-            cached[cacheKey] = {
-              data: payload,
-              timestamp: Date.now(),
-            };
-            storage.set(STORAGE_KEYS.operationsCache, cached);
-          } catch (e) {
-            // If cache write fails, continue - data is still returned
-          }
+          setCachedData(cacheKey, STORAGE_KEYS.operationsCache, payload);
           
           return payload;
         };
 
         const fetchQuick = async (authToken, query, signal) => {
+          // Check cache first
+          const cacheKey = createCacheKey('quick', query);
+          const cached = getCachedData(cacheKey, STORAGE_KEYS.quickCache, 5);
+          if (cached) {
+            return cached;
+          }
+
           const response = await fetch(`${API_BASE}/insights/quick${query}`, {
             headers: { Authorization: `Bearer ${authToken}` },
             signal,
@@ -4123,6 +4226,10 @@ const ModuleNav = ({ active, onChange }) => {
             requestError.status = response.status;
             throw requestError;
           }
+          
+          // Cache the result
+          setCachedData(cacheKey, STORAGE_KEYS.quickCache, payload);
+          
           return payload;
         };
 
