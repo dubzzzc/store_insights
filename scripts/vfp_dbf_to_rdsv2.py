@@ -1952,6 +1952,154 @@ def get_existing_keys(
                     if row[0] is not None:
                         existing_keys.add((str(row[0]).strip(),))
 
+        elif table_lower in ("poh", "pod"):
+            # Check for existing order
+            order_col = None
+            for col in col_names:
+                if col.lower() in (
+                    "order",
+                    "orderno",
+                    "pono",
+                    "po",
+                    "order_num",
+                    "order_number",
+                ):
+                    order_col = find_db_col(col)
+                    if order_col:
+                        break
+
+            if order_col:
+                order_col_safe = safe_sql_name(order_col)
+                if engine == "mssql":
+                    target = (
+                        f"[{schema}].[{safe_sql_name(table)}]"
+                        if schema
+                        else f"[{safe_sql_name(table)}]"
+                    )
+                    sql = f"SELECT [{order_col_safe}] FROM {target} WHERE [{order_col_safe}] IS NOT NULL"
+                else:
+                    target = f"`{safe_sql_name(table)}`"
+                    sql = f"SELECT `{order_col_safe}` FROM {target} WHERE `{order_col_safe}` IS NOT NULL"
+
+                cur.execute(sql)
+                for row in cur.fetchall():
+                    if row[0] is not None:
+                        existing_keys.add((str(row[0]).strip(),))
+
+        elif table_lower == "glb":
+            # Check for existing date
+            date_col = None
+            for col in col_names:
+                if col.lower() in (
+                    "date",
+                    "tdate",
+                    "sale_date",
+                    "trans_date",
+                    "transaction_date",
+                    "glb_date",
+                ):
+                    date_col = find_db_col(col)
+                    if date_col:
+                        break
+
+            if date_col:
+                date_col_safe = safe_sql_name(date_col)
+                if engine == "mssql":
+                    target = (
+                        f"[{schema}].[{safe_sql_name(table)}]"
+                        if schema
+                        else f"[{safe_sql_name(table)}]"
+                    )
+                    # For date comparison, use CAST to DATE to normalize to date only
+                    sql = f"SELECT DISTINCT CAST([{date_col_safe}] AS DATE) FROM {target} WHERE [{date_col_safe}] IS NOT NULL"
+                else:
+                    target = f"`{safe_sql_name(table)}`"
+                    # For date comparison, use DATE() function to normalize to date only
+                    sql = f"SELECT DISTINCT DATE(`{date_col_safe}`) FROM {target} WHERE `{date_col_safe}` IS NOT NULL"
+
+                cur.execute(sql)
+                for row in cur.fetchall():
+                    if row[0] is not None:
+                        # Convert date to string for comparison (YYYY-MM-DD format)
+                        if isinstance(row[0], (date, datetime)):
+                            date_str = row[0].strftime("%Y-%m-%d")
+                        else:
+                            date_str = str(row[0])[
+                                :10
+                            ]  # Take first 10 chars (YYYY-MM-DD)
+                        existing_keys.add((date_str,))
+
+        elif table_lower == "hst":
+            # Check for existing SKU + date combination
+            sku_col = None
+            date_col = None
+            for col in col_names:
+                if col.lower() in ("sku", "item", "item_id"):
+                    sku_col = find_db_col(col)
+                elif col.lower() in (
+                    "date",
+                    "tdate",
+                    "sale_date",
+                    "trans_date",
+                    "transaction_date",
+                ):
+                    date_col = find_db_col(col)
+
+            if sku_col and date_col:
+                sku_col_safe = safe_sql_name(sku_col)
+                date_col_safe = safe_sql_name(date_col)
+                if engine == "mssql":
+                    target = (
+                        f"[{schema}].[{safe_sql_name(table)}]"
+                        if schema
+                        else f"[{safe_sql_name(table)}]"
+                    )
+                    # For date comparison, use CAST to DATE to normalize to date only
+                    sql = f"SELECT [{sku_col_safe}], CAST([{date_col_safe}] AS DATE) FROM {target} WHERE [{sku_col_safe}] IS NOT NULL AND [{date_col_safe}] IS NOT NULL"
+                else:
+                    target = f"`{safe_sql_name(table)}`"
+                    # For date comparison, use DATE() function to normalize to date only
+                    sql = f"SELECT `{sku_col_safe}`, DATE(`{date_col_safe}`) FROM {target} WHERE `{sku_col_safe}` IS NOT NULL AND `{date_col_safe}` IS NOT NULL"
+
+                cur.execute(sql)
+                for row in cur.fetchall():
+                    if row[0] is not None and row[1] is not None:
+                        # Convert date to string for comparison (YYYY-MM-DD format)
+                        if isinstance(row[1], (date, datetime)):
+                            date_str = row[1].strftime("%Y-%m-%d")
+                        else:
+                            date_str = str(row[1])[
+                                :10
+                            ]  # Take first 10 chars (YYYY-MM-DD)
+                        existing_keys.add((str(row[0]).strip(), date_str))
+
+        elif table_lower in ("slh", "sll"):
+            # Check for existing listnum
+            listnum_col = None
+            for col in col_names:
+                if col.lower() in ("listnum", "list_num", "list_number", "list"):
+                    listnum_col = find_db_col(col)
+                    if listnum_col:
+                        break
+
+            if listnum_col:
+                listnum_col_safe = safe_sql_name(listnum_col)
+                if engine == "mssql":
+                    target = (
+                        f"[{schema}].[{safe_sql_name(table)}]"
+                        if schema
+                        else f"[{safe_sql_name(table)}]"
+                    )
+                    sql = f"SELECT [{listnum_col_safe}] FROM {target} WHERE [{listnum_col_safe}] IS NOT NULL"
+                else:
+                    target = f"`{safe_sql_name(table)}`"
+                    sql = f"SELECT `{listnum_col_safe}` FROM {target} WHERE `{listnum_col_safe}` IS NOT NULL"
+
+                cur.execute(sql)
+                for row in cur.fetchall():
+                    if row[0] is not None:
+                        existing_keys.add((str(row[0]).strip(),))
+
     except Exception as e:
         log_to_gui(
             f"WARNING: Could not check existing keys for {table}: {e}. Proceeding without duplicate check."
@@ -2037,7 +2185,20 @@ def bulk_insert(
     existing_keys = set()
     duplicate_check_enabled = False
 
-    if not recreate and table_lower in ("inv", "stk", "prc", "upc", "jnh", "jnl"):
+    if not recreate and table_lower in (
+        "inv",
+        "stk",
+        "prc",
+        "upc",
+        "jnh",
+        "jnl",
+        "poh",
+        "pod",
+        "glb",
+        "hst",
+        "slh",
+        "sll",
+    ):
         duplicate_check_enabled = True
         log_to_gui(f"Checking for existing records in {table} to prevent duplicates...")
         existing_keys = get_existing_keys(
@@ -2115,6 +2276,168 @@ def bulk_insert(
                             sale_val = row[sale_idx]
                             if sale_val is not None:
                                 key = (str(sale_val).strip(),)
+                                if key in existing_keys:
+                                    is_duplicate = True
+
+                    elif table_lower in ("poh", "pod"):
+                        # Check order
+                        order_idx = None
+                        for i, col in enumerate(col_names):
+                            if col.lower() in (
+                                "order",
+                                "orderno",
+                                "pono",
+                                "po",
+                                "order_num",
+                                "order_number",
+                            ):
+                                order_idx = i
+                                break
+                        if order_idx is not None and order_idx < len(row):
+                            order_val = row[order_idx]
+                            if order_val is not None:
+                                key = (str(order_val).strip(),)
+                                if key in existing_keys:
+                                    is_duplicate = True
+
+                    elif table_lower == "glb":
+                        # Check date
+                        date_idx = None
+                        for i, col in enumerate(col_names):
+                            if col.lower() in (
+                                "date",
+                                "tdate",
+                                "sale_date",
+                                "trans_date",
+                                "transaction_date",
+                                "glb_date",
+                            ):
+                                date_idx = i
+                                break
+                        if date_idx is not None and date_idx < len(row):
+                            date_val = row[date_idx]
+                            if date_val is not None:
+                                # Normalize date to YYYY-MM-DD format for comparison
+                                date_str = None
+                                if isinstance(date_val, (date, datetime)):
+                                    date_str = date_val.strftime("%Y-%m-%d")
+                                elif isinstance(date_val, str):
+                                    # Try to parse and normalize date string
+                                    try:
+                                        # Try common date formats
+                                        for fmt in [
+                                            "%Y-%m-%d",
+                                            "%m/%d/%Y",
+                                            "%Y/%m/%d",
+                                            "%d/%m/%Y",
+                                        ]:
+                                            try:
+                                                parsed = datetime.strptime(
+                                                    date_val[:10], fmt
+                                                )
+                                                date_str = parsed.strftime("%Y-%m-%d")
+                                                break
+                                            except ValueError:
+                                                continue
+                                        if not date_str:
+                                            # Fallback: take first 10 chars if it looks like a date
+                                            if (
+                                                len(date_val) >= 10
+                                                and date_val[4] in ("-", "/")
+                                                and date_val[7] in ("-", "/")
+                                            ):
+                                                date_str = date_val[:10].replace(
+                                                    "/", "-"
+                                                )
+                                    except Exception:
+                                        pass
+
+                                if date_str:
+                                    key = (date_str,)
+                                    if key in existing_keys:
+                                        is_duplicate = True
+
+                    elif table_lower == "hst":
+                        # Check SKU + date combination
+                        sku_idx = None
+                        date_idx = None
+                        for i, col in enumerate(col_names):
+                            if col.lower() in ("sku", "item", "item_id"):
+                                sku_idx = i
+                            elif col.lower() in (
+                                "date",
+                                "tdate",
+                                "sale_date",
+                                "trans_date",
+                                "transaction_date",
+                            ):
+                                date_idx = i
+
+                        if (
+                            sku_idx is not None
+                            and date_idx is not None
+                            and sku_idx < len(row)
+                            and date_idx < len(row)
+                        ):
+                            sku_val = row[sku_idx]
+                            date_val = row[date_idx]
+                            if sku_val is not None and date_val is not None:
+                                # Normalize date to YYYY-MM-DD format for comparison
+                                date_str = None
+                                if isinstance(date_val, (date, datetime)):
+                                    date_str = date_val.strftime("%Y-%m-%d")
+                                elif isinstance(date_val, str):
+                                    # Try to parse and normalize date string
+                                    try:
+                                        # Try common date formats
+                                        for fmt in [
+                                            "%Y-%m-%d",
+                                            "%m/%d/%Y",
+                                            "%Y/%m/%d",
+                                            "%d/%m/%Y",
+                                        ]:
+                                            try:
+                                                parsed = datetime.strptime(
+                                                    date_val[:10], fmt
+                                                )
+                                                date_str = parsed.strftime("%Y-%m-%d")
+                                                break
+                                            except ValueError:
+                                                continue
+                                        if not date_str:
+                                            # Fallback: take first 10 chars if it looks like a date
+                                            if (
+                                                len(date_val) >= 10
+                                                and date_val[4] in ("-", "/")
+                                                and date_val[7] in ("-", "/")
+                                            ):
+                                                date_str = date_val[:10].replace(
+                                                    "/", "-"
+                                                )
+                                    except Exception:
+                                        pass
+
+                                if date_str:
+                                    key = (str(sku_val).strip(), date_str)
+                                    if key in existing_keys:
+                                        is_duplicate = True
+
+                    elif table_lower in ("slh", "sll"):
+                        # Check listnum
+                        listnum_idx = None
+                        for i, col in enumerate(col_names):
+                            if col.lower() in (
+                                "listnum",
+                                "list_num",
+                                "list_number",
+                                "list",
+                            ):
+                                listnum_idx = i
+                                break
+                        if listnum_idx is not None and listnum_idx < len(row):
+                            listnum_val = row[listnum_idx]
+                            if listnum_val is not None:
+                                key = (str(listnum_val).strip(),)
                                 if key in existing_keys:
                                     is_duplicate = True
                 except (IndexError, TypeError, AttributeError):
