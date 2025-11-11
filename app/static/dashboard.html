@@ -3167,6 +3167,37 @@ const InventoryModule = ({ snapshot, dateRange, onDateRangeChange }) => {
   );
 };
 
+const fetchProductHistory = async (authToken, storeQuery, searchQuery, signal) => {
+  // Check cache first - cache key includes search query
+  const cacheKey = `product_history_${storeQuery}_${searchQuery || 'all'}`;
+  const cached = getCachedData(cacheKey, STORAGE_KEYS.salesCache, 10); // 10 min cache for product history
+  if (cached) {
+    return cached;
+  }
+
+  const searchParam = searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : '';
+  const response = await fetch(`${API_BASE}/insights/product-history${storeQuery}${searchParam}`, {
+    headers: { Authorization: `Bearer ${authToken}` },
+    signal,
+  });
+  let payload = {};
+  try {
+    payload = await response.json();
+  } catch (error) {
+    payload = {};
+  }
+  if (!response.ok) {
+    const requestError = new Error(payload.detail || 'Unable to load product history');
+    requestError.status = response.status;
+    throw requestError;
+  }
+  
+  // Cache the result
+  setCachedData(cacheKey, STORAGE_KEYS.salesCache, payload);
+  
+  return payload;
+};
+
 const HistoryModule = ({ token, storeQueryValue }) => {
   const [query, setQuery] = useState('');
   const [products, setProducts] = useState([]);
@@ -4337,37 +4368,6 @@ const ModuleNav = ({ active, onChange }) => {
           
           // Cache the result
           setCachedData(cacheKey, STORAGE_KEYS.quickCache, payload);
-          
-          return payload;
-        };
-
-        const fetchProductHistory = async (authToken, storeQuery, searchQuery, signal) => {
-          // Check cache first - cache key includes search query
-          const cacheKey = `product_history_${storeQuery}_${searchQuery || 'all'}`;
-          const cached = getCachedData(cacheKey, STORAGE_KEYS.salesCache, 10); // 10 min cache for product history
-          if (cached) {
-            return cached;
-          }
-
-          const searchParam = searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : '';
-          const response = await fetch(`${API_BASE}/insights/product-history${storeQuery}${searchParam}`, {
-            headers: { Authorization: `Bearer ${authToken}` },
-            signal,
-          });
-          let payload = {};
-          try {
-            payload = await response.json();
-          } catch (error) {
-            payload = {};
-          }
-          if (!response.ok) {
-            const requestError = new Error(payload.detail || 'Unable to load product history');
-            requestError.status = response.status;
-            throw requestError;
-          }
-          
-          // Cache the result
-          setCachedData(cacheKey, STORAGE_KEYS.salesCache, payload);
           
           return payload;
         };
