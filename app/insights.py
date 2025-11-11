@@ -612,14 +612,15 @@ def get_sales_insights(
                 jnh_sale = (
                     _pick_column(jnh_cols, ["sale", "sale_id", "invno"]) or jnl_sale
                 )
+                jnh_total = _pick_column(jnh_cols, ["total", "amount", "price"]) or None
 
-                if jnl_date_col and jnl_line_col and jnl_price_col:
+                if jnl_date_col and jnl_line_col and jnh_total:
                     where_parts = []
                     params2: Dict[str, Any] = {}
 
-                    # Filter by date using jnl's date column (half-open interval)
+                    # Filter by date using jnh.tstamp (half-open interval)
                     if start:
-                        where_parts.append(f"jnl.`{jnl_date_col}` >= :h_start_dt")
+                        where_parts.append(f"jnh.`{jnh_time}` >= :h_start_dt")
                         params2["h_start_dt"] = f"{start} 00:00:00"
                     if end:
                         try:
@@ -630,21 +631,43 @@ def get_sales_insights(
                             ).strftime("%Y-%m-%d 00:00:00")
                         except Exception:
                             h_end_next = f"{end} 23:59:59"
-                        where_parts.append(f"jnl.`{jnl_date_col}` < :h_end_dt")
+                        where_parts.append(f"jnh.`{jnh_time}` < :h_end_dt")
                         params2["h_end_dt"] = h_end_next
 
-                    # Filter: RFLAG <= 0 (matches process_prefix)
+                    # Exclude void sales: sales where any SKU line (sku > 0) has rflag = 4
+                    void_sales_where = []
                     if jnl_rflag:
-                        where_parts.append(f"jnl.`{jnl_rflag}` <= 0")
+                        void_sales_where.append(f"jnl_void.`{jnl_rflag}` = 4")
+                    jnl_sku_col = (
+                        _pick_column(jnl_cols, ["sku", "item", "item_id"]) or "sku"
+                    )
+                    void_sales_where.append(f"jnl_void.`{jnl_sku_col}` > 0")
 
-                    # Filter: LINE between 980-989 (tender lines, matches process_prefix)
-                    where_parts.append(f"jnl.`{jnl_line_col}` BETWEEN 980 AND 989")
+                    # Sales must have at least one tender line (980-989) with rflag <= 0
+                    tender_check_where = [
+                        f"jnl_tender.`{jnl_line_col}` BETWEEN 980 AND 989"
+                    ]
+                    if jnl_rflag:
+                        tender_check_where.append(f"jnl_tender.`{jnl_rflag}` <= 0")
 
                     hourly_sql = f"""
-                        SELECT HOUR(jnh.`{jnh_time}`) AS hour, SUM(jnl.`{jnl_price_col}`) AS total_sales
-                        FROM jnl
-                        JOIN jnh ON jnl.`{jnl_sale}` = jnh.`{jnh_sale}`
+                        SELECT HOUR(jnh.`{jnh_time}`) AS hour, SUM(jnh.`{jnh_total}`) AS total_sales
+                        FROM jnh
                         WHERE {' AND '.join(where_parts)}
+                          AND EXISTS (
+                              SELECT 1
+                              FROM jnl jnl_tender
+                              WHERE jnl_tender.`{jnl_sale}` = jnh.`{jnh_sale}`
+                                AND {' AND '.join(tender_check_where)}
+                              LIMIT 1
+                          )
+                          AND NOT EXISTS (
+                              SELECT 1
+                              FROM jnl jnl_void
+                              WHERE jnl_void.`{jnl_sale}` = jnh.`{jnh_sale}`
+                                AND {' AND '.join(void_sales_where)}
+                              LIMIT 1
+                          )
                         GROUP BY HOUR(jnh.`{jnh_time}`)
                         ORDER BY hour
                     """
