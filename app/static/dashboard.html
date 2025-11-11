@@ -4167,8 +4167,10 @@ const ModuleNav = ({ active, onChange }) => {
               setGatewayData(gatewayPayload);
             } else if (module === 'operations') {
               // Operations tab shows overall data - only pass store parameter, no date filters
-              const storeOnlyQuery = storeQueryValue.split('&').filter(p => p.startsWith('store=')).join('&');
-              const opsQuery = storeOnlyQuery ? `?${storeOnlyQuery}` : '';
+              // Extract store parameter from query string
+              const queryParams = new URLSearchParams(storeQueryValue.replace('?', ''));
+              const storeParam = queryParams.get('store');
+              const opsQuery = storeParam ? `?store=${encodeURIComponent(storeParam)}` : '';
               payload = await fetchOperations(authToken, opsQuery);
               setOperationsData(payload);
             }
