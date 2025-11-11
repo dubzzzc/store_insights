@@ -1414,9 +1414,13 @@ def get_sales_insights(
                         if po_start_eff or po_end_eff:
                             if poh_rcv_col:
                                 if po_start_eff:
-                                    poh_ids_where.append(f"poh.`{poh_rcv_col}` >= :po_start_dt")
+                                    poh_ids_where.append(
+                                        f"poh.`{poh_rcv_col}` >= :po_start_dt"
+                                    )
                                 if po_end_eff:
-                                    poh_ids_where.append(f"poh.`{poh_rcv_col}` < :po_end_dt")
+                                    poh_ids_where.append(
+                                        f"poh.`{poh_rcv_col}` < :po_end_dt"
+                                    )
                                 poh_ids_params.update(
                                     {
                                         k: v

@@ -888,6 +888,11 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
             col_vcode = safe_sql_name("vcode")
         elif table_lower == "str":
             col_store = safe_sql_name("store")
+        elif table_lower == "cat":
+            col_cat = safe_sql_name("cat")
+        elif table_lower == "emp":
+            col_id = safe_sql_name("id")
+            col_uid = safe_sql_name("uid")
         else:
             # Table not in our list - no indexes needed
             return
@@ -1046,6 +1051,22 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
                         f"CREATE INDEX idx_str_store ON {target} ([{col_store}])",
                     ),
                 ]
+            elif table_lower == "cat":
+                # Index for duplicate checking (cat)
+                indexes = [
+                    (
+                        "idx_cat_cat",
+                        f"CREATE INDEX idx_cat_cat ON {target} ([{col_cat}])",
+                    ),
+                ]
+            elif table_lower == "emp":
+                # Composite index for duplicate checking (id + uid)
+                indexes = [
+                    (
+                        "idx_emp_id_uid",
+                        f"CREATE INDEX idx_emp_id_uid ON {target} ([{col_id}], [{col_uid}])",
+                    ),
+                ]
             else:
                 # No indexes for other tables
                 indexes = []
@@ -1197,6 +1218,22 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
                     (
                         "idx_str_store",
                         f"CREATE INDEX idx_str_store ON {target} (`{col_store}`)",
+                    ),
+                ]
+            elif table_lower == "cat":
+                # Index for duplicate checking (cat)
+                indexes = [
+                    (
+                        "idx_cat_cat",
+                        f"CREATE INDEX idx_cat_cat ON {target} (`{col_cat}`)",
+                    ),
+                ]
+            elif table_lower == "emp":
+                # Composite index for duplicate checking (id + uid)
+                indexes = [
+                    (
+                        "idx_emp_id_uid",
+                        f"CREATE INDEX idx_emp_id_uid ON {target} (`{col_id}`, `{col_uid}`)",
                     ),
                 ]
             else:
@@ -2480,6 +2517,62 @@ def get_existing_keys(
                     if row[0] is not None:
                         existing_keys.add((str(row[0]).strip(),))
 
+        elif table_lower == "cat":
+            # Check for existing cat
+            cat_col = None
+            for col in col_names:
+                if col.lower() in ("cat", "category", "cat_id", "category_id"):
+                    cat_col = find_db_col(col)
+                    if cat_col:
+                        break
+
+            if cat_col:
+                cat_col_safe = safe_sql_name(cat_col)
+                if engine == "mssql":
+                    target = (
+                        f"[{schema}].[{safe_sql_name(table)}]"
+                        if schema
+                        else f"[{safe_sql_name(table)}]"
+                    )
+                    sql = f"SELECT [{cat_col_safe}] FROM {target} WHERE [{cat_col_safe}] IS NOT NULL"
+                else:
+                    target = f"`{safe_sql_name(table)}`"
+                    sql = f"SELECT `{cat_col_safe}` FROM {target} WHERE `{cat_col_safe}` IS NOT NULL"
+
+                cur.execute(sql)
+                for row in cur.fetchall():
+                    if row[0] is not None:
+                        existing_keys.add((str(row[0]).strip(),))
+
+        elif table_lower == "emp":
+            # Check for existing id + uid combination
+            id_col = None
+            uid_col = None
+            for col in col_names:
+                if col.lower() in ("id", "emp_id", "employee_id", "eid"):
+                    id_col = find_db_col(col)
+                elif col.lower() in ("uid", "user_id", "userid", "emp_uid"):
+                    uid_col = find_db_col(col)
+
+            if id_col and uid_col:
+                id_col_safe = safe_sql_name(id_col)
+                uid_col_safe = safe_sql_name(uid_col)
+                if engine == "mssql":
+                    target = (
+                        f"[{schema}].[{safe_sql_name(table)}]"
+                        if schema
+                        else f"[{safe_sql_name(table)}]"
+                    )
+                    sql = f"SELECT [{id_col_safe}], [{uid_col_safe}] FROM {target} WHERE [{id_col_safe}] IS NOT NULL AND [{uid_col_safe}] IS NOT NULL"
+                else:
+                    target = f"`{safe_sql_name(table)}`"
+                    sql = f"SELECT `{id_col_safe}`, `{uid_col_safe}` FROM {target} WHERE `{id_col_safe}` IS NOT NULL AND `{uid_col_safe}` IS NOT NULL"
+
+                cur.execute(sql)
+                for row in cur.fetchall():
+                    if row[0] is not None and row[1] is not None:
+                        existing_keys.add((str(row[0]).strip(), str(row[1]).strip()))
+
     except Exception as e:
         log_to_gui(
             f"WARNING: Could not check existing keys for {table}: {e}. Proceeding without duplicate check."
@@ -2582,6 +2675,8 @@ def bulk_insert(
         "cus",
         "vnd",
         "str",
+        "cat",
+        "emp",
     ):
         duplicate_check_enabled = True
         log_to_gui(f"Checking for existing records in {table} to prevent duplicates...")
@@ -2897,6 +2992,47 @@ def bulk_insert(
                             store_val = row[store_idx]
                             if store_val is not None:
                                 key = (str(store_val).strip(),)
+                                if key in existing_keys:
+                                    is_duplicate = True
+
+                    elif table_lower == "cat":
+                        # Check cat
+                        cat_idx = None
+                        for i, col in enumerate(col_names):
+                            if col.lower() in (
+                                "cat",
+                                "category",
+                                "cat_id",
+                                "category_id",
+                            ):
+                                cat_idx = i
+                                break
+                        if cat_idx is not None and cat_idx < len(row):
+                            cat_val = row[cat_idx]
+                            if cat_val is not None:
+                                key = (str(cat_val).strip(),)
+                                if key in existing_keys:
+                                    is_duplicate = True
+
+                    elif table_lower == "emp":
+                        # Check id + uid combination
+                        id_idx = None
+                        uid_idx = None
+                        for i, col in enumerate(col_names):
+                            if col.lower() in ("id", "emp_id", "employee_id", "eid"):
+                                id_idx = i
+                            elif col.lower() in ("uid", "user_id", "userid", "emp_uid"):
+                                uid_idx = i
+                        if (
+                            id_idx is not None
+                            and uid_idx is not None
+                            and id_idx < len(row)
+                            and uid_idx < len(row)
+                        ):
+                            id_val = row[id_idx]
+                            uid_val = row[uid_idx]
+                            if id_val is not None and uid_val is not None:
+                                key = (str(id_val).strip(), str(uid_val).strip())
                                 if key in existing_keys:
                                     is_duplicate = True
                 except (IndexError, TypeError, AttributeError):
