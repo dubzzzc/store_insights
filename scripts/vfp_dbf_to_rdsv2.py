@@ -922,6 +922,11 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
                 ]
             elif table_lower == "jnl":
                 # Indexes for jnl table (performance + duplicate checking)
+                col_date = (
+                    choose_column_name("date", existing_cols)
+                    or choose_column_name("tdate", existing_cols)
+                    or safe_sql_name("date")
+                )
                 indexes = [
                     (
                         "idx_jnl_sale_line_rflag",
@@ -934,6 +939,10 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
                     (
                         "idx_jnl_sale",
                         f"CREATE INDEX idx_jnl_sale ON {target} ([{col_sale}])",
+                    ),
+                    (
+                        "idx_jnl_date_rflag_sku",
+                        f"CREATE INDEX idx_jnl_date_rflag_sku ON {target} ([{col_date}], [{col_rflag}], [{col_sku}])",
                     ),
                 ]
             elif table_lower in ("inv", "stk", "prc"):
@@ -1091,6 +1100,11 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
                 ]
             elif table_lower == "jnl":
                 # Indexes for jnl table (performance + duplicate checking)
+                col_date = (
+                    choose_column_name("date", existing_cols)
+                    or choose_column_name("tdate", existing_cols)
+                    or safe_sql_name("date")
+                )
                 indexes = [
                     (
                         "idx_jnl_sale_line_rflag",
@@ -1103,6 +1117,10 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
                     (
                         "idx_jnl_sale",
                         f"CREATE INDEX idx_jnl_sale ON {target} (`{col_sale}`)",
+                    ),
+                    (
+                        "idx_jnl_date_rflag_sku",
+                        f"CREATE INDEX idx_jnl_date_rflag_sku ON {target} (`{col_date}`, `{col_rflag}`, `{col_sku}`)",
                     ),
                 ]
             elif table_lower in ("inv", "stk", "prc"):

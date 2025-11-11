@@ -4222,16 +4222,18 @@ const ModuleNav = ({ active, onChange }) => {
             
             // Only refresh if we have valid dates and are on the relevant tab
             const shouldRefresh = 
-              (activeModule === 'sales' && dateRange?.start) ||
-              (activeModule === 'purchase' && (poRange?.start || poRangeChanged)) ||
-              (activeModule === 'inventory' && (invRange?.start || invRangeChanged));
+              (activeModule === 'sales' && dateRangeChanged && dateRange?.start) ||
+              (activeModule === 'purchase' && poRangeChanged && (poRange?.start || poRange?.end)) ||
+              (activeModule === 'inventory' && invRangeChanged && (invRange?.start || invRange?.end));
             
-            if (shouldRefresh) {
+            if (shouldRefresh && token) {
               // Debounce the refresh to avoid too many requests
               if (debounceRef.current) clearTimeout(debounceRef.current);
               debounceRef.current = setTimeout(() => {
-                loadInsights(token, storeQueryValue);
-              }, 400);
+                if (token) {
+                  loadInsights(token, storeQueryValue);
+                }
+              }, 300);
             }
           }
           
