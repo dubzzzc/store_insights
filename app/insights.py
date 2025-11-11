@@ -725,24 +725,25 @@ def get_sales_insights(
                     if jnl_rflag:
                         tender_check_where.append(f"jnl_tender.`{jnl_rflag}` <= 0")
 
+                    # Optimize: Use INNER JOIN instead of EXISTS for better index usage
+                    # Join to get sales with valid tenders, then LEFT JOIN to exclude void sales
                     hourly_sql = f"""
-                        SELECT HOUR(jnh.`{jnh_time}`) AS hour, SUM(jnh.`{jnh_total}`) AS total_sales
+                        SELECT 
+                            HOUR(jnh.`{jnh_time}`) AS hour, 
+                            SUM(jnh.`{jnh_total}`) AS total_sales
                         FROM jnh
+                        INNER JOIN (
+                            SELECT DISTINCT `{jnl_sale}` AS sale_id
+                            FROM jnl
+                            WHERE {' AND '.join(tender_check_where)}
+                        ) AS valid_tenders ON valid_tenders.sale_id = jnh.`{jnh_sale}`
+                        LEFT JOIN (
+                            SELECT DISTINCT `{jnl_sale}` AS sale_id
+                            FROM jnl
+                            WHERE {' AND '.join(void_sales_where)}
+                        ) AS void_sales ON void_sales.sale_id = jnh.`{jnh_sale}`
                         WHERE {' AND '.join(where_parts)}
-                          AND EXISTS (
-                              SELECT 1
-                              FROM jnl jnl_tender
-                              WHERE jnl_tender.`{jnl_sale}` = jnh.`{jnh_sale}`
-                                AND {' AND '.join(tender_check_where)}
-                              LIMIT 1
-                          )
-                          AND NOT EXISTS (
-                              SELECT 1
-                              FROM jnl jnl_void
-                              WHERE jnl_void.`{jnl_sale}` = jnh.`{jnh_sale}`
-                                AND {' AND '.join(void_sales_where)}
-                              LIMIT 1
-                          )
+                          AND void_sales.sale_id IS NULL
                         GROUP BY HOUR(jnh.`{jnh_time}`)
                         ORDER BY hour
                     """
@@ -767,32 +768,48 @@ def get_sales_insights(
                             }
                         )
 
-            # Payment methods from jnl tenders LINE 980-989 (filter dates using jnl's date column)
+            # Payment methods from jnl tenders LINE 980-989
+            # Filter dates using jnh.tstamp to match hourly sales logic for consistency
             # Shows ALL payment types/tenders for the selected date range, including gift cards
             # LINE 980-989 are just tender slots (order received), payment type is identified by CAT column
             # For cash payments, subtract CASH CHANGE (LINE 999) from the total
             payment_methods: List[Dict[str, Any]] = []
-            if _table_exists(conn, db_name, "jnl"):
+            if _table_exists(conn, db_name, "jnl") and _table_exists(
+                conn, db_name, "jnh"
+            ):
                 cols = _get_columns(conn, db_name, "jnl")
                 line_col = _pick_column(cols, ["line", "line_code"]) or None
                 cat_col = "cat" if "cat" in cols else None
                 descript_col = (
                     _pick_column(cols, ["descript", "description", "desc"]) or None
                 )
-                jnl_date_filter_col = _pick_column(cols, ["sale_date", "trans_date", "transaction_date", "tdate", "date"]) or None
                 jnl_rflag = "rflag" if "rflag" in cols else None
                 amt_col = None
                 for c in ["amount", "total", "price"]:
                     if c in cols:
                         amt_col = c
                         break
+
+                # Get jnh columns for date filtering
+                jnh_cols = _get_columns(conn, db_name, "jnh")
+                jnh_time = (
+                    _pick_column(jnh_cols, ["tstamp", "timestamp", "time", "t_time"])
+                    or "tstamp"
+                )
+                jnh_sale = (
+                    _pick_column(jnh_cols, ["sale", "sale_id", "invno"]) or "sale"
+                )
+                jnl_sale_col = (
+                    _pick_column(cols, ["sale", "sale_id", "invno"]) or "sale"
+                )
+
                 where_parts = []
                 params3: Dict[str, Any] = {}
-                # Date filter: show ALL tenders for the selected date range
-                if jnl_date_filter_col and start:
-                    where_parts.append(f"jnl.`{jnl_date_filter_col}` >= :p_start_dt")
+                # Date filter: use jnh.tstamp to match hourly sales logic
+                if start:
+                    where_parts.append(f"jnh.`{jnh_time}` >= :p_start_dt")
                     params3["p_start_dt"] = f"{start} 00:00:00"
-                if jnl_date_filter_col and end:
+                if end:
                     try:
                         from datetime import timedelta
 
@@ -801,7 +818,7 @@ def get_sales_insights(
                         ).strftime("%Y-%m-%d 00:00:00")
                     except Exception:
                         p_end_next = f"{end} 23:59:59"
-                    where_parts.append(f"jnl.`{jnl_date_filter_col}` < :p_end_dt")
+                    where_parts.append(f"jnh.`{jnh_time}` < :p_end_dt")
                     params3["p_end_dt"] = p_end_next
                 # Filter: RFLAG <= 0 (excludes returns/voids, includes all valid tenders)
                 if jnl_rflag:
@@ -865,17 +882,18 @@ def get_sales_insights(
                             # Optimize: Pre-calculate cash change per sale using a simple subquery JOIN
                             # Get cash change (LINE 999) only for sales that have cash tenders and are not void
                             # Exclude void sales: sales where any SKU line (sku > 0) has rflag = 4
+                            # Use jnh.tstamp for date filtering to match main query
                             cash_change_where = [
                                 f"jnl_cc.`{line_col}` = 999",
                                 f"jnl_cc.`{jnl_rflag}` <= 0",
                             ]
-                            if jnl_date_filter_col and start:
+                            if start:
                                 cash_change_where.append(
-                                    f"jnl_cc.`{jnl_date_filter_col}` >= :cc_start_dt"
+                                    f"jnh_cc.`{jnh_time}` >= :cc_start_dt"
                                 )
-                            if jnl_date_filter_col and end:
+                            if end:
                                 cash_change_where.append(
-                                    f"jnl_cc.`{jnl_date_filter_col}` < :cc_end_dt"
+                                    f"jnh_cc.`{jnh_time}` < :cc_end_dt"
                                 )
 
                             # Build void sales check for cash change subquery
@@ -937,11 +955,13 @@ def get_sales_insights(
                                         END
                                     ) AS total
                                 FROM jnl
+                                INNER JOIN jnh ON jnh.`{jnh_sale}` = jnl.`{jnl_sale_col}`
                                 LEFT JOIN (
                                     SELECT 
                                         jnl_cc.`{jnl_sale_col}` AS sale_id,
                                         SUM(jnl_cc.`{amt_col}`) AS cash_change
                                     FROM jnl jnl_cc
+                                    INNER JOIN jnh jnh_cc ON jnh_cc.`{jnh_sale}` = jnl_cc.`{jnl_sale_col}`
                                     WHERE {' AND '.join(cash_change_where)}
                                       AND NOT EXISTS (
                                           SELECT 1
@@ -974,10 +994,10 @@ def get_sales_insights(
                                 ORDER BY jnl.`{cat_col}`
                             """
 
-                            # Add parameters for cash change subquery
-                            if jnl_date_filter_col and start:
+                            # Add parameters for cash change subquery (use same as main query)
+                            if start:
                                 params3["cc_start_dt"] = params3["p_start_dt"]
-                            if jnl_date_filter_col and end:
+                            if end:
                                 params3["cc_end_dt"] = params3["p_end_dt"]
                         else:
                             # No cat table: use DESCRIPT as fallback
@@ -998,6 +1018,7 @@ def get_sales_insights(
                                         jnl.`{descript_col}` AS method_name,
                                         SUM(jnl.`{amt_col}`) AS total
                                     FROM jnl
+                                    INNER JOIN jnh ON jnh.`{jnh_sale}` = jnl.`{jnl_sale_col}`
                                     WHERE {' AND '.join(where_parts) if where_parts else '1=1'} 
                                       AND jnl.`{line_col}` BETWEEN 980 AND 989
                                       AND NOT EXISTS (
@@ -1018,6 +1039,7 @@ def get_sales_insights(
                                         CAST(jnl.`{cat_col}` AS CHAR) AS method_name,
                                         SUM(jnl.`{amt_col}`) AS total
                                     FROM jnl
+                                    INNER JOIN jnh ON jnh.`{jnh_sale}` = jnl.`{jnl_sale_col}`
                                     WHERE {' AND '.join(where_parts) if where_parts else '1=1'} 
                                       AND jnl.`{line_col}` BETWEEN 980 AND 989
                                       AND NOT EXISTS (
@@ -1047,6 +1069,7 @@ def get_sales_insights(
                                     jnl.`{descript_col}` AS method_name,
                                     SUM(jnl.`{amt_col}`) AS total
                                 FROM jnl
+                                INNER JOIN jnh ON jnh.`{jnh_sale}` = jnl.`{jnl_sale_col}`
                                 WHERE {' AND '.join(where_parts) if where_parts else '1=1'} 
                                   AND jnl.`{line_col}` BETWEEN 980 AND 989
                                   AND NOT EXISTS (
@@ -1067,6 +1090,7 @@ def get_sales_insights(
                                     CAST(jnl.`{line_col}` AS CHAR) AS method_name,
                                     SUM(jnl.`{amt_col}`) AS total
                                 FROM jnl
+                                INNER JOIN jnh ON jnh.`{jnh_sale}` = jnl.`{jnl_sale_col}`
                                 WHERE {' AND '.join(where_parts) if where_parts else '1=1'} 
                                   AND jnl.`{line_col}` BETWEEN 980 AND 989
                                   AND NOT EXISTS (
@@ -1952,71 +1976,284 @@ def get_tenders_insights(
             tenders_data = []
             daily_trends = []
 
-            if _table_exists(conn, db_name, "jnl"):
+            # Use same logic as payment methods in sales insights
+            # Join to jnh, filter by jnh.tstamp, exclude void sales, handle cash change
+            if _table_exists(conn, db_name, "jnl") and _table_exists(
+                conn, db_name, "jnh"
+            ):
                 jnl_cols = _get_columns(conn, db_name, "jnl")
-                jnl_date_col = _pick_column(jnl_cols, ["sale_date", "trans_date", "transaction_date", "tdate", "date"]) or None
                 jnl_line_col = _pick_column(jnl_cols, ["line", "line_code"]) or "line"
-                jnl_price_col = _pick_column(jnl_cols, ["amount", "price", "total"]) or None
-                jnl_descript_col = _pick_column(jnl_cols, ["descript", "description", "desc"]) or None
+                jnl_rflag = "rflag" if "rflag" in jnl_cols else None
+                cat_col = "cat" if "cat" in jnl_cols else None
+                descript_col = (
+                    _pick_column(jnl_cols, ["descript", "description", "desc"]) or None
+                )
+                amt_col = None
+                for c in ["amount", "total", "price"]:
+                    if c in jnl_cols:
+                        amt_col = c
+                        break
 
-                if jnl_date_col and jnl_line_col and jnl_price_col and jnl_descript_col:
-                    where_parts = [f"`{jnl_line_col}` BETWEEN 980 AND 989"]
+                jnl_sale_col = (
+                    _pick_column(jnl_cols, ["sale", "sale_id", "invno"]) or "sale"
+                )
+                jnl_sku_col = (
+                    _pick_column(jnl_cols, ["sku", "item", "item_id"]) or "sku"
+                )
+
+                # Get jnh columns for date filtering
+                jnh_cols = _get_columns(conn, db_name, "jnh")
+                jnh_time = (
+                    _pick_column(jnh_cols, ["tstamp", "timestamp", "time", "t_time"])
+                    or "tstamp"
+                )
+                jnh_sale = (
+                    _pick_column(jnh_cols, ["sale", "sale_id", "invno"]) or "sale"
+                )
+
+                if jnl_line_col and amt_col:
+                    where_parts = []
                     params: Dict[str, Any] = {}
-                    if start:
-                        where_parts.append(f"DATE(`{jnl_date_col}`) >= :start")
-                        params["start"] = start
-                    if end:
-                        where_parts.append(f"DATE(`{jnl_date_col}`) <= :end")
-                        params["end"] = end
 
-                    sql = f"""
-                        SELECT DATE(`{jnl_date_col}`) AS date, `{jnl_price_col}` AS price,
-                               `{jnl_descript_col}` AS descript
-                        FROM jnl
-                        WHERE {' AND '.join(where_parts)}
-                        ORDER BY DATE(`{jnl_date_col}`), `{jnl_descript_col}`
-                    """
+                    # Date filter: use jnh.tstamp to match sales insights logic
+                    if start:
+                        where_parts.append(f"jnh.`{jnh_time}` >= :start_dt")
+                        params["start_dt"] = f"{start} 00:00:00"
+                    if end:
+                        try:
+                            from datetime import timedelta
+
+                            end_next = (
+                                datetime.fromisoformat(end) + timedelta(days=1)
+                            ).strftime("%Y-%m-%d 00:00:00")
+                        except Exception:
+                            end_next = f"{end} 23:59:59"
+                        where_parts.append(f"jnh.`{jnh_time}` < :end_dt")
+                        params["end_dt"] = end_next
+
+                    # Filter: RFLAG <= 0 (excludes returns/voids, includes all valid tenders)
+                    if jnl_rflag:
+                        where_parts.append(f"jnl.`{jnl_rflag}` <= 0")
+
+                    # Exclude void sales: sales where any SKU line (sku > 0) has rflag = 4
+                    void_sales_where = []
+                    if jnl_rflag:
+                        void_sales_where.append(f"jnl_void.`{jnl_rflag}` = 4")
+                    void_sales_where.append(f"jnl_void.`{jnl_sku_col}` > 0")
+
+                    # Build payment type identification and cash change logic
+                    if cat_col and _table_exists(conn, db_name, "cat"):
+                        cat_table_cols = _get_columns(conn, db_name, "cat")
+                        cat_code_col = (
+                            _pick_column(cat_table_cols, ["cat", "code", "id"]) or "cat"
+                        )
+                        cat_name_col = (
+                            _pick_column(
+                                cat_table_cols, ["name", "desc", "description", "label"]
+                            )
+                            or "name"
+                        )
+
+                        # Cash change subquery
+                        cash_change_where = [f"jnl_cc.`{jnl_line_col}` = 999"]
+                        if jnl_rflag:
+                            cash_change_where.append(f"jnl_cc.`{jnl_rflag}` <= 0")
+                        if start:
+                            cash_change_where.append(
+                                f"jnh_cc.`{jnh_time}` >= :cc_start_dt"
+                            )
+                            params["cc_start_dt"] = params["start_dt"]
+                        if end:
+                            cash_change_where.append(
+                                f"jnh_cc.`{jnh_time}` < :cc_end_dt"
+                            )
+                            params["cc_end_dt"] = params["end_dt"]
+
+                        cash_change_void_where = []
+                        if jnl_rflag:
+                            cash_change_void_where.append(
+                                f"jnl_void_cc.`{jnl_rflag}` = 4"
+                            )
+                        cash_change_void_where.append(
+                            f"jnl_void_cc.`{jnl_sku_col}` > 0"
+                        )
+
+                        cash_tender_check_where = [
+                            f"jnl_cash_tender.`{jnl_line_col}` BETWEEN 980 AND 989"
+                        ]
+                        if jnl_rflag:
+                            cash_tender_check_where.append(
+                                f"jnl_cash_tender.`{jnl_rflag}` <= 0"
+                            )
+
+                        cash_tender_identify = [
+                            f"UPPER(COALESCE(cat_cash_tender.`{cat_name_col}`, '')) LIKE '%CASH%'"
+                        ]
+                        if descript_col:
+                            cash_tender_identify.append(
+                                f"UPPER(jnl_cash_tender.`{descript_col}`) LIKE '%CASH%'"
+                            )
+                        cash_tender_identify_condition = " OR ".join(
+                            cash_tender_identify
+                        )
+
+                        # Main query: match payment methods logic from sales insights
+                        sql = f"""
+                            SELECT 
+                                DATE(jnh.`{jnh_time}`) AS date,
+                                COALESCE(
+                                    (SELECT cat.`{cat_name_col}` FROM cat WHERE cat.`{cat_code_col}` = jnl.`{cat_col}` LIMIT 1),
+                                    {f"jnl.`{descript_col}`" if descript_col else "NULL"},
+                                    CAST(jnl.`{cat_col}` AS CHAR)
+                                ) AS payment_type,
+                                CASE 
+                                    WHEN (
+                                        UPPER(COALESCE((SELECT cat.`{cat_name_col}` FROM cat WHERE cat.`{cat_code_col}` = jnl.`{cat_col}` LIMIT 1), '')) LIKE '%CASH%'
+                                        {' OR UPPER(jnl.`' + descript_col + '`) LIKE \'%CASH%\'' if descript_col else ''}
+                                    ) THEN 
+                                        GREATEST(0, jnl.`{amt_col}` - ABS(COALESCE(cash_change_per_sale.cash_change, 0)))
+                                    ELSE 
+                                        jnl.`{amt_col}`
+                                END AS amount,
+                                jnl.`{amt_col}` AS raw_amount,
+                                jnh.`{jnh_sale}` AS sale_id
+                            FROM jnl
+                            INNER JOIN jnh ON jnh.`{jnh_sale}` = jnl.`{jnl_sale_col}`
+                            LEFT JOIN (
+                                SELECT 
+                                    jnl_cc.`{jnl_sale_col}` AS sale_id,
+                                    SUM(jnl_cc.`{amt_col}`) AS cash_change
+                                FROM jnl jnl_cc
+                                INNER JOIN jnh jnh_cc ON jnh_cc.`{jnh_sale}` = jnl_cc.`{jnl_sale_col}`
+                                WHERE {' AND '.join(cash_change_where)}
+                                  AND NOT EXISTS (
+                                      SELECT 1
+                                      FROM jnl jnl_void_cc
+                                      WHERE jnl_void_cc.`{jnl_sale_col}` = jnl_cc.`{jnl_sale_col}`
+                                        AND {' AND '.join(cash_change_void_where)}
+                                      LIMIT 1
+                                  )
+                                  AND EXISTS (
+                                      SELECT 1
+                                      FROM jnl jnl_cash_tender
+                                      LEFT JOIN cat cat_cash_tender ON cat_cash_tender.`{cat_code_col}` = jnl_cash_tender.`{cat_col}`
+                                      WHERE jnl_cash_tender.`{jnl_sale_col}` = jnl_cc.`{jnl_sale_col}`
+                                        AND {' AND '.join(cash_tender_check_where)}
+                                        AND ({cash_tender_identify_condition})
+                                      LIMIT 1
+                                  )
+                                GROUP BY jnl_cc.`{jnl_sale_col}`
+                            ) AS cash_change_per_sale ON cash_change_per_sale.sale_id = jnl.`{jnl_sale_col}`
+                            WHERE {' AND '.join(where_parts) if where_parts else '1=1'}
+                              AND jnl.`{jnl_line_col}` BETWEEN 980 AND 989
+                              AND NOT EXISTS (
+                                  SELECT 1
+                                  FROM jnl jnl_void
+                                  WHERE jnl_void.`{jnl_sale_col}` = jnl.`{jnl_sale_col}`
+                                    AND {' AND '.join(void_sales_where)}
+                                  LIMIT 1
+                              )
+                            ORDER BY DATE(jnh.`{jnh_time}`), payment_type
+                        """
+                    else:
+                        # Fallback: no cat table, use descript
+                        sql = f"""
+                            SELECT 
+                                DATE(jnh.`{jnh_time}`) AS date,
+                                {f"jnl.`{descript_col}`" if descript_col else "CAST(jnl.`{jnl_line_col}` AS CHAR)"} AS payment_type,
+                                jnl.`{amt_col}` AS amount,
+                                jnl.`{amt_col}` AS raw_amount,
+                                jnh.`{jnh_sale}` AS sale_id
+                            FROM jnl
+                            INNER JOIN jnh ON jnh.`{jnh_sale}` = jnl.`{jnl_sale_col}`
+                            WHERE {' AND '.join(where_parts) if where_parts else '1=1'}
+                              AND jnl.`{jnl_line_col}` BETWEEN 980 AND 989
+                              AND NOT EXISTS (
+                                  SELECT 1
+                                  FROM jnl jnl_void
+                                  WHERE jnl_void.`{jnl_sale_col}` = jnl.`{jnl_sale_col}`
+                                    AND {' AND '.join(void_sales_where)}
+                                  LIMIT 1
+                              )
+                            ORDER BY DATE(jnh.`{jnh_time}`), payment_type
+                        """
+
                     rows = conn.execute(text(sql), params).mappings()
 
                     # Group by date and payment type
                     from collections import defaultdict
-                    by_type = defaultdict(lambda: {"sale_amount": 0.0, "sale_count": 0, "reversal_amount": 0.0, "reversal_count": 0})
-                    by_date_type = defaultdict(lambda: {"sale_amount": 0.0, "sale_count": 0, "reversal_amount": 0.0, "reversal_count": 0})
+                    by_type = defaultdict(
+                        lambda: {
+                            "sale_amount": 0.0,
+                            "sale_count": set(),
+                            "reversal_amount": 0.0,
+                            "reversal_count": set(),
+                        }
+                    )
+                    by_date_type = defaultdict(
+                        lambda: {
+                            "sale_amount": 0.0,
+                            "sale_count": set(),
+                            "reversal_amount": 0.0,
+                            "reversal_count": set(),
+                        }
+                    )
 
                     for row in rows:
                         try:
-                            price = float(row.get("price") or 0)
-                            descript = str(row.get("descript", "") or "")
+                            amount = float(row.get("amount") or 0)
+                            raw_amount = float(row.get("raw_amount") or 0)
+                            payment_type = str(row.get("payment_type") or "Unknown")
                             date_str = str(row.get("date", "")) if row.get("date") else ""
-                            freshness.track(date_str)
+                            sale_id = row.get("sale_id")
 
-                            payment_type = _normalize_payment_type(descript)
+                            if date_str:
+                                freshness.track(date_str)
 
-                            if price >= 0:
-                                by_type[payment_type]["sale_amount"] += price
-                                by_type[payment_type]["sale_count"] += 1
+                            # Normalize payment type name
+                            payment_type = _normalize_payment_type(payment_type)
+
+                            if raw_amount >= 0:
+                                by_type[payment_type]["sale_amount"] += amount
+                                if sale_id:
+                                    by_type[payment_type]["sale_count"].add(sale_id)
                                 if date_str:
-                                    by_date_type[(date_str, payment_type)]["sale_amount"] += price
-                                    by_date_type[(date_str, payment_type)]["sale_count"] += 1
+                                    by_date_type[(date_str, payment_type)][
+                                        "sale_amount"
+                                    ] += amount
+                                    if sale_id:
+                                        by_date_type[(date_str, payment_type)][
+                                            "sale_count"
+                                        ].add(sale_id)
                             else:
-                                by_type[payment_type]["reversal_amount"] += abs(price)
-                                by_type[payment_type]["reversal_count"] += 1
+                                by_type[payment_type]["reversal_amount"] += abs(amount)
+                                if sale_id:
+                                    by_type[payment_type]["reversal_count"].add(sale_id)
                                 if date_str:
-                                    by_date_type[(date_str, payment_type)]["reversal_amount"] += abs(price)
-                                    by_date_type[(date_str, payment_type)]["reversal_count"] += 1
+                                    by_date_type[(date_str, payment_type)][
+                                        "reversal_amount"
+                                    ] += abs(amount)
+                                    if sale_id:
+                                        by_date_type[(date_str, payment_type)][
+                                            "reversal_count"
+                                        ].add(sale_id)
                         except:
                             continue
 
                     # Build tenders summary
                     for payment_type, stats in by_type.items():
-                        tenders_data.append({
-                            "payment_type": payment_type,
-                            "sale_amount": round(stats["sale_amount"], 2),
-                            "sale_count": stats["sale_count"],
-                            "reversal_amount": round(stats["reversal_amount"], 2),
-                            "reversal_count": stats["reversal_count"],
-                            "net_amount": round(stats["sale_amount"] - stats["reversal_amount"], 2)
-                        })
+                        tenders_data.append(
+                            {
+                                "payment_type": payment_type,
+                                "sale_amount": round(stats["sale_amount"], 2),
+                                "sale_count": len(stats["sale_count"]),
+                                "reversal_amount": round(stats["reversal_amount"], 2),
+                                "reversal_count": len(stats["reversal_count"]),
+                                "net_amount": round(
+                                    stats["sale_amount"] - stats["reversal_amount"], 2
+                                ),
+                            }
+                        )
 
                     # Build daily trends
                     daily_by_date = defaultdict(lambda: defaultdict(lambda: {"sale_amount": 0.0, "reversal_amount": 0.0}))
