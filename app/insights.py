@@ -738,17 +738,65 @@ def get_sales_insights(
 
                             # Join jnl to cat table: jnl.cat = cat.cat to get cat.name
                             # Use cat.name, fallback to descript, then cat code
+                            # For cash: subtract CASH CHANGE (LINE 999) per sale using correlated subquery
                             descript_fallback = (
                                 f"jnl.`{descript_col}`" if descript_col else "NULL"
                             )
                             descript_group = (
                                 f", jnl.`{descript_col}`" if descript_col else ""
                             )
+
+                            # Build cash identification condition for the subquery
+                            # Check if the sale has a cash tender (by cat.name or descript)
+                            cash_check_where = []
+                            if descript_col:
+                                cash_check_where.append(
+                                    f"UPPER(jnl_cash.`{descript_col}`) LIKE '%CASH%'"
+                                )
+                            cash_check_where.append(
+                                f"UPPER(cat_cash.`{cat_name_col}`) LIKE '%CASH%'"
+                            )
+                            cash_check_condition = " OR ".join(cash_check_where)
+
+                            # Correlated subquery to get cash change for this sale (only if sale has cash tender)
+                            cash_change_subquery = f"""
+                                (SELECT COALESCE(SUM(jnl_cc.`{amt_col}`), 0)
+                                 FROM jnl jnl_cc
+                                 WHERE jnl_cc.`{jnl_sale_col}` = jnl.`{jnl_sale_col}`
+                                   AND jnl_cc.`{line_col}` = 999
+                                   AND jnl_cc.`{jnl_rflag}` <= 0
+                                   AND EXISTS (
+                                       SELECT 1
+                                       FROM jnl jnl_cash
+                                       LEFT JOIN cat cat_cash ON cat_cash.`{cat_code_col}` = jnl_cash.`{cat_col}`
+                                       WHERE jnl_cash.`{jnl_sale_col}` = jnl.`{jnl_sale_col}`
+                                         AND jnl_cash.`{line_col}` BETWEEN 980 AND 989
+                                         AND jnl_cash.`{jnl_rflag}` <= 0
+                                         AND ({cash_check_condition})
+                                       LIMIT 1
+                                   )
+                                )
+                            """
+
+                            # Identify if current tender is cash
+                            cash_identify_condition = (
+                                f"UPPER(cat.`{cat_name_col}`) LIKE '%CASH%'"
+                            )
+                            if descript_col:
+                                cash_identify_condition = f"({cash_identify_condition} OR UPPER(jnl.`{descript_col}`) LIKE '%CASH%')"
+
                             tender_sql = f"""
                                 SELECT 
                                     jnl.`{cat_col}` AS code,
                                     COALESCE(cat.`{cat_name_col}`, {descript_fallback}, CAST(jnl.`{cat_col}` AS CHAR)) AS method_name,
-                                    SUM(jnl.`{amt_col}`) AS total
+                                    SUM(
+                                        CASE 
+                                            WHEN {cash_identify_condition} THEN 
+                                                GREATEST(0, jnl.`{amt_col}` - {cash_change_subquery})
+                                            ELSE 
+                                                jnl.`{amt_col}`
+                                        END
+                                    ) AS total
                                 FROM jnl
                                 LEFT JOIN cat ON cat.`{cat_code_col}` = jnl.`{cat_col}`
                                 WHERE {' AND '.join(where_parts) if where_parts else '1=1'} 
@@ -812,184 +860,15 @@ def get_sales_insights(
                     """
                     rows = conn.execute(text(tender_sql), params3).mappings()
 
-                    # Get CASH CHANGE total (LINE 999) only for sales that have cash tenders
-                    # Cash payments are identified by joining to cat table and checking cat.name for "cash"
-                    # Not by CAT code (cash is usually CAT 70, not 980)
-                    cash_change_total = 0.0
-                    if line_col and cat_col:
-                        # Check if cat table exists to identify cash payments by name
-                        cat_table_exists = _table_exists(conn, db_name, "cat")
-                        if cat_table_exists:
-                            cat_table_cols = _get_columns(conn, db_name, "cat")
-                            cat_code_col = (
-                                _pick_column(cat_table_cols, ["cat", "code", "id"])
-                                or "cat"
-                            )
-                            cat_name_col = (
-                                _pick_column(
-                                    cat_table_cols,
-                                    ["name", "desc", "description", "label"],
-                                )
-                                or "name"
-                            )
-
-                            # Build WHERE clause for CASH CHANGE query
-                            cash_change_where = [f"jnl_change.`{line_col}` = 999"]
-                            cash_change_params = {}
-                            if jnl_rflag:
-                                cash_change_where.append(
-                                    f"jnl_change.`{jnl_rflag}` <= 0"
-                                )
-                            if jnl_date_filter_col and start:
-                                cash_change_where.append(
-                                    f"jnl_change.`{jnl_date_filter_col}` >= :cc_start_dt"
-                                )
-                                cash_change_params["cc_start_dt"] = params3[
-                                    "p_start_dt"
-                                ]
-                            if jnl_date_filter_col and end:
-                                cash_change_where.append(
-                                    f"jnl_change.`{jnl_date_filter_col}` < :cc_end_dt"
-                                )
-                                cash_change_params["cc_end_dt"] = params3["p_end_dt"]
-
-                            # Build parameters for cash sales EXISTS subquery
-                            cash_sales_params = {}
-                            if jnl_date_filter_col and start:
-                                cash_sales_params["cs_start_dt"] = params3["p_start_dt"]
-                            if jnl_date_filter_col and end:
-                                cash_sales_params["cs_end_dt"] = params3["p_end_dt"]
-
-                            # Build WHERE clause for cash sales EXISTS subquery
-                            cash_exists_where = [
-                                f"jnl_cash.`{jnl_sale_col}` = jnl_change.`{jnl_sale_col}`",
-                                f"jnl_cash.`{line_col}` BETWEEN 980 AND 989",
-                            ]
-                            if jnl_rflag:
-                                cash_exists_where.append(f"jnl_cash.`{jnl_rflag}` <= 0")
-                            if jnl_date_filter_col and start:
-                                cash_exists_where.append(
-                                    f"jnl_cash.`{jnl_date_filter_col}` >= :cs_start_dt"
-                                )
-                            if jnl_date_filter_col and end:
-                                cash_exists_where.append(
-                                    f"jnl_cash.`{jnl_date_filter_col}` < :cs_end_dt"
-                                )
-
-                            # Identify cash by cat.name or descript containing "cash"
-                            cash_identify = []
-                            if descript_col:
-                                cash_identify.append(
-                                    f"UPPER(jnl_cash.`{descript_col}`) LIKE '%CASH%'"
-                                )
-                            cash_identify.append(
-                                f"UPPER(cat.`{cat_name_col}`) LIKE '%CASH%'"
-                            )
-
-                            # Use EXISTS to find cash payments by checking cat.name
-                            cash_change_sql = f"""
-                                SELECT SUM(jnl_change.`{amt_col}`) AS total
-                                FROM jnl jnl_change
-                                WHERE {' AND '.join(cash_change_where)}
-                                  AND EXISTS (
-                                      SELECT 1
-                                      FROM jnl jnl_cash
-                                      LEFT JOIN cat ON cat.`{cat_code_col}` = jnl_cash.`{cat_col}`
-                                      WHERE {' AND '.join(cash_exists_where)}
-                                        AND ({' OR '.join(cash_identify)})
-                                      LIMIT 1
-                                  )
-                            """
-
-                            cash_change_row = (
-                                conn.execute(
-                                    text(cash_change_sql),
-                                    {**cash_sales_params, **cash_change_params},
-                                )
-                                .mappings()
-                                .first()
-                            )
-                            if cash_change_row:
-                                cash_change_total = float(
-                                    cash_change_row.get("total") or 0
-                                )
-                        else:
-                            # No cat table: use descript to identify cash
-                            cash_sales_where = []
-                            cash_sales_params = {}
-                            if jnl_date_filter_col and start:
-                                cash_sales_where.append(
-                                    f"jnl_cash.`{jnl_date_filter_col}` >= :cs_start_dt"
-                                )
-                                cash_sales_params["cs_start_dt"] = params3["p_start_dt"]
-                            if jnl_date_filter_col and end:
-                                cash_sales_where.append(
-                                    f"jnl_cash.`{jnl_date_filter_col}` < :cs_end_dt"
-                                )
-                                cash_sales_params["cs_end_dt"] = params3["p_end_dt"]
-                            if jnl_rflag:
-                                cash_sales_where.append(f"jnl_cash.`{jnl_rflag}` <= 0")
-                            cash_sales_where.append(
-                                f"jnl_cash.`{line_col}` BETWEEN 980 AND 989"
-                            )
-                            if descript_col:
-                                cash_sales_where.append(
-                                    f"UPPER(jnl_cash.`{descript_col}`) LIKE '%CASH%'"
-                                )
-
-                            all_cash_change_where = [
-                                f"jnl_change.`{line_col}` = 999"
-                            ] + cash_change_where
-                            cash_change_sql = f"""
-                                SELECT SUM(jnl_change.`{amt_col}`) AS total
-                                FROM jnl jnl_change
-                                WHERE {' AND '.join(all_cash_change_where)}
-                                  AND EXISTS (
-                                      SELECT 1
-                                      FROM jnl jnl_cash
-                                      WHERE jnl_cash.`{jnl_sale_col}` = jnl_change.`{jnl_sale_col}`
-                                        {' AND ' + ' AND '.join(cash_sales_where) if cash_sales_where else ''}
-                                      LIMIT 1
-                                  )
-                            """
-
-                            cash_change_row = (
-                                conn.execute(
-                                    text(cash_change_sql),
-                                    {**cash_sales_params, **cash_change_params},
-                                )
-                                .mappings()
-                                .first()
-                            )
-                            if cash_change_row:
-                                cash_change_total = float(
-                                    cash_change_row.get("total") or 0
-                                )
-
+                    # Process payment methods - cash change is already handled in SQL query
+                    # All payment types (including cash) use the same calculation logic
                     total_sum = 0.0
                     tmp = []
                     for r in rows:
                         code_raw = r.get("code")
                         method_name = r.get("method_name") or str(code_raw) or "Unknown"
-                        # Try to convert to int for CAT values
-                        try:
-                            code = int(code_raw) if code_raw is not None else None
-                        except (ValueError, TypeError):
-                            code = code_raw
-
                         amount = float(r.get("total") or 0)
-                        # Subtract CASH CHANGE from cash payments only
-                        # Cash is identified by cat.name containing "cash" (usually CAT 70, not 980)
-                        # Check if it's cash by method name from cat table
-                        is_cash = (
-                            isinstance(method_name, str)
-                            and "cash" in method_name.lower()
-                        )
-                        if is_cash:
-                            amount = max(
-                                0.0, amount - cash_change_total
-                            )  # Ensure cash doesn't go negative
-                        # Add this tender's amount to the total (cash already adjusted above)
+                        # Amount is already correct (cash change subtracted in SQL for cash, others unchanged)
                         total_sum += amount
                         # Use method_name from query (from cat.name or descript)
                         tmp.append({"method": str(method_name), "total_sales": amount})
@@ -1557,18 +1436,28 @@ def get_operations_insights(
 
                 if jnl_date_col and jnl_line_col and jnl_sale_col:
                     # Get all transactions in date range
+                    # Use half-open interval for index usage (no DATE() wrapper in WHERE)
                     where_parts = []
                     params: Dict[str, Any] = {}
                     if start:
-                        where_parts.append(f"DATE(`{jnl_date_col}`) >= :start")
-                        params["start"] = start
+                        where_parts.append(f"`{jnl_date_col}` >= :start_dt")
+                        params["start_dt"] = f"{start} 00:00:00"
                     if end:
-                        where_parts.append(f"DATE(`{jnl_date_col}`) <= :end")
-                        params["end"] = end
+                        try:
+                            from datetime import timedelta
+
+                            end_next = (
+                                datetime.fromisoformat(end) + timedelta(days=1)
+                            ).strftime("%Y-%m-%d 00:00:00")
+                        except Exception:
+                            end_next = f"{end} 23:59:59"
+                        where_parts.append(f"`{jnl_date_col}` < :end_dt")
+                        params["end_dt"] = end_next
                     if jnl_rflag_col:
                         where_parts.append(f"`{jnl_rflag_col}` = 0")
 
                     # Get all rows for grouping by sale
+                    # DATE() only in SELECT for output, not in WHERE (allows index usage)
                     sql = f"""
                         SELECT `{jnl_sale_col}` AS sale_id, `{jnl_line_col}` AS line_code,
                                `{jnl_price_col}` AS price, `{jnl_descript_col}` AS descript,
