@@ -1332,9 +1332,9 @@ def get_sales_insights(
                 po_start_eff = po_start
                 po_end_eff = po_end
 
-                # Group by vendor using provided PO date range (posted/received only: status 3,4)
+                # Group by vendor using provided PO date range (all statuses: 3=Complete, 4=posted, 6=received, 8=open order)
                 # Optimized query structure to use composite index (status, rcvdate, vendor)
-                where_parts = [f"poh.`{poh_status_col}` IN (3, 4)"]
+                where_parts = [f"poh.`{poh_status_col}` IN (3, 4, 6, 8)"]
                 params: Dict[str, Any] = {}
 
                 # Date filters: use rcvdate only (posted/received on date range)
@@ -1392,7 +1392,12 @@ def get_sales_insights(
                 """
 
                 rows = conn.execute(text(sql), params).mappings()
-                status_map = {3: "posted", 4: "received"}
+                status_map = {
+                    3: "Complete",
+                    4: "posted",
+                    6: "received",
+                    8: "open order",
+                }
 
                 # For each vendor, fetch individual order details from pod
                 for r in rows:
@@ -1406,8 +1411,12 @@ def get_sales_insights(
                         pod_po_col = _pick_column(pod_cols, ["po", "po_id", "poh_id", "invno"]) or poh_id_col
                         pod_total_col = _pick_column(pod_cols, ["total", "amount", "price"]) or None
                         pod_date_col = _pick_column(pod_cols, ["date", "pdate", "created_at"]) or None
+                        pod_status_col = (
+                            _pick_column(pod_cols, ["status", "stat"]) or None
+                        )
 
                         # Get POs from poh for this vendor within PO date range and matching status
+                        # Also get POH status for each order to compare with POD status
                         poh_ids_where = [f"poh.`{poh_vendor_col}` = :vnum", f"poh.`{poh_status_col}` = :stat"]
                         poh_ids_params = {"vnum": vendor_num, "stat": status_code}
 
@@ -1429,13 +1438,20 @@ def get_sales_insights(
                                     }
                                 )
 
+                        # Get POH order IDs and their statuses
                         poh_ids_sql = f"""
-                            SELECT poh.`{poh_id_col}` AS po_id
+                            SELECT poh.`{poh_id_col}` AS po_id, poh.`{poh_status_col}` AS poh_status
                             FROM poh
                             WHERE {' AND '.join(poh_ids_where)}
                         """
                         poh_id_rows = conn.execute(text(poh_ids_sql), poh_ids_params).mappings()
-                        po_ids = [str(row.get("po_id")) for row in poh_id_rows if row.get("po_id")]
+                        # Create a map of po_id -> poh_status for comparison
+                        poh_status_map = {
+                            str(row.get("po_id")): int(row.get("poh_status", 0))
+                            for row in poh_id_rows
+                            if row.get("po_id")
+                        }
+                        po_ids = list(poh_status_map.keys())
 
                         if po_ids and pod_po_col:
                             pod_where = [f"`{pod_po_col}` IN :poids"]
@@ -1448,6 +1464,11 @@ def get_sales_insights(
                                 pod_select.append("0 AS order_total")
                             if pod_date_col:
                                 pod_select.append(f"MIN(DATE(`{pod_date_col}`)) AS order_date")
+                            # Get POD status if available
+                            if pod_status_col:
+                                pod_select.append(
+                                    f"MAX(`{pod_status_col}`) AS pod_status"
+                                )
 
                             pod_sql = f"""
                                 SELECT {', '.join(pod_select)}
@@ -1458,11 +1479,49 @@ def get_sales_insights(
                             """
                             pod_rows = conn.execute(text(pod_sql), pod_params).mappings()
                             for pod_row in pod_rows:
-                                order_details.append({
-                                    "po_id": str(pod_row.get("po_id", "")),
-                                    "order_total": float(pod_row.get("order_total", 0) or 0),
-                                    "order_date": str(pod_row.get("order_date", "")) if pod_row.get("order_date") else None,
-                                })
+                                po_id_str = str(pod_row.get("po_id", ""))
+                                poh_status_for_order = poh_status_map.get(
+                                    po_id_str, status_code
+                                )
+
+                                # Get POD status if available, otherwise use POH status
+                                pod_status_for_order = None
+                                if (
+                                    pod_status_col
+                                    and pod_row.get("pod_status") is not None
+                                ):
+                                    try:
+                                        pod_status_for_order = int(
+                                            pod_row.get("pod_status", 0)
+                                        )
+                                    except (ValueError, TypeError):
+                                        pod_status_for_order = None
+
+                                # Use POH status as default if POD status differs or is not available
+                                final_status = poh_status_for_order
+                                if (
+                                    pod_status_for_order is not None
+                                    and pod_status_for_order != poh_status_for_order
+                                ):
+                                    # POD status differs from POH status - use POH status as default
+                                    final_status = poh_status_for_order
+
+                                order_details.append(
+                                    {
+                                        "po_id": po_id_str,
+                                        "order_total": float(
+                                            pod_row.get("order_total", 0) or 0
+                                        ),
+                                        "order_date": (
+                                            str(pod_row.get("order_date", ""))
+                                            if pod_row.get("order_date")
+                                            else None
+                                        ),
+                                        "status": status_map.get(
+                                            final_status, str(final_status)
+                                        ),
+                                    }
+                                )
                                 freshness.track(pod_row.get("order_date"))
 
                     purchase_orders.append({
