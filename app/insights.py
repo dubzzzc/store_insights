@@ -787,7 +787,7 @@ def get_sales_insights(
                                     SUM(
                                         CASE 
                                             WHEN {cash_identify_condition} THEN 
-                                                GREATEST(0, jnl.`{amt_col}` - COALESCE(cash_change_per_sale.cash_change, 0))
+                                                GREATEST(0, jnl.`{amt_col}` - ABS(COALESCE(cash_change_per_sale.cash_change, 0)))
                                             ELSE 
                                                 jnl.`{amt_col}`
                                         END
