@@ -2931,31 +2931,72 @@ def get_product_history(
                             qty_expr = f"`{jnl_qty_col}`" if jnl_qty_col else "1"
                             price_expr = f"`{jnl_price_col}`" if jnl_price_col else "0"
 
+                            # Use DATE() to extract date part, then format in Python for cross-database compatibility
                             monthly_sql = f"""
                                 SELECT 
-                                    DATE_FORMAT(DATE(`{jnl_date_col}`), '%Y-%m') AS month,
+                                    DATE(`{jnl_date_col}`) AS sale_date,
                                     SUM({qty_expr}) AS total_qty,
                                     SUM({price_expr}) AS total_amount
                                 FROM jnl
                                 WHERE {' AND '.join(jnl_where)}
-                                GROUP BY DATE_FORMAT(DATE(`{jnl_date_col}`), '%Y-%m')
-                                ORDER BY month DESC
-                                LIMIT 24
+                                GROUP BY DATE(`{jnl_date_col}`)
+                                ORDER BY sale_date DESC
+                                LIMIT 730
                             """
 
                             monthly_rows = conn.execute(
                                 text(monthly_sql), jnl_params
                             ).mappings()
+
+                            # Group by month in Python
+                            monthly_data = {}
                             for month_row in monthly_rows:
+                                sale_date = month_row.get("sale_date")
+                                if sale_date:
+                                    # Format as YYYY-MM
+                                    if isinstance(sale_date, str):
+                                        # Parse date string
+                                        try:
+                                            dt = datetime.strptime(
+                                                sale_date.split()[0], "%Y-%m-%d"
+                                            )
+                                            month_key = dt.strftime("%Y-%m")
+                                        except:
+                                            month_key = (
+                                                sale_date[:7]
+                                                if len(sale_date) >= 7
+                                                else sale_date
+                                            )
+                                    else:
+                                        # datetime object
+                                        month_key = sale_date.strftime("%Y-%m")
+
+                                    if month_key not in monthly_data:
+                                        monthly_data[month_key] = {
+                                            "total_qty": 0.0,
+                                            "total_amount": 0.0,
+                                        }
+
+                                    monthly_data[month_key]["total_qty"] += float(
+                                        month_row.get("total_qty", 0) or 0
+                                    )
+                                    monthly_data[month_key]["total_amount"] += float(
+                                        month_row.get("total_amount", 0) or 0
+                                    )
+
+                            # Convert to list and sort by month (descending), limit to 24 months
+                            for month_key in sorted(monthly_data.keys(), reverse=True)[
+                                :24
+                            ]:
                                 product["monthly_sales"].append(
                                     {
-                                        "month": str(month_row.get("month", "")),
-                                        "total_qty": float(
-                                            month_row.get("total_qty", 0) or 0
-                                        ),
-                                        "total_amount": float(
-                                            month_row.get("total_amount", 0) or 0
-                                        ),
+                                        "month": month_key,
+                                        "total_qty": monthly_data[month_key][
+                                            "total_qty"
+                                        ],
+                                        "total_amount": monthly_data[month_key][
+                                            "total_amount"
+                                        ],
                                     }
                                 )
 
