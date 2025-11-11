@@ -2781,6 +2781,13 @@ def get_product_history(
 
             products = []
 
+            # Require minimum search length to prevent slow queries
+            if search and len(search.strip()) < 2:
+                return {
+                    "products": [],
+                    "meta": response_meta,
+                }
+
             # Search for products in inv table
             if _table_exists(conn, db_name, "inv"):
                 inv_cols = _get_columns(conn, db_name, "inv")
@@ -2817,20 +2824,59 @@ def get_product_history(
                     where_parts.append(f"UPPER(inv.`{inv_deleted_col}`) != 'T'")
 
                 if search:
-                    search_like = f"%{search}%"
-                    # Search by SKU, name, or UPC
-                    # Prefix columns with inv. to avoid ambiguity when joining with upc
-                    search_conditions = [
-                        f"inv.`{inv_sku_col}` LIKE :search",
-                        f"inv.`{inv_name_col}` LIKE :search",
-                    ]
+                    search_clean = search.strip()
+                    # Optimize search: use exact match for SKU if it looks like a SKU (numeric or short alphanumeric)
+                    # Use prefix match (no leading wildcard) for better index usage when possible
+                    search_conditions = []
+
+                    # Try exact SKU match first (fastest, uses index)
+                    search_conditions.append(f"inv.`{inv_sku_col}` = :exact_sku")
+                    params["exact_sku"] = search_clean
+
+                    # Prefix match for SKU (uses index if available)
+                    search_conditions.append(f"inv.`{inv_sku_col}` LIKE :sku_prefix")
+                    params["sku_prefix"] = f"{search_clean}%"
+
+                    # Name search with prefix match (better than full wildcard)
+                    search_conditions.append(f"inv.`{inv_name_col}` LIKE :name_prefix")
+                    params["name_prefix"] = f"{search_clean}%"
+
+                    # Full wildcard for name (fallback, slower but more flexible)
+                    search_conditions.append(f"inv.`{inv_name_col}` LIKE :name_like")
+                    params["name_like"] = f"%{search_clean}%"
+
+                    # UPC search - only if upc table exists
                     if upc_table_exists and upc_upc_col:
-                        # Join with upc table for UPC search
-                        search_conditions.append(
-                            f"EXISTS (SELECT 1 FROM upc WHERE upc.`{upc_sku_col}` = inv.`{inv_sku_col}` AND upc.`{upc_upc_col}` LIKE :search)"
-                        )
+                        # First get SKUs from UPC table that match
+                        upc_search_sql = f"""
+                            SELECT DISTINCT `{upc_sku_col}` AS sku
+                            FROM upc
+                            WHERE `{upc_upc_col}` LIKE :upc_search
+                            LIMIT 100
+                        """
+                        params["upc_search"] = f"%{search_clean}%"
+                        upc_skus = []
+                        try:
+                            upc_rows = conn.execute(
+                                text(upc_search_sql),
+                                {"upc_search": params["upc_search"]},
+                            ).mappings()
+                            upc_skus = [
+                                str(row.get("sku", ""))
+                                for row in upc_rows
+                                if row.get("sku")
+                            ]
+                        except:
+                            pass  # If UPC search fails, continue without it
+
+                        if upc_skus:
+                            # Add SKU match for UPC results
+                            search_conditions.append(
+                                f"inv.`{inv_sku_col}` IN :upc_skus"
+                            )
+                            params["upc_skus"] = tuple(upc_skus)
+
                     where_parts.append(f"({' OR '.join(search_conditions)})")
-                    params["search"] = search_like
 
                 # Limit results to top 50 products for performance
                 price_select = (
@@ -2841,11 +2887,6 @@ def get_product_history(
                 cost_select = (
                     f"inv.`{inv_cost_col}` AS cost" if inv_cost_col else "NULL AS cost"
                 )
-                upc_join = ""
-                if upc_table_exists and search and upc_sku_col:
-                    upc_join = (
-                        f"LEFT JOIN upc ON upc.`{upc_sku_col}` = inv.`{inv_sku_col}`"
-                    )
 
                 inv_sql = f"""
                     SELECT DISTINCT inv.`{inv_sku_col}` AS sku,
@@ -2853,7 +2894,6 @@ def get_product_history(
                            {price_select},
                            {cost_select}
                     FROM inv
-                    {upc_join}
                     WHERE {' AND '.join(where_parts) if where_parts else '1=1'}
                     ORDER BY inv.`{inv_sku_col}`
                     LIMIT 50
