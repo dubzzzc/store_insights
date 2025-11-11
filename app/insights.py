@@ -2967,11 +2967,21 @@ def get_product_history(
                             if jnl_rflag_col:
                                 jnl_where.append(f"`{jnl_rflag_col}` = 0")
 
+                            # Limit to last 2 years to prevent timeout
+                            from datetime import datetime, timedelta
+
+                            two_years_ago = (
+                                datetime.now() - timedelta(days=730)
+                            ).strftime("%Y-%m-%d")
+                            jnl_where.append(f"DATE(`{jnl_date_col}`) >= :date_limit")
+                            jnl_params["date_limit"] = two_years_ago
+
                             # Group by year-month for monthly totals
                             qty_expr = f"`{jnl_qty_col}`" if jnl_qty_col else "1"
                             price_expr = f"`{jnl_price_col}`" if jnl_price_col else "0"
 
                             # Use DATE() to extract date part, then format in Python for cross-database compatibility
+                            # Limit to 365 days (1 year) of daily data to prevent timeout
                             monthly_sql = f"""
                                 SELECT 
                                     DATE(`{jnl_date_col}`) AS sale_date,
@@ -2981,7 +2991,7 @@ def get_product_history(
                                 WHERE {' AND '.join(jnl_where)}
                                 GROUP BY DATE(`{jnl_date_col}`)
                                 ORDER BY sale_date DESC
-                                LIMIT 730
+                                LIMIT 365
                             """
 
                             monthly_rows = conn.execute(
