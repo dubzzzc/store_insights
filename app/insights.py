@@ -1711,20 +1711,17 @@ def get_operations_insights(
                 "store_name": selected_store.get("store_name"),
             }
 
-            # Operations tab: transaction/till/gift cards show current month, products/supplier invoices show overall
-            # Calculate current month range (first day 00:00:00 to end of month)
+            # Operations tab: transaction/till/gift cards show current month up to now, products/supplier invoices show overall
+            # Calculate current month range (first day 00:00:00 to current date/time)
             from datetime import datetime, timedelta
 
             now = datetime.now()
             current_month_start = datetime(now.year, now.month, 1)
-            # Next month's first day (exclusive end)
-            if now.month == 12:
-                current_month_end = datetime(now.year + 1, 1, 1)
-            else:
-                current_month_end = datetime(now.year, now.month + 1, 1)
+            # Use current date/time as end (not end of month) - only count transactions up to now
+            current_month_end = now
 
             month_start_str = current_month_start.strftime("%Y-%m-%d 00:00:00")
-            month_end_str = current_month_end.strftime("%Y-%m-%d 00:00:00")
+            month_end_str = current_month_end.strftime("%Y-%m-%d %H:%M:%S")
 
             # Transaction counts and till amounts from jnl (current month only)
             tx_count = 0
@@ -1744,14 +1741,14 @@ def get_operations_insights(
                 jnl_descript_col = _pick_column(jnl_cols, ["descript", "description", "desc"]) or None
 
                 if jnl_line_col and jnl_sale_col and jnl_date_col:
-                    # Get valid transactions for current month only (first day 00:00:00 to end of month)
+                    # Get valid transactions for current month up to current date/time (first day 00:00:00 to now)
                     where_parts = []
                     params: Dict[str, Any] = {}
                     if jnl_rflag_col:
                         where_parts.append(f"`{jnl_rflag_col}` = 0")
-                    # Filter by current month
+                    # Filter by current month up to current date/time
                     where_parts.append(f"`{jnl_date_col}` >= :month_start")
-                    where_parts.append(f"`{jnl_date_col}` < :month_end")
+                    where_parts.append(f"`{jnl_date_col}` <= :month_end")
                     params["month_start"] = month_start_str
                     params["month_end"] = month_end_str
 
@@ -1766,6 +1763,7 @@ def get_operations_insights(
                     rows = conn.execute(text(sql), params).mappings()
 
                     # Group by sale_id to find valid transactions
+                    # Valid transaction = sale has both line 950 (till) and line 980 (tender)
                     current_sale = None
                     current_group = []
                     for row in rows:
@@ -1776,13 +1774,15 @@ def get_operations_insights(
                             # Process previous group
                             if current_group:
                                 lines = {r.get("line_code", "") for r in current_group}
+                                # Valid transaction must have both till line (950) and tender line (980)
                                 if "950" in lines and "980" in lines:
                                     tx_count += 1
-                                    # Sum till from line 950
+                                    # Sum all till amounts from line 950 for this transaction
                                     for r in current_group:
                                         if r.get("line_code") == "950":
                                             try:
                                                 price_val = float(r.get("price") or 0)
+                                                # Sanity check to exclude outliers
                                                 if abs(price_val) <= 100000:
                                                     total_till += price_val
                                             except:
@@ -1821,12 +1821,15 @@ def get_operations_insights(
                     # Process last group
                     if current_group:
                         lines = {r.get("line_code", "") for r in current_group}
+                        # Valid transaction must have both till line (950) and tender line (980)
                         if "950" in lines and "980" in lines:
                             tx_count += 1
+                            # Sum all till amounts from line 950 for this transaction
                             for r in current_group:
                                 if r.get("line_code") == "950":
                                     try:
                                         price_val = float(r.get("price") or 0)
+                                        # Sanity check to exclude outliers
                                         if abs(price_val) <= 100000:
                                             total_till += price_val
                                     except:
