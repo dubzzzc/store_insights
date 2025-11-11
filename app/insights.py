@@ -1747,10 +1747,14 @@ def get_operations_insights(
                     if jnl_rflag_col:
                         where_parts.append(f"`{jnl_rflag_col}` = 0")
                     # Filter by current month up to current date/time
-                    where_parts.append(f"`{jnl_date_col}` >= :month_start")
-                    where_parts.append(f"`{jnl_date_col}` <= :month_end")
-                    params["month_start"] = month_start_str
-                    params["month_end"] = month_end_str
+                    # Use DATE() on column to handle both DATE and DATETIME columns properly
+                    where_parts.append(f"DATE(`{jnl_date_col}`) >= :month_start")
+                    where_parts.append(f"DATE(`{jnl_date_col}`) <= :month_end")
+                    # Extract just the date part for comparison (YYYY-MM-DD)
+                    params["month_start"] = month_start_str.split()[
+                        0
+                    ]  # Get date part only
+                    params["month_end"] = month_end_str.split()[0]  # Get date part only
 
                     # Get all rows for grouping by sale (current month only)
                     sql = f"""
@@ -1773,13 +1777,16 @@ def get_operations_insights(
                         if sale_id != current_sale:
                             # Process previous group
                             if current_group:
-                                lines = {r.get("line_code", "") for r in current_group}
+                                # Convert line codes to strings for consistent comparison
+                                lines = {
+                                    str(r.get("line_code", "")) for r in current_group
+                                }
                                 # Valid transaction must have both till line (950) and tender line (980)
                                 if "950" in lines and "980" in lines:
                                     tx_count += 1
                                     # Sum all till amounts from line 950 for this transaction
                                     for r in current_group:
-                                        if r.get("line_code") == "950":
+                                        if str(r.get("line_code", "")) == "950":
                                             try:
                                                 price_val = float(r.get("price") or 0)
                                                 # Sanity check to exclude outliers
@@ -1792,7 +1799,7 @@ def get_operations_insights(
                                     if jnl_descript_col:
                                         has_gift_pattern = False
                                         for r in current_group:
-                                            if r.get("line_code") == "980":
+                                            if str(r.get("line_code", "")) == "980":
                                                 desc = str(r.get("descript", "")).lower()
                                                 if any(pattern in desc for pattern in ["gift card", "giftcard", "gc", "gift cert", "giftcert", "gift certificate", "giftcertificate", "gift crd", "giftcrd"]):
                                                     has_gift_pattern = True
@@ -1801,7 +1808,7 @@ def get_operations_insights(
                                         if has_gift_pattern:
                                             # Check if it's a redemption (negative price) or purchase (positive)
                                             for r in current_group:
-                                                if r.get("line_code") == "950":
+                                                if str(r.get("line_code", "")) == "950":
                                                     try:
                                                         price_val = float(r.get("price") or 0)
                                                         if price_val < 0:
@@ -1820,13 +1827,14 @@ def get_operations_insights(
 
                     # Process last group
                     if current_group:
-                        lines = {r.get("line_code", "") for r in current_group}
+                        # Convert line codes to strings for consistent comparison
+                        lines = {str(r.get("line_code", "")) for r in current_group}
                         # Valid transaction must have both till line (950) and tender line (980)
                         if "950" in lines and "980" in lines:
                             tx_count += 1
                             # Sum all till amounts from line 950 for this transaction
                             for r in current_group:
-                                if r.get("line_code") == "950":
+                                if str(r.get("line_code", "")) == "950":
                                     try:
                                         price_val = float(r.get("price") or 0)
                                         # Sanity check to exclude outliers
