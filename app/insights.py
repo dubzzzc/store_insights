@@ -473,31 +473,17 @@ def get_sales_insights(
                 params["end_dt"] = end_next
             where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
-            # Optimize: Use subquery to filter first (uses index), then group by date
-            # This allows the WHERE clause to use indexes before applying DATE() function
-            # Expressions already have backticks, just need to prefix with 'filtered.'
-            import re
-
-            # Add 'filtered.' prefix to column references in expressions
-            def add_filtered_prefix(expr):
-                # Match column names with backticks: `column_name`
-                return re.sub(r"`([a-zA-Z_][a-zA-Z0-9_]*)`", r"filtered.`\1`", expr)
-
-            qty_expr_filtered = add_filtered_prefix(qty_expr)
-            amount_expr_filtered = add_filtered_prefix(amount_expr)
-
+            # Optimize: Aggregate directly without subquery to avoid materializing large intermediate results
+            # WHERE clause uses index-friendly half-open intervals, DATE() only in SELECT/GROUP BY
             sql = f"""
                 SELECT 
-                    DATE(filtered.`{date_col}`) AS date,
-                    {qty_expr_filtered} AS total_items_sold,
-                    {amount_expr_filtered} AS total_sales
-                FROM (
-                    SELECT {select_cols_str}
-                    FROM `{table}`
-                    {where_sql}
-                ) AS filtered
-                GROUP BY DATE(filtered.`{date_col}`)
-                ORDER BY DATE(filtered.`{date_col}`) DESC
+                    DATE(`{date_col}`) AS date,
+                    {qty_expr} AS total_items_sold,
+                    {amount_expr} AS total_sales
+                FROM `{table}`
+                {where_sql}
+                GROUP BY DATE(`{date_col}`)
+                ORDER BY DATE(`{date_col}`) DESC
                 {"LIMIT 7" if not (start or end) else ""}
             """
 
