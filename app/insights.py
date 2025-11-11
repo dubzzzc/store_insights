@@ -1711,8 +1711,22 @@ def get_operations_insights(
                 "store_name": selected_store.get("store_name"),
             }
 
-            # Operations tab shows overall/all-time data without date filtering
-            # Transaction counts and till amounts from jnl (all valid transactions)
+            # Operations tab: transaction/till/gift cards show current month, products/supplier invoices show overall
+            # Calculate current month range (first day 00:00:00 to end of month)
+            from datetime import datetime, timedelta
+
+            now = datetime.now()
+            current_month_start = datetime(now.year, now.month, 1)
+            # Next month's first day (exclusive end)
+            if now.month == 12:
+                current_month_end = datetime(now.year + 1, 1, 1)
+            else:
+                current_month_end = datetime(now.year, now.month + 1, 1)
+
+            month_start_str = current_month_start.strftime("%Y-%m-%d 00:00:00")
+            month_end_str = current_month_end.strftime("%Y-%m-%d 00:00:00")
+
+            # Transaction counts and till amounts from jnl (current month only)
             tx_count = 0
             total_till = 0.0
             gift_redeem_count = 0
@@ -1729,14 +1743,19 @@ def get_operations_insights(
                 jnl_price_col = _pick_column(jnl_cols, ["amount", "price", "total"]) or None
                 jnl_descript_col = _pick_column(jnl_cols, ["descript", "description", "desc"]) or None
 
-                if jnl_line_col and jnl_sale_col:
-                    # Get all valid transactions (no date filtering - overall view)
+                if jnl_line_col and jnl_sale_col and jnl_date_col:
+                    # Get valid transactions for current month only (first day 00:00:00 to end of month)
                     where_parts = []
                     params: Dict[str, Any] = {}
                     if jnl_rflag_col:
                         where_parts.append(f"`{jnl_rflag_col}` = 0")
+                    # Filter by current month
+                    where_parts.append(f"`{jnl_date_col}` >= :month_start")
+                    where_parts.append(f"`{jnl_date_col}` < :month_end")
+                    params["month_start"] = month_start_str
+                    params["month_end"] = month_end_str
 
-                    # Get all rows for grouping by sale (no date filtering - overall view)
+                    # Get all rows for grouping by sale (current month only)
                     sql = f"""
                         SELECT `{jnl_sale_col}` AS sale_id, `{jnl_line_col}` AS line_code,
                                `{jnl_price_col}` AS price, `{jnl_descript_col}` AS descript
