@@ -3167,24 +3167,49 @@ const InventoryModule = ({ snapshot, dateRange, onDateRangeChange }) => {
   );
 };
 
-const HistoryModule = ({ history }) => {
+const HistoryModule = ({ token, storeQueryValue }) => {
   const [query, setQuery] = useState('');
+  const [products, setProducts] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const debounceRef = useRef(null);
 
-  const filteredHistory = useMemo(() => {
-    if (!history?.length) return [];
-    if (!query) return history;
-    const lowered = query.toLowerCase();
-    return history.filter((entry) =>
-      [entry.product_name, entry.sku, entry.upc]
-        .filter(Boolean)
-        .some((value) => value.toLowerCase().includes(lowered))
-    );
-  }, [history, query]);
+  useEffect(() => {
+    if (!token || !storeQueryValue) return;
+
+    // Debounce search to avoid too many API calls
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+
+    setIsLoading(true);
+    setError('');
+
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const controller = new AbortController();
+        const payload = await fetchProductHistory(token, storeQueryValue, query, controller.signal);
+        setProducts(payload.products || []);
+        setIsLoading(false);
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          setError(err.message || 'Unable to load product history');
+          setIsLoading(false);
+        }
+      }
+    }, 500);
+
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, [token, storeQueryValue, query]);
 
   return (
     <div className="panel">
       <div className="panel-header">
-        <h2 className="panel-title">Sales History</h2>
+        <h2 className="panel-title">Product Sales History</h2>
       </div>
       <div className="search-bar">
         <input
@@ -3194,33 +3219,114 @@ const HistoryModule = ({ history }) => {
           placeholder="Search product by UPC / SKU / Name"
         />
       </div>
-      {filteredHistory.length ? (
+      {isLoading ? (
+        <div className="empty-state">Loading product history...</div>
+      ) : error ? (
+        <div className="empty-state" style={{ color: 'var(--danger)' }}>{error}</div>
+      ) : products.length ? (
         <div className="history-table">
-          <div className="table-wrapper">
-            <table>
-              <thead>
-                <tr>
-                  <th>Product</th>
-                  <th>SKU</th>
-                  <th>Year</th>
-                  <th>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredHistory.map((entry) => (
-                  <tr key={`${entry.sku}-${entry.year}`}>
-                    <td>{entry.product_name || '—'}</td>
-                    <td>{entry.sku || '—'}</td>
-                    <td>{entry.year || '—'}</td>
-                    <td>{formatCurrency(entry.total || 0)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {products.map((product) => (
+            <div key={product.sku} style={{ marginBottom: '2rem', borderBottom: '1px solid var(--panel-border)', paddingBottom: '1.5rem' }}>
+              <div style={{ marginBottom: '1rem' }}>
+                <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem' }}>{product.name || '—'}</h3>
+                <div style={{ display: 'flex', gap: '1rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                  <span><strong>SKU:</strong> {product.sku || '—'}</span>
+                  {product.upc && <span><strong>UPC:</strong> {product.upc}</span>}
+                  <span><strong>Price:</strong> {formatCurrency(product.price || 0)}</span>
+                  <span><strong>Cost:</strong> {formatCurrency(product.cost || 0)}</span>
+                </div>
+              </div>
+
+              {product.monthly_sales?.length > 0 && (
+                <div style={{ marginBottom: '1rem' }}>
+                  <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.95rem' }}>Monthly Sales</h4>
+                  <div className="table-wrapper">
+                    <table style={{ fontSize: '0.85rem' }}>
+                      <thead>
+                        <tr>
+                          <th>Month</th>
+                          <th>Qty Sold</th>
+                          <th>Total Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {product.monthly_sales.map((month, idx) => (
+                          <tr key={idx}>
+                            <td>{month.month || '—'}</td>
+                            <td>{formatQuantity(month.total_qty || 0)}</td>
+                            <td>{formatCurrency(month.total_amount || 0)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                {product.purchase_orders?.length > 0 && (
+                  <div>
+                    <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.95rem' }}>Last 5 Purchase Orders</h4>
+                    <div className="table-wrapper">
+                      <table style={{ fontSize: '0.85rem' }}>
+                        <thead>
+                          <tr>
+                            <th>PO ID</th>
+                            <th>Date</th>
+                            <th>Qty</th>
+                            <th>Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {product.purchase_orders.map((po, idx) => (
+                            <tr key={idx}>
+                              <td>{po.po_id || '—'}</td>
+                              <td>{po.date || '—'}</td>
+                              <td>{formatQuantity(po.qty || 0)}</td>
+                              <td>{formatCurrency(po.amount || 0)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {product.recent_sales?.length > 0 && (
+                  <div>
+                    <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.95rem' }}>Last 5 Sales</h4>
+                    <div className="table-wrapper">
+                      <table style={{ fontSize: '0.85rem' }}>
+                        <thead>
+                          <tr>
+                            <th>Sale ID</th>
+                            <th>Date</th>
+                            <th>Qty</th>
+                            <th>Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {product.recent_sales.map((sale, idx) => (
+                            <tr key={idx}>
+                              <td>{sale.sale_id || '—'}</td>
+                              <td>{sale.date || '—'}</td>
+                              <td>{formatQuantity(sale.qty || 0)}</td>
+                              <td>{formatCurrency(sale.amount || 0)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       ) : (
-        <div className="empty-state">Historical sales will appear once the feed is connected.</div>
+        <div className="empty-state">
+          {query ? 'No products found matching your search.' : 'Enter a search term to find product history.'}
+        </div>
       )}
     </div>
   );
@@ -3734,7 +3840,7 @@ const ModuleNav = ({ active, onChange }) => {
 
         {activeModule === 'inventory' ? <InventoryModule snapshot={inventory} dateRange={invRange} onDateRangeChange={onInvRangeChange} /> : null}
 
-        {activeModule === 'history' ? <HistoryModule history={history} /> : null}
+        {activeModule === 'history' ? <HistoryModule token={token} storeQueryValue={storeQueryValue} /> : null}
 
         {activeModule === 'tenders' ? <TendersModule data={tendersData} gatewayData={gatewayData} dateRange={dateRange} onDateRangeChange={onDateRangeChange} /> : null}
 
@@ -4229,6 +4335,37 @@ const ModuleNav = ({ active, onChange }) => {
           
           // Cache the result
           setCachedData(cacheKey, STORAGE_KEYS.quickCache, payload);
+          
+          return payload;
+        };
+
+        const fetchProductHistory = async (authToken, storeQuery, searchQuery, signal) => {
+          // Check cache first - cache key includes search query
+          const cacheKey = `product_history_${storeQuery}_${searchQuery || 'all'}`;
+          const cached = getCachedData(cacheKey, STORAGE_KEYS.salesCache, 10); // 10 min cache for product history
+          if (cached) {
+            return cached;
+          }
+
+          const searchParam = searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : '';
+          const response = await fetch(`${API_BASE}/insights/product-history${storeQuery}${searchParam}`, {
+            headers: { Authorization: `Bearer ${authToken}` },
+            signal,
+          });
+          let payload = {};
+          try {
+            payload = await response.json();
+          } catch (error) {
+            payload = {};
+          }
+          if (!response.ok) {
+            const requestError = new Error(payload.detail || 'Unable to load product history');
+            requestError.status = response.status;
+            throw requestError;
+          }
+          
+          // Cache the result
+          setCachedData(cacheKey, STORAGE_KEYS.salesCache, payload);
           
           return payload;
         };

@@ -2753,6 +2753,376 @@ def get_quick_insights(
         raise HTTPException(status_code=500, detail=f"Failed to get quick insights: {str(e)}")
 
 
+@router.get("/product-history")
+def get_product_history(
+    store: Optional[str] = Query(
+        default=None, description="Store identifier (store_id or store_db)"
+    ),
+    search: Optional[str] = Query(
+        default="", description="Search by SKU, UPC, or product name"
+    ),
+    user: dict = Depends(get_auth_user),
+):
+    """Get product sales history with monthly breakdown, purchase orders, and recent sales."""
+    try:
+        selected_store = _select_store(user, store)
+        db_name = selected_store["store_db"]
+        db_user = selected_store["db_user"]
+        db_pass = selected_store["db_pass"]
+
+        engine = _get_engine(db_user, db_pass, db_name)
+
+        with engine.connect() as conn:
+            response_meta = {
+                "store_db": db_name,
+                "store_id": selected_store.get("store_id"),
+                "store_name": selected_store.get("store_name"),
+            }
+
+            products = []
+
+            # Search for products in inv table
+            if _table_exists(conn, db_name, "inv"):
+                inv_cols = _get_columns(conn, db_name, "inv")
+                inv_sku_col = _pick_column(inv_cols, ["sku"]) or "sku"
+                inv_name_col = (
+                    _pick_column(inv_cols, ["desc", "description", "name"])
+                    or inv_sku_col
+                )
+                inv_price_col = (
+                    _pick_column(inv_cols, ["price", "sprice", "sell_price"]) or None
+                )
+                inv_cost_col = (
+                    _pick_column(inv_cols, ["lcost", "last_cost", "acost", "avg_cost"])
+                    or None
+                )
+                inv_deleted_col = (
+                    _pick_column(inv_cols, ["deleted", "del", "is_deleted"]) or None
+                )
+
+                # Get UPC from upc table if it exists
+                upc_table_exists = _table_exists(conn, db_name, "upc")
+                upc_sku_col = None
+                upc_upc_col = None
+                if upc_table_exists:
+                    upc_cols = _get_columns(conn, db_name, "upc")
+                    upc_sku_col = _pick_column(upc_cols, ["sku"]) or "sku"
+                    upc_upc_col = _pick_column(upc_cols, ["upc", "barcode"]) or "upc"
+
+                # Build search query
+                where_parts = []
+                params: Dict[str, Any] = {}
+
+                if inv_deleted_col:
+                    where_parts.append(f"UPPER(`{inv_deleted_col}`) != 'T'")
+
+                if search:
+                    search_like = f"%{search}%"
+                    # Search by SKU, name, or UPC
+                    search_conditions = [
+                        f"`{inv_sku_col}` LIKE :search",
+                        f"`{inv_name_col}` LIKE :search",
+                    ]
+                    if upc_table_exists and upc_upc_col:
+                        # Join with upc table for UPC search
+                        search_conditions.append(
+                            f"EXISTS (SELECT 1 FROM upc WHERE upc.`{upc_sku_col}` = inv.`{inv_sku_col}` AND upc.`{upc_upc_col}` LIKE :search)"
+                        )
+                    where_parts.append(f"({' OR '.join(search_conditions)})")
+                    params["search"] = search_like
+
+                # Limit results to top 50 products for performance
+                price_select = (
+                    f"inv.`{inv_price_col}` AS price"
+                    if inv_price_col
+                    else "NULL AS price"
+                )
+                cost_select = (
+                    f"inv.`{inv_cost_col}` AS cost" if inv_cost_col else "NULL AS cost"
+                )
+                upc_join = ""
+                if upc_table_exists and search and upc_sku_col:
+                    upc_join = (
+                        f"LEFT JOIN upc ON upc.`{upc_sku_col}` = inv.`{inv_sku_col}`"
+                    )
+
+                inv_sql = f"""
+                    SELECT DISTINCT inv.`{inv_sku_col}` AS sku,
+                           inv.`{inv_name_col}` AS name,
+                           {price_select},
+                           {cost_select}
+                    FROM inv
+                    {upc_join}
+                    WHERE {' AND '.join(where_parts) if where_parts else '1=1'}
+                    ORDER BY inv.`{inv_sku_col}`
+                    LIMIT 50
+                """
+
+                inv_rows = conn.execute(text(inv_sql), params).mappings()
+                product_skus = []
+
+                for inv_row in inv_rows:
+                    sku = str(inv_row.get("sku", ""))
+                    if not sku:
+                        continue
+
+                    product_skus.append(sku)
+
+                    # Get UPC for this product
+                    upc_value = None
+                    if upc_table_exists and upc_sku_col and upc_upc_col:
+                        upc_sql = f"""
+                            SELECT `{upc_upc_col}` AS upc
+                            FROM upc
+                            WHERE `{upc_sku_col}` = :sku
+                            LIMIT 1
+                        """
+                        upc_row = (
+                            conn.execute(text(upc_sql), {"sku": sku}).mappings().first()
+                        )
+                        if upc_row:
+                            upc_value = str(upc_row.get("upc", "")) or None
+
+                    product = {
+                        "sku": sku,
+                        "upc": upc_value,
+                        "name": str(inv_row.get("name", "")) or None,
+                        "price": float(inv_row.get("price", 0) or 0),
+                        "cost": float(inv_row.get("cost", 0) or 0),
+                        "monthly_sales": [],
+                        "purchase_orders": [],
+                        "recent_sales": [],
+                    }
+
+                    # Get monthly sales from jnl
+                    if _table_exists(conn, db_name, "jnl"):
+                        jnl_cols = _get_columns(conn, db_name, "jnl")
+                        jnl_sku_col = _pick_column(jnl_cols, ["sku"]) or "sku"
+                        jnl_date_col = (
+                            _pick_column(
+                                jnl_cols,
+                                [
+                                    "sale_date",
+                                    "trans_date",
+                                    "transaction_date",
+                                    "tdate",
+                                    "date",
+                                ],
+                            )
+                            or None
+                        )
+                        jnl_qty_col = (
+                            _pick_column(jnl_cols, ["qty", "quantity"]) or None
+                        )
+                        jnl_price_col = (
+                            _pick_column(jnl_cols, ["amount", "price", "total"]) or None
+                        )
+                        jnl_rflag_col = _pick_column(jnl_cols, ["rflag"]) or None
+
+                        if jnl_sku_col and jnl_date_col:
+                            jnl_where = [f"`{jnl_sku_col}` = :sku"]
+                            jnl_params = {"sku": sku}
+
+                            if jnl_rflag_col:
+                                jnl_where.append(f"`{jnl_rflag_col}` = 0")
+
+                            # Group by year-month for monthly totals
+                            qty_expr = f"`{jnl_qty_col}`" if jnl_qty_col else "1"
+                            price_expr = f"`{jnl_price_col}`" if jnl_price_col else "0"
+
+                            monthly_sql = f"""
+                                SELECT 
+                                    DATE_FORMAT(DATE(`{jnl_date_col}`), '%Y-%m') AS month,
+                                    SUM({qty_expr}) AS total_qty,
+                                    SUM({price_expr}) AS total_amount
+                                FROM jnl
+                                WHERE {' AND '.join(jnl_where)}
+                                GROUP BY DATE_FORMAT(DATE(`{jnl_date_col}`), '%Y-%m')
+                                ORDER BY month DESC
+                                LIMIT 24
+                            """
+
+                            monthly_rows = conn.execute(
+                                text(monthly_sql), jnl_params
+                            ).mappings()
+                            for month_row in monthly_rows:
+                                product["monthly_sales"].append(
+                                    {
+                                        "month": str(month_row.get("month", "")),
+                                        "total_qty": float(
+                                            month_row.get("total_qty", 0) or 0
+                                        ),
+                                        "total_amount": float(
+                                            month_row.get("total_amount", 0) or 0
+                                        ),
+                                    }
+                                )
+
+                    # Get last 5 purchase orders from pod
+                    if _table_exists(conn, db_name, "pod"):
+                        pod_cols = _get_columns(conn, db_name, "pod")
+                        pod_sku_col = _pick_column(pod_cols, ["sku"]) or "sku"
+                        pod_po_col = (
+                            _pick_column(pod_cols, ["po", "po_id", "poh_id", "invno"])
+                            or None
+                        )
+                        pod_qty_col = (
+                            _pick_column(pod_cols, ["qty", "quantity"]) or None
+                        )
+                        pod_price_col = (
+                            _pick_column(pod_cols, ["price", "amount", "total"]) or None
+                        )
+                        pod_date_col = (
+                            _pick_column(pod_cols, ["date", "pdate", "created_at"])
+                            or None
+                        )
+
+                        if pod_sku_col and pod_po_col:
+                            pod_select_parts = [f"`{pod_po_col}` AS po_id"]
+                            pod_group_parts = [f"`{pod_po_col}`"]
+
+                            if pod_date_col:
+                                pod_select_parts.append(
+                                    f"DATE(`{pod_date_col}`) AS po_date"
+                                )
+                                pod_group_parts.append(f"DATE(`{pod_date_col}`)")
+                            if pod_qty_col:
+                                pod_select_parts.append(f"SUM(`{pod_qty_col}`) AS qty")
+                            if pod_price_col:
+                                pod_select_parts.append(
+                                    f"SUM(`{pod_price_col}`) AS amount"
+                                )
+
+                            pod_sql = f"""
+                                SELECT {', '.join(pod_select_parts)}
+                                FROM pod
+                                WHERE `{pod_sku_col}` = :sku
+                                GROUP BY {', '.join(pod_group_parts)}
+                                ORDER BY `{pod_po_col}` DESC
+                                LIMIT 5
+                            """
+
+                            pod_rows = conn.execute(
+                                text(pod_sql), {"sku": sku}
+                            ).mappings()
+                            for pod_row in pod_rows:
+                                product["purchase_orders"].append(
+                                    {
+                                        "po_id": str(pod_row.get("po_id", "")),
+                                        "date": (
+                                            str(pod_row.get("po_date", ""))
+                                            if pod_date_col
+                                            else None
+                                        ),
+                                        "qty": (
+                                            float(pod_row.get("qty", 0) or 0)
+                                            if pod_qty_col
+                                            else 0
+                                        ),
+                                        "amount": (
+                                            float(pod_row.get("amount", 0) or 0)
+                                            if pod_price_col
+                                            else 0
+                                        ),
+                                    }
+                                )
+
+                    # Get last 5 sales from jnl
+                    if _table_exists(conn, db_name, "jnl"):
+                        jnl_cols = _get_columns(conn, db_name, "jnl")
+                        jnl_sku_col = _pick_column(jnl_cols, ["sku"]) or "sku"
+                        jnl_sale_col = (
+                            _pick_column(jnl_cols, ["sale", "sale_id", "invno"])
+                            or "sale"
+                        )
+                        jnl_date_col = (
+                            _pick_column(
+                                jnl_cols,
+                                [
+                                    "sale_date",
+                                    "trans_date",
+                                    "transaction_date",
+                                    "tdate",
+                                    "date",
+                                ],
+                            )
+                            or None
+                        )
+                        jnl_qty_col = (
+                            _pick_column(jnl_cols, ["qty", "quantity"]) or None
+                        )
+                        jnl_price_col = (
+                            _pick_column(jnl_cols, ["amount", "price", "total"]) or None
+                        )
+                        jnl_rflag_col = _pick_column(jnl_cols, ["rflag"]) or None
+
+                        if jnl_sku_col and jnl_sale_col and jnl_date_col:
+                            jnl_where = [f"`{jnl_sku_col}` = :sku"]
+                            jnl_params = {"sku": sku}
+
+                            if jnl_rflag_col:
+                                jnl_where.append(f"`{jnl_rflag_col}` = 0")
+
+                            sales_select_parts = [
+                                f"`{jnl_sale_col}` AS sale_id",
+                                f"DATE(`{jnl_date_col}`) AS sale_date",
+                            ]
+                            if jnl_qty_col:
+                                sales_select_parts.append(
+                                    f"SUM(`{jnl_qty_col}`) AS qty"
+                                )
+                            if jnl_price_col:
+                                sales_select_parts.append(
+                                    f"SUM(`{jnl_price_col}`) AS amount"
+                                )
+
+                            sales_sql = f"""
+                                SELECT {', '.join(sales_select_parts)}
+                                FROM jnl
+                                WHERE {' AND '.join(jnl_where)}
+                                GROUP BY `{jnl_sale_col}`, DATE(`{jnl_date_col}`)
+                                ORDER BY `{jnl_date_col}` DESC, `{jnl_sale_col}` DESC
+                                LIMIT 5
+                            """
+
+                            sales_rows = conn.execute(
+                                text(sales_sql), jnl_params
+                            ).mappings()
+                            for sale_row in sales_rows:
+                                product["recent_sales"].append(
+                                    {
+                                        "sale_id": str(sale_row.get("sale_id", "")),
+                                        "date": (
+                                            str(sale_row.get("sale_date", ""))
+                                            if sale_row.get("sale_date")
+                                            else None
+                                        ),
+                                        "qty": (
+                                            float(sale_row.get("qty", 0) or 0)
+                                            if jnl_qty_col
+                                            else 0
+                                        ),
+                                        "amount": (
+                                            float(sale_row.get("amount", 0) or 0)
+                                            if jnl_price_col
+                                            else 0
+                                        ),
+                                    }
+                                )
+
+                    products.append(product)
+
+            return {
+                "products": products,
+                "meta": response_meta,
+            }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get product history: {str(e)}"
+        )
+
+
 @router.get("/diagnostics")
 def get_diagnostics(
     store: Optional[str] = Query(
