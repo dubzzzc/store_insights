@@ -1272,7 +1272,7 @@ def get_sales_insights(
                     FROM hst
                     WHERE {' AND '.join(where_parts) if where_parts else '1=1'}
                     GROUP BY `{hst_sku}`
-                    ORDER BY total_sales DESC, total_qty DESC
+                    ORDER BY total_qty DESC, total_sales DESC
                     LIMIT 20
                 """
                 list_rows = list(conn.execute(text(base_sql), params5).mappings())
