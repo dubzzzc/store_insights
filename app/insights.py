@@ -835,7 +835,10 @@ def get_sales_insights(
                     )
 
                     # Get ALL tenders (LINE 980-989) - payment type is identified by jnl.cat
+                    # For ecommerce sales, cat may be in promo column, so use promo as fallback
                     # Join to cat table to get cat.name for payment method names
+                    # Ecommerce sales have cat.name containing "WEB" - include these in payment methods
+                    promo_col = "promo" if "promo" in cols else None
                     if cat_col:
                         # Check if cat table exists and get column names
                         cat_table_exists = _table_exists(conn, db_name, "cat")
@@ -874,8 +877,16 @@ def get_sales_insights(
                             )
                             cash_check_condition = " OR ".join(cash_check_where)
 
+                            # Build cat lookup: use cat column, fallback to promo if cat is empty/0
+                            # This handles ecommerce sales where cat might be in promo column
+                            cat_lookup_expr = (
+                                f"COALESCE(NULLIF(jnl.`{cat_col}`, 0), NULLIF(jnl.`{promo_col}`, 0), 0)"
+                                if promo_col
+                                else f"COALESCE(NULLIF(jnl.`{cat_col}`, 0), 0)"
+                            )
+
                             # Identify if current tender is cash (using subquery to avoid JOIN duplicates)
-                            cash_identify_condition = f"UPPER(COALESCE((SELECT cat.`{cat_name_col}` FROM cat WHERE cat.`{cat_code_col}` = jnl.`{cat_col}` LIMIT 1), '')) LIKE '%CASH%'"
+                            cash_identify_condition = f"UPPER(COALESCE((SELECT cat.`{cat_name_col}` FROM cat WHERE cat.`{cat_code_col}` = {cat_lookup_expr} LIMIT 1), '')) LIKE '%CASH%'"
                             if descript_col:
                                 cash_identify_condition = f"({cash_identify_condition} OR UPPER(jnl.`{descript_col}`) LIKE '%CASH%')"
 
@@ -937,16 +948,16 @@ def get_sales_insights(
 
                             tender_sql = f"""
                                 SELECT 
-                                    jnl.`{cat_col}` AS code,
+                                    {cat_lookup_expr} AS code,
                                     COALESCE(
-                                        (SELECT cat.`{cat_name_col}` FROM cat WHERE cat.`{cat_code_col}` = jnl.`{cat_col}` LIMIT 1),
+                                        (SELECT cat.`{cat_name_col}` FROM cat WHERE cat.`{cat_code_col}` = {cat_lookup_expr} LIMIT 1),
                                         {descript_fallback},
-                                        CAST(jnl.`{cat_col}` AS CHAR)
+                                        CAST({cat_lookup_expr} AS CHAR)
                                     ) AS method_name,
                                     SUM(
                                         CASE 
                                             WHEN (
-                                                UPPER(COALESCE((SELECT cat.`{cat_name_col}` FROM cat WHERE cat.`{cat_code_col}` = jnl.`{cat_col}` LIMIT 1), '')) LIKE '%CASH%'
+                                                UPPER(COALESCE((SELECT cat.`{cat_name_col}` FROM cat WHERE cat.`{cat_code_col}` = {cat_lookup_expr} LIMIT 1), '')) LIKE '%CASH%'
                                                 OR UPPER(jnl.`{descript_col}`) LIKE '%CASH%'
                                             ) THEN 
                                                 GREATEST(0, jnl.`{amt_col}` - ABS(COALESCE(cash_change_per_sale.cash_change, 0)))
@@ -990,8 +1001,8 @@ def get_sales_insights(
                                         AND {' AND '.join(void_sales_where)}
                                       LIMIT 1
                                   )
-                                GROUP BY jnl.`{cat_col}`
-                                ORDER BY jnl.`{cat_col}`
+                                GROUP BY {cat_lookup_expr}
+                                ORDER BY {cat_lookup_expr}
                             """
 
                             # Add parameters for cash change subquery (use same as main query)
@@ -2042,6 +2053,8 @@ def get_tenders_insights(
                     void_sales_where.append(f"jnl_void.`{jnl_sku_col}` > 0")
 
                     # Build payment type identification and cash change logic
+                    # For ecommerce sales, cat may be in promo column, so use promo as fallback
+                    promo_col = "promo" if "promo" in jnl_cols else None
                     if cat_col and _table_exists(conn, db_name, "cat"):
                         cat_table_cols = _get_columns(conn, db_name, "cat")
                         cat_code_col = (
@@ -2052,6 +2065,14 @@ def get_tenders_insights(
                                 cat_table_cols, ["name", "desc", "description", "label"]
                             )
                             or "name"
+                        )
+
+                        # Build cat lookup: use cat column, fallback to promo if cat is empty/0
+                        # This handles ecommerce sales where cat might be in promo column
+                        cat_lookup_expr = (
+                            f"COALESCE(NULLIF(jnl.`{cat_col}`, 0), NULLIF(jnl.`{promo_col}`, 0), 0)"
+                            if promo_col
+                            else f"COALESCE(NULLIF(jnl.`{cat_col}`, 0), 0)"
                         )
 
                         # Cash change subquery
@@ -2102,13 +2123,13 @@ def get_tenders_insights(
                             SELECT 
                                 DATE(jnh.`{jnh_time}`) AS date,
                                 COALESCE(
-                                    (SELECT cat.`{cat_name_col}` FROM cat WHERE cat.`{cat_code_col}` = jnl.`{cat_col}` LIMIT 1),
+                                    (SELECT cat.`{cat_name_col}` FROM cat WHERE cat.`{cat_code_col}` = {cat_lookup_expr} LIMIT 1),
                                     {f"jnl.`{descript_col}`" if descript_col else "NULL"},
-                                    CAST(jnl.`{cat_col}` AS CHAR)
+                                    CAST({cat_lookup_expr} AS CHAR)
                                 ) AS payment_type,
                                 CASE 
                                     WHEN (
-                                        UPPER(COALESCE((SELECT cat.`{cat_name_col}` FROM cat WHERE cat.`{cat_code_col}` = jnl.`{cat_col}` LIMIT 1), '')) LIKE '%CASH%'
+                                        UPPER(COALESCE((SELECT cat.`{cat_name_col}` FROM cat WHERE cat.`{cat_code_col}` = {cat_lookup_expr} LIMIT 1), '')) LIKE '%CASH%'
                                         {' OR UPPER(jnl.`' + descript_col + '`) LIKE \'%CASH%\'' if descript_col else ''}
                                     ) THEN 
                                         GREATEST(0, jnl.`{amt_col}` - ABS(COALESCE(cash_change_per_sale.cash_change, 0)))
