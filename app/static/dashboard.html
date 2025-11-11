@@ -2488,12 +2488,18 @@ const AdminView = ({
       base.average_dollars_per_sale !== undefined && base.average_dollars_per_sale !== null
         ? toNumber(base.average_dollars_per_sale, 0)
         : 0;
+    // Total net amount is the sum of all payment methods (tenders) net amounts
+    // This is calculated from the payment_methods in the backend
+    const totalNet = base.total_net !== undefined && base.total_net !== null
+      ? toNumber(base.total_net, 0)
+      : grossSales; // Fallback to grossSales if total_net not available
 
     return {
       grossSales,
       totalItems,
       daysCaptured: rawDays,
       averageDollarsPerSale,
+      totalNet,
     };
   }, [sales, summary]);
 
@@ -2611,7 +2617,7 @@ const AdminView = ({
         </div>
         <div className="sales-hero-metric">
           <span>Total Net Amount</span>
-          <strong>{formatCurrency(derivedSummary.grossSales)}</strong>
+          <strong>{formatCurrency(derivedSummary.totalNet)}</strong>
           <span>
             {derivedSummary.daysCaptured
               ? `${derivedSummary.daysCaptured} day window`
