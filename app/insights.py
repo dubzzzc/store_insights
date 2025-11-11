@@ -746,8 +746,7 @@ def get_sales_insights(
                                 f", jnl.`{descript_col}`" if descript_col else ""
                             )
 
-                            # Build cash identification condition for the subquery
-                            # Check if the sale has a cash tender (by cat.name or descript)
+                            # Build cash identification condition
                             cash_check_where = []
                             if descript_col:
                                 cash_check_where.append(
@@ -758,32 +757,43 @@ def get_sales_insights(
                             )
                             cash_check_condition = " OR ".join(cash_check_where)
 
-                            # Correlated subquery to get cash change for this sale (only if sale has cash tender)
-                            cash_change_subquery = f"""
-                                (SELECT COALESCE(SUM(jnl_cc.`{amt_col}`), 0)
-                                 FROM jnl jnl_cc
-                                 WHERE jnl_cc.`{jnl_sale_col}` = jnl.`{jnl_sale_col}`
-                                   AND jnl_cc.`{line_col}` = 999
-                                   AND jnl_cc.`{jnl_rflag}` <= 0
-                                   AND EXISTS (
-                                       SELECT 1
-                                       FROM jnl jnl_cash
-                                       LEFT JOIN cat cat_cash ON cat_cash.`{cat_code_col}` = jnl_cash.`{cat_col}`
-                                       WHERE jnl_cash.`{jnl_sale_col}` = jnl.`{jnl_sale_col}`
-                                         AND jnl_cash.`{line_col}` BETWEEN 980 AND 989
-                                         AND jnl_cash.`{jnl_rflag}` <= 0
-                                         AND ({cash_check_condition})
-                                       LIMIT 1
-                                   )
-                                )
-                            """
-
                             # Identify if current tender is cash
                             cash_identify_condition = (
                                 f"UPPER(cat.`{cat_name_col}`) LIKE '%CASH%'"
                             )
                             if descript_col:
                                 cash_identify_condition = f"({cash_identify_condition} OR UPPER(jnl.`{descript_col}`) LIKE '%CASH%')"
+
+                            # Optimize: Pre-calculate cash change per sale using a subquery JOIN instead of correlated subquery
+                            # This is much more efficient than executing a subquery for each row
+                            # Build WHERE clause for cash change subquery
+                            cash_change_where = [
+                                f"jnl_cc.`{line_col}` = 999",
+                                f"jnl_cc.`{jnl_rflag}` <= 0",
+                            ]
+                            if jnl_date_filter_col and start:
+                                cash_change_where.append(
+                                    f"jnl_cc.`{jnl_date_filter_col}` >= :cc_start_dt"
+                                )
+                            if jnl_date_filter_col and end:
+                                cash_change_where.append(
+                                    f"jnl_cc.`{jnl_date_filter_col}` < :cc_end_dt"
+                                )
+
+                            # Build WHERE clause for EXISTS subquery (cash sales check)
+                            cash_sales_exists_where = [
+                                f"jnl_cash.`{jnl_sale_col}` = jnl_cc.`{jnl_sale_col}`",
+                                f"jnl_cash.`{line_col}` BETWEEN 980 AND 989",
+                                f"jnl_cash.`{jnl_rflag}` <= 0",
+                            ]
+                            if jnl_date_filter_col and start:
+                                cash_sales_exists_where.append(
+                                    f"jnl_cash.`{jnl_date_filter_col}` >= :ccs_start_dt"
+                                )
+                            if jnl_date_filter_col and end:
+                                cash_sales_exists_where.append(
+                                    f"jnl_cash.`{jnl_date_filter_col}` < :ccs_end_dt"
+                                )
 
                             tender_sql = f"""
                                 SELECT 
@@ -792,18 +802,42 @@ def get_sales_insights(
                                     SUM(
                                         CASE 
                                             WHEN {cash_identify_condition} THEN 
-                                                GREATEST(0, jnl.`{amt_col}` - {cash_change_subquery})
+                                                GREATEST(0, jnl.`{amt_col}` - COALESCE(cash_change_per_sale.cash_change, 0))
                                             ELSE 
                                                 jnl.`{amt_col}`
                                         END
                                     ) AS total
                                 FROM jnl
                                 LEFT JOIN cat ON cat.`{cat_code_col}` = jnl.`{cat_col}`
+                                LEFT JOIN (
+                                    SELECT 
+                                        jnl_cc.`{jnl_sale_col}` AS sale_id,
+                                        SUM(jnl_cc.`{amt_col}`) AS cash_change
+                                    FROM jnl jnl_cc
+                                    WHERE {' AND '.join(cash_change_where)}
+                                      AND EXISTS (
+                                          SELECT 1
+                                          FROM jnl jnl_cash
+                                          LEFT JOIN cat cat_cash ON cat_cash.`{cat_code_col}` = jnl_cash.`{cat_col}`
+                                          WHERE {' AND '.join(cash_sales_exists_where)}
+                                            AND ({cash_check_condition})
+                                          LIMIT 1
+                                      )
+                                    GROUP BY jnl_cc.`{jnl_sale_col}`
+                                ) AS cash_change_per_sale ON cash_change_per_sale.sale_id = jnl.`{jnl_sale_col}`
                                 WHERE {' AND '.join(where_parts) if where_parts else '1=1'} 
                                   AND jnl.`{line_col}` BETWEEN 980 AND 989
                                 GROUP BY jnl.`{cat_col}`, cat.`{cat_name_col}`{descript_group}
                                 ORDER BY jnl.`{cat_col}`
                             """
+
+                            # Add parameters for cash change subquery
+                            if jnl_date_filter_col and start:
+                                params3["cc_start_dt"] = params3["p_start_dt"]
+                                params3["ccs_start_dt"] = params3["p_start_dt"]
+                            if jnl_date_filter_col and end:
+                                params3["cc_end_dt"] = params3["p_end_dt"]
+                                params3["ccs_end_dt"] = params3["p_end_dt"]
                         else:
                             # No cat table: use DESCRIPT as fallback
                             if descript_col:
