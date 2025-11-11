@@ -1472,6 +1472,14 @@
         }
       };
 
+      const clearSalesCache = () => {
+        try {
+          storage.set(STORAGE_KEYS.salesCache, {});
+        } catch (e) {
+          // Ignore errors
+        }
+      };
+
       const getStoreIdentifier = (store) => {
         if (!store) return '';
         if (store.store_id !== undefined && store.store_id !== null) {
@@ -3929,6 +3937,13 @@ const ModuleNav = ({ active, onChange }) => {
 
         // Auto-set end date to start date when start changes (unless end was manually set)
         const handleDateRangeChange = useCallback((newRange) => {
+          // Clear cache when dates change to prevent showing stale data
+          const startChanged = newRange.start !== undefined && newRange.start !== dateRange?.start;
+          const endChanged = newRange.end !== undefined && newRange.end !== dateRange?.end;
+          if (startChanged || endChanged) {
+            clearSalesCache();
+          }
+          
           setDateRange((prev) => {
             const updated = { ...(prev || {}), ...newRange };
             const startChanged = newRange.start !== undefined && newRange.start !== prev?.start;
@@ -3949,7 +3964,7 @@ const ModuleNav = ({ active, onChange }) => {
           if (newRange.end !== undefined && newRange.end !== newRange.start) {
             setDateRangeEndManual(true);
           }
-        }, [dateRangeEndManual]);
+        }, [dateRangeEndManual, dateRange]);
 
         const handlePoRangeChange = useCallback((newRange) => {
           setPoRange((prev) => {
@@ -4007,6 +4022,8 @@ const ModuleNav = ({ active, onChange }) => {
           if (invRange?.end) params.push(`inv_end=${encodeURIComponent(invRange.end)}`);
           return params.length ? `?${params.join('&')}` : '';
         }, [selectedStore, dateRange, poRange, invRange]);
+
+        const storeQueryValueRef = useRef(storeQueryValue);
 
         const handleAdminLogout = useCallback(
           (message = '') => {
@@ -4469,6 +4486,8 @@ const ModuleNav = ({ active, onChange }) => {
         useEffect(() => {
           if (!token || userRole === 'admin') return;
           if (stores.length > 1 && !selectedStore) return;
+          // Update ref with latest storeQueryValue
+          storeQueryValueRef.current = storeQueryValue;
           // Always load insights when storeQueryValue changes (includes date changes)
           // This handles initial load and date range changes
           loadInsights(token, storeQueryValue);
@@ -4516,7 +4535,8 @@ const ModuleNav = ({ active, onChange }) => {
               if (debounceRef.current) clearTimeout(debounceRef.current);
               debounceRef.current = setTimeout(() => {
                 if (token) {
-                  loadInsights(token, storeQueryValue);
+                  // Use ref to get latest storeQueryValue (avoids stale closure)
+                  loadInsights(token, storeQueryValueRef.current);
                 }
               }, 300);
             }
