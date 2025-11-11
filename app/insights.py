@@ -649,13 +649,25 @@ def get_sales_insights(
                         ORDER BY hour
                     """
                     rows = conn.execute(text(hourly_sql), params2).mappings()
-                    hourly = [
-                        {
-                            "hour": f"{int(r['hour']):02d}:00",
-                            "total_sales": float(r["total_sales"]),
-                        }
-                        for r in rows
-                    ]
+                    hourly = []
+                    for r in rows:
+                        hour_num = int(r["hour"])
+                        if hour_num == 12:
+                            hour_label = "NOON TO 12:59 PM"
+                        elif hour_num == 0:
+                            hour_label = "12:00 AM TO 12:59 AM"
+                        elif hour_num < 12:
+                            hour_label = f"{hour_num}:00 TO {hour_num}:59 AM"
+                        else:
+                            # PM hours: 13->1, 14->2, etc.
+                            pm_hour = hour_num - 12
+                            hour_label = f"{pm_hour}:00 TO {pm_hour}:59 PM"
+                        hourly.append(
+                            {
+                                "hour": hour_label,
+                                "total_sales": float(r["total_sales"]),
+                            }
+                        )
 
             # Payment methods from jnl tenders LINE 980-989 (filter dates using jnl's date column)
             # Shows ALL payment types/tenders for the selected date range, including gift cards
@@ -743,10 +755,8 @@ def get_sales_insights(
                             )
                             cash_check_condition = " OR ".join(cash_check_where)
 
-                            # Identify if current tender is cash
-                            cash_identify_condition = (
-                                f"UPPER(cat.`{cat_name_col}`) LIKE '%CASH%'"
-                            )
+                            # Identify if current tender is cash (using subquery to avoid JOIN duplicates)
+                            cash_identify_condition = f"UPPER(COALESCE((SELECT cat.`{cat_name_col}` FROM cat WHERE cat.`{cat_code_col}` = jnl.`{cat_col}` LIMIT 1), '')) LIKE '%CASH%'"
                             if descript_col:
                                 cash_identify_condition = f"({cash_identify_condition} OR UPPER(jnl.`{descript_col}`) LIKE '%CASH%')"
 
@@ -766,20 +776,28 @@ def get_sales_insights(
                                     f"jnl_cc.`{jnl_date_filter_col}` < :cc_end_dt"
                                 )
 
+                            # Use subquery for cat.name to avoid duplicates from multiple cat rows
+                            # This ensures we only get one cat.name per cat code
                             tender_sql = f"""
                                 SELECT 
                                     jnl.`{cat_col}` AS code,
-                                    COALESCE(cat.`{cat_name_col}`, {descript_fallback}, CAST(jnl.`{cat_col}` AS CHAR)) AS method_name,
+                                    COALESCE(
+                                        (SELECT cat.`{cat_name_col}` FROM cat WHERE cat.`{cat_code_col}` = jnl.`{cat_col}` LIMIT 1),
+                                        {descript_fallback},
+                                        CAST(jnl.`{cat_col}` AS CHAR)
+                                    ) AS method_name,
                                     SUM(
                                         CASE 
-                                            WHEN {cash_identify_condition} THEN 
+                                            WHEN (
+                                                UPPER(COALESCE((SELECT cat.`{cat_name_col}` FROM cat WHERE cat.`{cat_code_col}` = jnl.`{cat_col}` LIMIT 1), '')) LIKE '%CASH%'
+                                                OR UPPER(jnl.`{descript_col}`) LIKE '%CASH%'
+                                            ) THEN 
                                                 GREATEST(0, jnl.`{amt_col}` - ABS(COALESCE(cash_change_per_sale.cash_change, 0)))
                                             ELSE 
                                                 jnl.`{amt_col}`
                                         END
                                     ) AS total
                                 FROM jnl
-                                LEFT JOIN cat ON cat.`{cat_code_col}` = jnl.`{cat_col}`
                                 LEFT JOIN (
                                     SELECT 
                                         jnl_cc.`{jnl_sale_col}` AS sale_id,
@@ -790,7 +808,7 @@ def get_sales_insights(
                                 ) AS cash_change_per_sale ON cash_change_per_sale.sale_id = jnl.`{jnl_sale_col}`
                                 WHERE {' AND '.join(where_parts) if where_parts else '1=1'} 
                                   AND jnl.`{line_col}` BETWEEN 980 AND 989
-                                GROUP BY jnl.`{cat_col}`, cat.`{cat_name_col}`{descript_group}
+                                GROUP BY jnl.`{cat_col}`
                                 ORDER BY jnl.`{cat_col}`
                             """
 
@@ -933,13 +951,16 @@ def get_sales_insights(
 
                         if cat_join_label:
                             cc, cl = cat_join_label
+                            # Use subquery for cat.name to avoid duplicates from multiple cat rows
                             cat_sql = f"""
-                                SELECT COALESCE(cat.`{cl}`, CAST(jnl.`cat` AS CHAR)) AS category, 
-                                       SUM(jnl.`{amt_col}`) AS total
+                                SELECT COALESCE(
+                                    (SELECT cat.`{cl}` FROM cat WHERE cat.`{cc}` = jnl.`cat` LIMIT 1),
+                                    CAST(jnl.`cat` AS CHAR)
+                                ) AS category, 
+                                SUM(jnl.`{amt_col}`) AS total
                                 FROM jnl
-                                LEFT JOIN cat ON cat.`{cc}` = jnl.`cat`
                                 WHERE {' AND '.join(where_parts)}
-                                GROUP BY jnl.`cat`, cat.`{cl}`
+                                GROUP BY jnl.`cat`
                                 ORDER BY total DESC
                                 LIMIT 50
                             """
