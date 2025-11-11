@@ -737,6 +737,10 @@ def get_sales_insights(
                     jnl_sale_col = (
                         _pick_column(cols, ["sale", "sale_id", "invno"]) or "sale"
                     )
+                    # Get SKU column for void sales check
+                    jnl_sku_col = (
+                        _pick_column(cols, ["sku", "item", "item_id"]) or "sku"
+                    )
 
                     # Get ALL tenders (LINE 980-989) - payment type is identified by jnl.cat
                     # Join to cat table to get cat.name for payment method names
@@ -784,8 +788,8 @@ def get_sales_insights(
                                 cash_identify_condition = f"({cash_identify_condition} OR UPPER(jnl.`{descript_col}`) LIKE '%CASH%')"
 
                             # Optimize: Pre-calculate cash change per sale using a simple subquery JOIN
-                            # Get all cash change (LINE 999) for the date range, grouped by sale
-                            # Then only subtract it from cash tenders in the main query
+                            # Get cash change (LINE 999) only for sales that have cash tenders and are not void
+                            # Exclude void sales: sales where any SKU line (sku > 0) has rflag = 4
                             cash_change_where = [
                                 f"jnl_cc.`{line_col}` = 999",
                                 f"jnl_cc.`{jnl_rflag}` <= 0",
@@ -799,8 +803,45 @@ def get_sales_insights(
                                     f"jnl_cc.`{jnl_date_filter_col}` < :cc_end_dt"
                                 )
 
+                            # Build void sales check for cash change subquery
+                            cash_change_void_where = []
+                            if jnl_rflag:
+                                cash_change_void_where.append(
+                                    f"jnl_void_cc.`{jnl_rflag}` = 4"
+                                )
+                            cash_change_void_where.append(
+                                f"jnl_void_cc.`{jnl_sku_col}` > 0"
+                            )
+
+                            # Build cash tender check - ensure sale has cash tenders
+                            cash_tender_check_where = [
+                                f"jnl_cash_tender.`{line_col}` BETWEEN 980 AND 989"
+                            ]
+                            if jnl_rflag:
+                                cash_tender_check_where.append(
+                                    f"jnl_cash_tender.`{jnl_rflag}` <= 0"
+                                )
+
+                            # Build cash identification condition for EXISTS check
+                            cash_tender_identify = [
+                                f"UPPER(COALESCE(cat_cash_tender.`{cat_name_col}`, '')) LIKE '%CASH%'"
+                            ]
+                            if descript_col:
+                                cash_tender_identify.append(
+                                    f"UPPER(jnl_cash_tender.`{descript_col}`) LIKE '%CASH%'"
+                                )
+                            cash_tender_identify_condition = " OR ".join(
+                                cash_tender_identify
+                            )
+
                             # Use subquery for cat.name to avoid duplicates from multiple cat rows
                             # This ensures we only get one cat.name per cat code
+                            # Exclude void sales: sales where any SKU line (sku > 0) has rflag = 4
+                            void_sales_where = []
+                            if jnl_rflag:
+                                void_sales_where.append(f"jnl_void.`{jnl_rflag}` = 4")
+                            void_sales_where.append(f"jnl_void.`{jnl_sku_col}` > 0")
+
                             tender_sql = f"""
                                 SELECT 
                                     jnl.`{cat_col}` AS code,
@@ -827,10 +868,33 @@ def get_sales_insights(
                                         SUM(jnl_cc.`{amt_col}`) AS cash_change
                                     FROM jnl jnl_cc
                                     WHERE {' AND '.join(cash_change_where)}
+                                      AND NOT EXISTS (
+                                          SELECT 1
+                                          FROM jnl jnl_void_cc
+                                          WHERE jnl_void_cc.`{jnl_sale_col}` = jnl_cc.`{jnl_sale_col}`
+                                            AND {' AND '.join(cash_change_void_where)}
+                                          LIMIT 1
+                                      )
+                                      AND EXISTS (
+                                          SELECT 1
+                                          FROM jnl jnl_cash_tender
+                                          LEFT JOIN cat cat_cash_tender ON cat_cash_tender.`{cat_code_col}` = jnl_cash_tender.`{cat_col}`
+                                          WHERE jnl_cash_tender.`{jnl_sale_col}` = jnl_cc.`{jnl_sale_col}`
+                                            AND {' AND '.join(cash_tender_check_where)}
+                                            AND ({cash_tender_identify_condition})
+                                          LIMIT 1
+                                      )
                                     GROUP BY jnl_cc.`{jnl_sale_col}`
                                 ) AS cash_change_per_sale ON cash_change_per_sale.sale_id = jnl.`{jnl_sale_col}`
                                 WHERE {' AND '.join(where_parts) if where_parts else '1=1'} 
                                   AND jnl.`{line_col}` BETWEEN 980 AND 989
+                                  AND NOT EXISTS (
+                                      SELECT 1
+                                      FROM jnl jnl_void
+                                      WHERE jnl_void.`{jnl_sale_col}` = jnl.`{jnl_sale_col}`
+                                        AND {' AND '.join(void_sales_where)}
+                                      LIMIT 1
+                                  )
                                 GROUP BY jnl.`{cat_col}`
                                 ORDER BY jnl.`{cat_col}`
                             """
@@ -842,6 +906,16 @@ def get_sales_insights(
                                 params3["cc_end_dt"] = params3["p_end_dt"]
                         else:
                             # No cat table: use DESCRIPT as fallback
+                            # Exclude void sales: sales where any SKU line (sku > 0) has rflag = 4
+                            void_sales_where_fallback = []
+                            if jnl_rflag:
+                                void_sales_where_fallback.append(
+                                    f"jnl_void.`{jnl_rflag}` = 4"
+                                )
+                            void_sales_where_fallback.append(
+                                f"jnl_void.`{jnl_sku_col}` > 0"
+                            )
+
                             if descript_col:
                                 tender_sql = f"""
                                     SELECT 
@@ -851,6 +925,13 @@ def get_sales_insights(
                                     FROM jnl
                                     WHERE {' AND '.join(where_parts) if where_parts else '1=1'} 
                                       AND jnl.`{line_col}` BETWEEN 980 AND 989
+                                      AND NOT EXISTS (
+                                          SELECT 1
+                                          FROM jnl jnl_void
+                                          WHERE jnl_void.`{jnl_sale_col}` = jnl.`{jnl_sale_col}`
+                                            AND {' AND '.join(void_sales_where_fallback)}
+                                          LIMIT 1
+                                      )
                                     GROUP BY jnl.`{cat_col}`, jnl.`{descript_col}`
                                     ORDER BY jnl.`{cat_col}`
                                 """
@@ -864,11 +945,26 @@ def get_sales_insights(
                                     FROM jnl
                                     WHERE {' AND '.join(where_parts) if where_parts else '1=1'} 
                                       AND jnl.`{line_col}` BETWEEN 980 AND 989
+                                      AND NOT EXISTS (
+                                          SELECT 1
+                                          FROM jnl jnl_void
+                                          WHERE jnl_void.`{jnl_sale_col}` = jnl.`{jnl_sale_col}`
+                                            AND {' AND '.join(void_sales_where_fallback)}
+                                          LIMIT 1
+                                      )
                                     GROUP BY jnl.`{cat_col}`
                                     ORDER BY jnl.`{cat_col}`
                                 """
                     else:
                         # No CAT column: use DESCRIPT
+                        # Exclude void sales: sales where any SKU line (sku > 0) has rflag = 4
+                        void_sales_where_no_cat = []
+                        if jnl_rflag:
+                            void_sales_where_no_cat.append(
+                                f"jnl_void.`{jnl_rflag}` = 4"
+                            )
+                        void_sales_where_no_cat.append(f"jnl_void.`{jnl_sku_col}` > 0")
+
                         if descript_col:
                             tender_sql = f"""
                                 SELECT 
@@ -878,6 +974,13 @@ def get_sales_insights(
                                 FROM jnl
                                 WHERE {' AND '.join(where_parts) if where_parts else '1=1'} 
                                   AND jnl.`{line_col}` BETWEEN 980 AND 989
+                                  AND NOT EXISTS (
+                                      SELECT 1
+                                      FROM jnl jnl_void
+                                      WHERE jnl_void.`{jnl_sale_col}` = jnl.`{jnl_sale_col}`
+                                        AND {' AND '.join(void_sales_where_no_cat)}
+                                      LIMIT 1
+                                  )
                                 GROUP BY jnl.`{descript_col}`
                                 ORDER BY jnl.`{descript_col}`
                             """
@@ -891,9 +994,16 @@ def get_sales_insights(
                                 FROM jnl
                                 WHERE {' AND '.join(where_parts) if where_parts else '1=1'} 
                                   AND jnl.`{line_col}` BETWEEN 980 AND 989
+                                  AND NOT EXISTS (
+                                      SELECT 1
+                                      FROM jnl jnl_void
+                                      WHERE jnl_void.`{jnl_sale_col}` = jnl.`{jnl_sale_col}`
+                                        AND {' AND '.join(void_sales_where_no_cat)}
+                                      LIMIT 1
+                                  )
                                 GROUP BY jnl.`{line_col}`
                                 ORDER BY jnl.`{line_col}`
-                    """
+                            """
                     rows = conn.execute(text(tender_sql), params3).mappings()
 
                     # Process payment methods - cash change is already handled in SQL query
