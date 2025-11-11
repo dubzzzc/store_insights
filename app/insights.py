@@ -2814,14 +2814,15 @@ def get_product_history(
                 params: Dict[str, Any] = {}
 
                 if inv_deleted_col:
-                    where_parts.append(f"UPPER(`{inv_deleted_col}`) != 'T'")
+                    where_parts.append(f"UPPER(inv.`{inv_deleted_col}`) != 'T'")
 
                 if search:
                     search_like = f"%{search}%"
                     # Search by SKU, name, or UPC
+                    # Prefix columns with inv. to avoid ambiguity when joining with upc
                     search_conditions = [
-                        f"`{inv_sku_col}` LIKE :search",
-                        f"`{inv_name_col}` LIKE :search",
+                        f"inv.`{inv_sku_col}` LIKE :search",
+                        f"inv.`{inv_name_col}` LIKE :search",
                     ]
                     if upc_table_exists and upc_upc_col:
                         # Join with upc table for UPC search
