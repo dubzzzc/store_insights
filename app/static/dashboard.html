@@ -3791,6 +3791,8 @@ const ModuleNav = ({ active, onChange }) => {
         onPoRangeChange,
         invRange,
         onInvRangeChange,
+        token,
+        storeQueryValue,
 }) => {
   const storeLabel = useMemo(() => {
     if (storeInfo?.store_name) return storeInfo.store_name;
@@ -4952,6 +4954,8 @@ const ModuleNav = ({ active, onChange }) => {
                 dateRange={dateRange}
                 onDateRangeChange={handleDateRangeChange}
                 poRange={poRange}
+                token={token}
+                storeQueryValue={storeQueryValue}
                 onPoRangeChange={handlePoRangeChange}
                 invRange={invRange}
                 onInvRangeChange={handleInvRangeChange}
