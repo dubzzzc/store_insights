@@ -565,14 +565,89 @@ def get_sales_insights(
             gross_total = sum(row["total_sales"] for row in sales_data)
             total_items = sum(row["total_items_sold"] for row in sales_data)
             days_captured = len(sales_data)
+
+            # Count distinct sales (transactions) for average dollars per sale calculation
+            sale_count = 0
+            if _table_exists(conn, db_name, "jnh"):
+                jnh_cols = _get_columns(conn, db_name, "jnh")
+                jnh_time = (
+                    _pick_column(jnh_cols, ["tstamp", "timestamp", "time", "t_time"])
+                    or "tstamp"
+                )
+                jnh_sale = (
+                    _pick_column(jnh_cols, ["sale", "sale_id", "invno"]) or "sale"
+                )
+                jnh_total = _pick_column(jnh_cols, ["total", "amount", "price"]) or None
+
+                if jnh_total:
+                    sale_count_where = []
+                    sale_count_params: Dict[str, Any] = {}
+
+                    # Filter by date using jnh.tstamp (half-open interval)
+                    if start:
+                        sale_count_where.append(f"jnh.`{jnh_time}` >= :sc_start_dt")
+                        sale_count_params["sc_start_dt"] = f"{start} 00:00:00"
+                    if end:
+                        try:
+                            from datetime import timedelta
+
+                            sc_end_next = (
+                                datetime.fromisoformat(end) + timedelta(days=1)
+                            ).strftime("%Y-%m-%d 00:00:00")
+                        except Exception:
+                            sc_end_next = f"{end} 23:59:59"
+                        sale_count_where.append(f"jnh.`{jnh_time}` < :sc_end_dt")
+                        sale_count_params["sc_end_dt"] = sc_end_next
+
+                    # Count distinct sales, excluding void sales
+                    if _table_exists(conn, db_name, "jnl"):
+                        jnl_cols = _get_columns(conn, db_name, "jnl")
+                        jnl_sale_col = (
+                            _pick_column(jnl_cols, ["sale", "sale_id", "invno"])
+                            or "sale"
+                        )
+                        jnl_rflag = "rflag" if "rflag" in jnl_cols else None
+                        jnl_sku_col = (
+                            _pick_column(jnl_cols, ["sku", "item", "item_id"]) or "sku"
+                        )
+
+                        void_sales_where = []
+                        if jnl_rflag:
+                            void_sales_where.append(f"jnl_void.`{jnl_rflag}` = 4")
+                        void_sales_where.append(f"jnl_void.`{jnl_sku_col}` > 0")
+
+                        sale_count_sql = f"""
+                            SELECT COUNT(DISTINCT jnh.`{jnh_sale}`) AS sale_count
+                            FROM jnh
+                            WHERE {' AND '.join(sale_count_where) if sale_count_where else '1=1'}
+                              AND NOT EXISTS (
+                                  SELECT 1
+                                  FROM jnl jnl_void
+                                  WHERE jnl_void.`{jnl_sale_col}` = jnh.`{jnh_sale}`
+                                    AND {' AND '.join(void_sales_where)}
+                                  LIMIT 1
+                              )
+                        """
+                        sale_count_row = (
+                            conn.execute(text(sale_count_sql), sale_count_params)
+                            .mappings()
+                            .first()
+                        )
+                        if sale_count_row:
+                            sale_count = int(sale_count_row.get("sale_count") or 0)
+
+            # Initialize total_net - will be updated after payment_methods are calculated
+            total_net = 0.0
+
             summary = {
                 "gross_sales": round(gross_total, 2),
                 "total_items": float(total_items),
                 "days_captured": days_captured,
-                "average_daily_sales": (
-                    round(gross_total / days_captured, 2) if days_captured else 0.0
+                "average_dollars_per_sale": (
+                    round(gross_total / sale_count, 2) if sale_count > 0 else 0.0
                 ),
                 "tax_total": round(tax_total, 2),
+                "total_net": 0.0,  # Will be updated after payment_methods calculation
             }
 
             # Hourly breakdown: use jnl tender lines (LINE 980-989) with RFLAG <= 0, filter by jnl.DATE,
@@ -1023,6 +1098,9 @@ def get_sales_insights(
                         payment_methods = [
                             {**item, "percentage": round((item["total_sales"]/total_sum)*100, 2)} for item in tmp
                         ]
+                        # Update total_net in summary - sum of all payment methods (tenders)
+                        total_net = total_sum
+                        summary["total_net"] = round(total_net, 2)
 
             # Categories: aggregate by jnl.cat for ALL product sales (sku > 0) in the selected date range
             # Shows ALL categories with sales for the date range, joined to cat table for category names
