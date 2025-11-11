@@ -840,6 +840,135 @@ def drop_table(conn, engine: str, table: str, schema: str = None):
     conn.commit()
 
 
+def create_table_indexes(conn, engine: str, table: str, schema: str = None):
+    """
+    Create optimized indexes for specific tables (jnh and jnl).
+    Called automatically when tables are created or recreated.
+    """
+    table_lower = table.lower()
+
+    # Only create indexes for jnh and jnl tables
+    if table_lower not in ("jnh", "jnl"):
+        return
+
+    cur = conn.cursor()
+
+    try:
+        # Normalize column names using safe_sql_name to match table's actual column names
+        if table_lower == "jnh":
+            col_tstamp = safe_sql_name("tstamp")
+            col_sale = safe_sql_name("sale")
+        else:  # jnl
+            col_sale = safe_sql_name("sale")
+            col_line = safe_sql_name("line")
+            col_rflag = safe_sql_name("rflag")
+            col_sku = safe_sql_name("sku")
+
+        if engine == "mssql":
+            target = (
+                f"[{schema}].[{safe_sql_name(table)}]"
+                if schema
+                else f"[{safe_sql_name(table)}]"
+            )
+
+            if table_lower == "jnh":
+                # Indexes for jnh table
+                indexes = [
+                    (
+                        "idx_jnh_tstamp_sale",
+                        f"CREATE INDEX idx_jnh_tstamp_sale ON {target} ([{col_tstamp}], [{col_sale}])",
+                    ),
+                    (
+                        "idx_jnh_tstamp",
+                        f"CREATE INDEX idx_jnh_tstamp ON {target} ([{col_tstamp}])",
+                    ),
+                    (
+                        "idx_jnh_sale",
+                        f"CREATE INDEX idx_jnh_sale ON {target} ([{col_sale}])",
+                    ),
+                ]
+            else:  # jnl
+                # Indexes for jnl table
+                indexes = [
+                    (
+                        "idx_jnl_sale_line_rflag",
+                        f"CREATE INDEX idx_jnl_sale_line_rflag ON {target} ([{col_sale}], [{col_line}], [{col_rflag}])",
+                    ),
+                    (
+                        "idx_jnl_sale_rflag_sku",
+                        f"CREATE INDEX idx_jnl_sale_rflag_sku ON {target} ([{col_sale}], [{col_rflag}], [{col_sku}])",
+                    ),
+                    (
+                        "idx_jnl_sale",
+                        f"CREATE INDEX idx_jnl_sale ON {target} ([{col_sale}])",
+                    ),
+                ]
+        else:  # mysql
+            target = f"`{safe_sql_name(table)}`"
+
+            if table_lower == "jnh":
+                # Indexes for jnh table
+                indexes = [
+                    (
+                        "idx_jnh_tstamp_sale",
+                        f"CREATE INDEX idx_jnh_tstamp_sale ON {target} (`{col_tstamp}`, `{col_sale}`)",
+                    ),
+                    (
+                        "idx_jnh_tstamp",
+                        f"CREATE INDEX idx_jnh_tstamp ON {target} (`{col_tstamp}`)",
+                    ),
+                    (
+                        "idx_jnh_sale",
+                        f"CREATE INDEX idx_jnh_sale ON {target} (`{col_sale}`)",
+                    ),
+                ]
+            else:  # jnl
+                # Indexes for jnl table
+                indexes = [
+                    (
+                        "idx_jnl_sale_line_rflag",
+                        f"CREATE INDEX idx_jnl_sale_line_rflag ON {target} (`{col_sale}`, `{col_line}`, `{col_rflag}`)",
+                    ),
+                    (
+                        "idx_jnl_sale_rflag_sku",
+                        f"CREATE INDEX idx_jnl_sale_rflag_sku ON {target} (`{col_sale}`, `{col_rflag}`, `{col_sku}`)",
+                    ),
+                    (
+                        "idx_jnl_sale",
+                        f"CREATE INDEX idx_jnl_sale ON {target} (`{col_sale}`)",
+                    ),
+                ]
+
+        # Create each index (ignore errors if index already exists)
+        for idx_name, idx_sql in indexes:
+            try:
+                cur.execute(idx_sql)
+                log_to_gui(f"Created index {idx_name} on {table}")
+            except Exception as e:
+                # Index might already exist, or column might not exist yet
+                # Log but don't fail - this is expected in some cases
+                error_msg = str(e).lower()
+                if (
+                    "already exists" in error_msg
+                    or "duplicate" in error_msg
+                    or "duplicate key" in error_msg
+                ):
+                    log_to_gui(f"Index {idx_name} already exists on {table}, skipping")
+                else:
+                    log_to_gui(
+                        f"WARNING: Could not create index {idx_name} on {table}: {e}"
+                    )
+
+        conn.commit()
+    except Exception as e:
+        log_to_gui(f"WARNING: Error creating indexes for {table}: {e}")
+        # Don't fail table creation if indexes fail
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+
 def ensure_table(
     conn, engine: str, table: str, fields, schema: str = None, recreate: bool = False
 ):
@@ -850,6 +979,9 @@ def ensure_table(
         cur = conn.cursor()
         cur.execute(ddl)
         conn.commit()
+
+        # Create indexes for jnh and jnl tables after table creation
+        create_table_indexes(conn, engine, table, schema)
         return
     if not recreate:
         existing = existing_columns(conn, engine, table, schema)
