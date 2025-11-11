@@ -1291,6 +1291,7 @@
         adminKey: 'store-insights/admin-key',
         role: 'store-insights/role',
         profile: 'store-insights/profile',
+        operationsCache: 'store-insights/operations-cache',
       };
 
       const getStorage = () => {
@@ -4056,6 +4057,25 @@ const ModuleNav = ({ active, onChange }) => {
         };
 
         const fetchOperations = async (authToken, query, signal) => {
+          // Check cache first - operations data is cached per store and month
+          const queryParams = new URLSearchParams(query.replace('?', ''));
+          const storeParam = queryParams.get('store') || 'default';
+          const now = new Date();
+          const cacheKey = `ops_${storeParam}_${now.getFullYear()}_${now.getMonth()}`;
+          
+          try {
+            const cached = storage.get(STORAGE_KEYS.operationsCache, {});
+            if (cached[cacheKey] && cached[cacheKey].data) {
+              const cacheAge = Date.now() - (cached[cacheKey].timestamp || 0);
+              // Use cache if less than 5 minutes old
+              if (cacheAge < 5 * 60 * 1000) {
+                return cached[cacheKey].data;
+              }
+            }
+          } catch (e) {
+            // If cache read fails, continue to fetch
+          }
+
           const response = await fetch(`${API_BASE}/insights/operations${query}`, {
             headers: { Authorization: `Bearer ${authToken}` },
             signal,
@@ -4071,6 +4091,19 @@ const ModuleNav = ({ active, onChange }) => {
             requestError.status = response.status;
             throw requestError;
           }
+          
+          // Cache the result
+          try {
+            const cached = storage.get(STORAGE_KEYS.operationsCache, {});
+            cached[cacheKey] = {
+              data: payload,
+              timestamp: Date.now(),
+            };
+            storage.set(STORAGE_KEYS.operationsCache, cached);
+          } catch (e) {
+            // If cache write fails, continue - data is still returned
+          }
+          
           return payload;
         };
 
