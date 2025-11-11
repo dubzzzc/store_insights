@@ -1692,24 +1692,9 @@ def get_operations_insights(
     store: Optional[str] = Query(
         default=None, description="Store identifier (store_id or store_db)"
     ),
-    start: Optional[str] = Query(default=None, description="Start date (YYYY-MM-DD)"),
-    end: Optional[str] = Query(default=None, description="End date (YYYY-MM-DD)"),
-    # New: independent filters for inventory (product creation) and supplier invoices
-    inv_start: Optional[str] = Query(
-        default=None, description="Products created start date (YYYY-MM-DD)"
-    ),
-    inv_end: Optional[str] = Query(
-        default=None, description="Products created end date (YYYY-MM-DD)"
-    ),
-    po_start: Optional[str] = Query(
-        default=None, description="Supplier invoices start date (YYYY-MM-DD)"
-    ),
-    po_end: Optional[str] = Query(
-        default=None, description="Supplier invoices end date (YYYY-MM-DD)"
-    ),
     user: dict = Depends(get_auth_user),
 ):
-    """Get store operations insights: transaction counts, gift cards, products, supplier invoices."""
+    """Get store operations insights: overall system-wide metrics including transaction counts, gift cards, products, and supplier invoices. All metrics show all-time totals without date filtering."""
     try:
         selected_store = _select_store(user, store)
         db_name = selected_store["store_db"]
@@ -1726,14 +1711,8 @@ def get_operations_insights(
                 "store_name": selected_store.get("store_name"),
             }
 
-            # Default date range to last 30 days if not provided
-            if not start:
-                from datetime import timedelta
-                start = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
-            if not end:
-                end = datetime.now().strftime('%Y-%m-%d')
-
-            # Transaction counts and till amounts from jnl
+            # Operations tab shows overall/all-time data without date filtering
+            # Transaction counts and till amounts from jnl (all valid transactions)
             tx_count = 0
             total_till = 0.0
             gift_redeem_count = 0
@@ -1750,34 +1729,17 @@ def get_operations_insights(
                 jnl_price_col = _pick_column(jnl_cols, ["amount", "price", "total"]) or None
                 jnl_descript_col = _pick_column(jnl_cols, ["descript", "description", "desc"]) or None
 
-                if jnl_date_col and jnl_line_col and jnl_sale_col:
-                    # Get all transactions in date range
-                    # Use half-open interval for index usage (no DATE() wrapper in WHERE)
+                if jnl_line_col and jnl_sale_col:
+                    # Get all valid transactions (no date filtering - overall view)
                     where_parts = []
                     params: Dict[str, Any] = {}
-                    if start:
-                        where_parts.append(f"`{jnl_date_col}` >= :start_dt")
-                        params["start_dt"] = f"{start} 00:00:00"
-                    if end:
-                        try:
-                            from datetime import timedelta
-
-                            end_next = (
-                                datetime.fromisoformat(end) + timedelta(days=1)
-                            ).strftime("%Y-%m-%d 00:00:00")
-                        except Exception:
-                            end_next = f"{end} 23:59:59"
-                        where_parts.append(f"`{jnl_date_col}` < :end_dt")
-                        params["end_dt"] = end_next
                     if jnl_rflag_col:
                         where_parts.append(f"`{jnl_rflag_col}` = 0")
 
-                    # Get all rows for grouping by sale
-                    # DATE() only in SELECT for output, not in WHERE (allows index usage)
+                    # Get all rows for grouping by sale (no date filtering - overall view)
                     sql = f"""
                         SELECT `{jnl_sale_col}` AS sale_id, `{jnl_line_col}` AS line_code,
-                               `{jnl_price_col}` AS price, `{jnl_descript_col}` AS descript,
-                               DATE(`{jnl_date_col}`) AS sale_date
+                               `{jnl_price_col}` AS price, `{jnl_descript_col}` AS descript
                         FROM jnl
                         WHERE {' AND '.join(where_parts) if where_parts else '1=1'}
                         ORDER BY `{jnl_sale_col}`, `{jnl_line_col}`
@@ -1788,7 +1750,6 @@ def get_operations_insights(
                     current_sale = None
                     current_group = []
                     for row in rows:
-                        freshness.track(row.get("sale_date"))
                         sale_id = str(row.get("sale_id", ""))
                         line_code = str(row.get("line_code", ""))
 
@@ -1852,7 +1813,7 @@ def get_operations_insights(
                                     except:
                                         pass
 
-            # Product counts from inv (independent inventory date filter)
+            # Product counts from inv (overall view - no date filtering)
             product_count = 0
             first_product_date = None
             last_product_date = None
@@ -1865,36 +1826,14 @@ def get_operations_insights(
                 if inv_deleted_col:
                     where_parts.append(f"UPPER(`{inv_deleted_col}`) != 'T'")
 
+                # Get overall product count and date range (no date filtering)
                 if inv_cdate_col:
-                    # Independent date filter for inventory - ONLY use inv_start/inv_end, never fall back to start/end
-                    # This prevents cross-contamination between sales date selector and inventory date selector
-                    inv_start_eff = inv_start
-                    inv_end_eff = inv_end
-                    range_parts = []
-                    if inv_start_eff:
-                        range_parts.append(f"`{inv_cdate_col}` >= :inv_start_dt")
-                    if inv_end_eff:
-                        try:
-                            from datetime import timedelta
-
-                            inv_end_next = (
-                                datetime.fromisoformat(inv_end_eff) + timedelta(days=1)
-                            ).strftime("%Y-%m-%d 00:00:00")
-                        except Exception:
-                            inv_end_next = f"{inv_end_eff} 23:59:59"
-                        range_parts.append(f"`{inv_cdate_col}` < :inv_end_dt")
-                    all_parts = where_parts + range_parts
-                    params_inv: Dict[str, Any] = {}
-                    if inv_start_eff:
-                        params_inv["inv_start_dt"] = f"{inv_start_eff} 00:00:00"
-                    if inv_end_eff:
-                        params_inv["inv_end_dt"] = inv_end_next
                     sql = f"""
                         SELECT COUNT(*) AS cnt,
                                MIN(DATE(`{inv_cdate_col}`)) AS first_date,
                                MAX(DATE(`{inv_cdate_col}`)) AS last_date
                         FROM inv
-                        {'WHERE ' + ' AND '.join(all_parts) if all_parts else ''}
+                        {'WHERE ' + ' AND '.join(where_parts) if where_parts else ''}
                     """
                 else:
                     sql = f"""
@@ -1902,11 +1841,7 @@ def get_operations_insights(
                         FROM inv
                         {'WHERE ' + ' AND '.join(where_parts) if where_parts else ''}
                     """
-                r = (
-                    conn.execute(text(sql), params_inv if inv_cdate_col else {})
-                    .mappings()
-                    .first()
-                )
+                r = conn.execute(text(sql)).mappings().first()
                 if r:
                     product_count = int(r.get("cnt", 0) or 0)
                     if inv_cdate_col:
@@ -1914,7 +1849,7 @@ def get_operations_insights(
                         last_product_date = str(r.get("last_date", "")) if r.get("last_date") else None
                         freshness.track(first_product_date, last_product_date)
 
-            # Supplier invoice counts from poh (independent PO date filter)
+            # Supplier invoice counts from poh (overall view - only posted status 4, no date filtering)
             supplier_invoice_count = 0
             first_supplier_date = None
             last_supplier_date = None
@@ -1924,32 +1859,13 @@ def get_operations_insights(
                 poh_vendor_col = _pick_column(poh_cols, ["vendor", "vcode"]) or "vendor"
                 poh_rcvdate_col = _pick_column(poh_cols, ["rcvdate", "received_date", "rcv_date"]) or None
 
+                # Only posted invoices (status 4), exclude test vendors, no date filtering
                 where_parts = [
-                    f"`{poh_status_col}` IN ('3', '4', 3, 4)",
-                    f"`{poh_vendor_col}` NOT IN ('9998', '9999', 9998, 9999)"
+                    f"`{poh_status_col}` = 4",
+                    f"`{poh_vendor_col}` NOT IN ('9998', '9999', 9998, 9999)",
                 ]
 
                 if poh_rcvdate_col:
-                    # Independent date filter for supplier invoices - ONLY use po_start/po_end, never fall back to start/end
-                    # This prevents cross-contamination between sales date selector and supplier invoice date selector
-                    po_start_eff = po_start
-                    po_end_eff = po_end
-                    params_poh: Dict[str, Any] = {}
-                    if po_start_eff:
-                        where_parts.append(f"`{poh_rcvdate_col}` >= :poh_start_dt")
-                        params_poh["poh_start_dt"] = f"{po_start_eff} 00:00:00"
-                    if po_end_eff:
-                        try:
-                            from datetime import timedelta
-
-                            poh_end_next = (
-                                datetime.fromisoformat(po_end_eff) + timedelta(days=1)
-                            ).strftime("%Y-%m-%d 00:00:00")
-                        except Exception:
-                            poh_end_next = f"{po_end_eff} 23:59:59"
-                        where_parts.append(f"`{poh_rcvdate_col}` < :poh_end_dt")
-                        params_poh["poh_end_dt"] = poh_end_next
-
                     sql = f"""
                         SELECT COUNT(*) AS cnt,
                                MIN(DATE(`{poh_rcvdate_col}`)) AS first_date,
@@ -1957,7 +1873,7 @@ def get_operations_insights(
                         FROM poh
                         WHERE {' AND '.join(where_parts)}
                     """
-                    r = conn.execute(text(sql), params_poh).mappings().first()
+                    r = conn.execute(text(sql)).mappings().first()
                     if r:
                         supplier_invoice_count = int(r.get("cnt", 0) or 0)
                         first_supplier_date = str(r.get("first_date", "")) if r.get("first_date") else None

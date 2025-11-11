@@ -3306,7 +3306,7 @@ const GatewayModule = ({ data, dateRange, onDateRangeChange }) => {
   );
 };
 
-const OperationsModule = ({ data, dateRange, onDateRangeChange }) => {
+const OperationsModule = ({ data }) => {
   if (!data) {
     return <div className="empty-state">Loading operations data...</div>;
   }
@@ -3315,6 +3315,7 @@ const OperationsModule = ({ data, dateRange, onDateRangeChange }) => {
     <div className="panel">
       <div className="panel-header">
         <h2 className="panel-title">Store Operations</h2>
+        <p className="chart-subtitle">Overall system-wide metrics</p>
       </div>
       <div className="summary-grid">
         <div className="summary-card">
@@ -3665,7 +3666,7 @@ const ModuleNav = ({ active, onChange }) => {
 
         {activeModule === 'tenders' ? <TendersModule data={tendersData} gatewayData={gatewayData} dateRange={dateRange} onDateRangeChange={onDateRangeChange} /> : null}
 
-        {activeModule === 'operations' ? <OperationsModule data={operationsData} dateRange={dateRange} onDateRangeChange={onDateRangeChange} /> : null}
+        {activeModule === 'operations' ? <OperationsModule data={operationsData} /> : null}
       </div>
     </div>
   );
@@ -4165,7 +4166,10 @@ const ModuleNav = ({ active, onChange }) => {
               setTendersData(tendersPayload);
               setGatewayData(gatewayPayload);
             } else if (module === 'operations') {
-              payload = await fetchOperations(authToken, query);
+              // Operations tab shows overall data - only pass store parameter, no date filters
+              const storeOnlyQuery = storeQueryValue.split('&').filter(p => p.startsWith('store=')).join('&');
+              const opsQuery = storeOnlyQuery ? `?${storeOnlyQuery}` : '';
+              payload = await fetchOperations(authToken, opsQuery);
               setOperationsData(payload);
             }
             setAuthError('');
