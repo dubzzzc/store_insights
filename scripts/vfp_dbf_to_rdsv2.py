@@ -852,6 +852,9 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
     cur = conn.cursor()
     indexes = []  # Initialize empty list - will be populated for specific tables
 
+    # Get existing columns to match actual column names
+    existing_cols = existing_columns(conn, engine, table, schema)
+
     try:
         # Normalize column names using safe_sql_name to match table's actual column names
         if table_lower == "jnh":
@@ -960,12 +963,47 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
                         f"CREATE INDEX idx_{table_lower}_listnum ON {target} ([{col_listnum}])",
                     ),
                 ]
-            elif table_lower in ("poh", "pod"):
+            elif table_lower == "poh":
+                # Indexes for poh table: duplicate checking + performance for date/status/vendor queries
+                # Find actual column names from existing columns
+                col_rcvdate = (
+                    choose_column_name("rcvdate", existing_cols)
+                    or choose_column_name("received_date", existing_cols)
+                    or choose_column_name("rcv_date", existing_cols)
+                )
+                col_status = choose_column_name(
+                    "status", existing_cols
+                ) or choose_column_name("stat", existing_cols)
+                col_vendor = choose_column_name(
+                    "vendor", existing_cols
+                ) or choose_column_name("vcode", existing_cols)
+
+                # Only create indexes if columns exist
+                index_list = [
+                    ("idx_poh_order", col_order),
+                ]
+                if col_rcvdate and col_status and col_vendor:
+                    index_list.append(
+                        (
+                            "idx_poh_status_rcvdate_vendor",
+                            f"{col_status}, {col_rcvdate}, {col_vendor}",
+                        )
+                    )
+                if col_rcvdate:
+                    index_list.append(("idx_poh_rcvdate", col_rcvdate))
+                if col_vendor:
+                    index_list.append(("idx_poh_vendor", col_vendor))
+
+                indexes = [
+                    (name, f"CREATE INDEX {name} ON {target} ([{cols}])")
+                    for name, cols in index_list
+                ]
+            elif table_lower == "pod":
                 # Index for duplicate checking (order)
                 indexes = [
                     (
-                        f"idx_{table_lower}_order",
-                        f"CREATE INDEX idx_{table_lower}_order ON {target} ([{col_order}])",
+                        "idx_pod_order",
+                        f"CREATE INDEX idx_pod_order ON {target} ([{col_order}])",
                     ),
                 ]
             elif table_lower == "glb":
@@ -1078,12 +1116,47 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
                         f"CREATE INDEX idx_{table_lower}_listnum ON {target} (`{col_listnum}`)",
                     ),
                 ]
-            elif table_lower in ("poh", "pod"):
+            elif table_lower == "poh":
+                # Indexes for poh table: duplicate checking + performance for date/status/vendor queries
+                # Find actual column names from existing columns
+                col_rcvdate = (
+                    choose_column_name("rcvdate", existing_cols)
+                    or choose_column_name("received_date", existing_cols)
+                    or choose_column_name("rcv_date", existing_cols)
+                )
+                col_status = choose_column_name(
+                    "status", existing_cols
+                ) or choose_column_name("stat", existing_cols)
+                col_vendor = choose_column_name(
+                    "vendor", existing_cols
+                ) or choose_column_name("vcode", existing_cols)
+
+                # Only create indexes if columns exist
+                index_list = [
+                    ("idx_poh_order", col_order),
+                ]
+                if col_rcvdate and col_status and col_vendor:
+                    index_list.append(
+                        (
+                            "idx_poh_status_rcvdate_vendor",
+                            f"{col_status}, {col_rcvdate}, {col_vendor}",
+                        )
+                    )
+                if col_rcvdate:
+                    index_list.append(("idx_poh_rcvdate", col_rcvdate))
+                if col_vendor:
+                    index_list.append(("idx_poh_vendor", col_vendor))
+
+                indexes = [
+                    (name, f"CREATE INDEX {name} ON {target} (`{cols}`)")
+                    for name, cols in index_list
+                ]
+            elif table_lower == "pod":
                 # Index for duplicate checking (order)
                 indexes = [
                     (
-                        f"idx_{table_lower}_order",
-                        f"CREATE INDEX idx_{table_lower}_order ON {target} (`{col_order}`)",
+                        "idx_pod_order",
+                        f"CREATE INDEX idx_pod_order ON {target} (`{col_order}`)",
                     ),
                 ]
             elif table_lower == "glb":

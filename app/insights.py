@@ -1333,14 +1333,15 @@ def get_sales_insights(
                 po_end_eff = po_end
 
                 # Group by vendor using provided PO date range (posted/received only: status 3,4)
+                # Optimized query structure to use composite index (status, rcvdate, vendor)
                 where_parts = [f"poh.`{poh_status_col}` IN (3, 4)"]
                 params: Dict[str, Any] = {}
 
                 # Date filters: use rcvdate only (posted/received on date range)
-                date_filters = []
+                # Use AND (not OR) to match index structure and ensure proper date range filtering
                 if poh_rcv_col and (po_start_eff or po_end_eff):
                     if po_start_eff:
-                        date_filters.append(f"(poh.`{poh_rcv_col}` >= :po_start_dt)")
+                        where_parts.append(f"poh.`{poh_rcv_col}` >= :po_start_dt")
                         params["po_start_dt"] = f"{po_start_eff} 00:00:00"
                     if po_end_eff:
                         try:
@@ -1351,11 +1352,8 @@ def get_sales_insights(
                             ).strftime("%Y-%m-%d 00:00:00")
                         except Exception:
                             po_end_next = f"{po_end_eff} 23:59:59"
-                        date_filters.append(f"(poh.`{poh_rcv_col}` < :po_end_dt)")
+                        where_parts.append(f"poh.`{poh_rcv_col}` < :po_end_dt")
                         params["po_end_dt"] = po_end_next
-                if date_filters:
-                    # Convert ORs into a combined predicate. If both bounds present, we generate both sides above.
-                    where_parts.append(f"({' OR '.join(date_filters)})")
 
                 # Join vnd: poh.vendor = vnd.vendor, use vnd.lastname
                 vnd_cols = _get_columns(conn, db_name, "vnd") if _table_exists(conn, db_name, "vnd") else []
@@ -1414,18 +1412,11 @@ def get_sales_insights(
                         poh_ids_params = {"vnum": vendor_num, "stat": status_code}
 
                         if po_start_eff or po_end_eff:
-                            sub_filters = []
                             if poh_rcv_col:
                                 if po_start_eff:
-                                    sub_filters.append(
-                                        f"(poh.`{poh_rcv_col}` >= :po_start_dt)"
-                                    )
+                                    poh_ids_where.append(f"poh.`{poh_rcv_col}` >= :po_start_dt")
                                 if po_end_eff:
-                                    sub_filters.append(
-                                        f"(poh.`{poh_rcv_col}` < :po_end_dt)"
-                                    )
-                            if sub_filters:
-                                poh_ids_where.append(f"({' OR '.join(sub_filters)})")
+                                    poh_ids_where.append(f"poh.`{poh_rcv_col}` < :po_end_dt")
                                 poh_ids_params.update(
                                     {
                                         k: v

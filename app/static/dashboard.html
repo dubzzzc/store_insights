@@ -3001,7 +3001,7 @@ const PurchaseOrdersModule = ({ orders, dateRange, onDateRangeChange }) => {
           </table>
         </div>
       ) : (
-        <div className="empty-state">No purchase orders in the selected range.</div>
+        <div className="empty-state">No orders found for the selected date range.</div>
       )}
       {modalOpen && selectedVendor && (
         <div className="modal-overlay" onClick={closeModal}>
