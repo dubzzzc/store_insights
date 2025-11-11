@@ -2484,18 +2484,16 @@ const AdminView = ({
         ? toNumber(base.days_captured, fallbackDays)
         : fallbackDays;
     const safeDays = rawDays > 0 ? rawDays : fallbackDays;
-    const averageDailySales =
-      base.average_daily_sales !== undefined && base.average_daily_sales !== null
-        ? toNumber(base.average_daily_sales, safeDays ? grossSales / (safeDays || 1) : 0)
-        : safeDays
-        ? fallback.sales / (safeDays || 1)
+    const averageDollarsPerSale =
+      base.average_dollars_per_sale !== undefined && base.average_dollars_per_sale !== null
+        ? toNumber(base.average_dollars_per_sale, 0)
         : 0;
 
     return {
       grossSales,
       totalItems,
       daysCaptured: rawDays,
-      averageDailySales,
+      averageDollarsPerSale,
     };
   }, [sales, summary]);
 
@@ -2696,12 +2694,12 @@ const AdminView = ({
 
       <div className="summary-grid">
         <div className="summary-card">
-          <h3>Average Daily Sales</h3>
-          <strong>{formatCurrency(derivedSummary.averageDailySales)}</strong>
+          <h3>Average Dollars Per Sale</h3>
+          <strong>{formatCurrency(derivedSummary.averageDollarsPerSale)}</strong>
           <span>
             {derivedSummary.daysCaptured
-              ? `${derivedSummary.daysCaptured} day window`
-              : 'No days captured'}
+              ? `Average transaction value over ${derivedSummary.daysCaptured} day${derivedSummary.daysCaptured !== 1 ? 's' : ''}`
+              : 'No sales data'}
           </span>
         </div>
         <div className="summary-card">
