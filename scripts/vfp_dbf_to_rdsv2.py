@@ -842,27 +842,52 @@ def drop_table(conn, engine: str, table: str, schema: str = None):
 
 def create_table_indexes(conn, engine: str, table: str, schema: str = None):
     """
-    Create optimized indexes for specific tables (jnh and jnl).
+    Create optimized indexes for specific tables.
+    - jnh/jnl: Performance indexes for hourly sales queries
+    - Other tables: Indexes for duplicate checking performance
     Called automatically when tables are created or recreated.
     """
     table_lower = table.lower()
 
-    # Only create indexes for jnh and jnl tables
-    if table_lower not in ("jnh", "jnl"):
-        return
-
     cur = conn.cursor()
+    indexes = []  # Initialize empty list - will be populated for specific tables
 
     try:
         # Normalize column names using safe_sql_name to match table's actual column names
         if table_lower == "jnh":
             col_tstamp = safe_sql_name("tstamp")
             col_sale = safe_sql_name("sale")
-        else:  # jnl
+        elif table_lower == "jnl":
             col_sale = safe_sql_name("sale")
             col_line = safe_sql_name("line")
             col_rflag = safe_sql_name("rflag")
             col_sku = safe_sql_name("sku")
+        elif table_lower in ("inv", "stk", "prc"):
+            col_sku = safe_sql_name("sku")
+        elif table_lower == "upc":
+            col_upc = safe_sql_name("upc")
+            col_sku = safe_sql_name("sku")
+        elif table_lower == "hst":
+            col_sku = safe_sql_name("sku")
+            col_date = safe_sql_name("date")
+        elif table_lower in ("slh", "sll"):
+            col_listnum = safe_sql_name("listnum")
+        elif table_lower in ("poh", "pod"):
+            col_order = safe_sql_name("order")
+        elif table_lower == "glb":
+            col_date = safe_sql_name("date")
+        elif table_lower == "cnt":
+            col_code = safe_sql_name("code")
+        elif table_lower == "cus":
+            col_customer = safe_sql_name("customer")
+        elif table_lower == "vnd":
+            col_vendor = safe_sql_name("vendor")
+            col_vcode = safe_sql_name("vcode")
+        elif table_lower == "str":
+            col_store = safe_sql_name("store")
+        else:
+            # Table not in our list - no indexes needed
+            return
 
         if engine == "mssql":
             target = (
@@ -872,7 +897,7 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
             )
 
             if table_lower == "jnh":
-                # Indexes for jnh table
+                # Indexes for jnh table (performance + duplicate checking)
                 indexes = [
                     (
                         "idx_jnh_tstamp_sale",
@@ -887,8 +912,8 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
                         f"CREATE INDEX idx_jnh_sale ON {target} ([{col_sale}])",
                     ),
                 ]
-            else:  # jnl
-                # Indexes for jnl table
+            elif table_lower == "jnl":
+                # Indexes for jnl table (performance + duplicate checking)
                 indexes = [
                     (
                         "idx_jnl_sale_line_rflag",
@@ -903,11 +928,94 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
                         f"CREATE INDEX idx_jnl_sale ON {target} ([{col_sale}])",
                     ),
                 ]
+            elif table_lower in ("inv", "stk", "prc"):
+                # Index for duplicate checking (SKU)
+                indexes = [
+                    (
+                        f"idx_{table_lower}_sku",
+                        f"CREATE INDEX idx_{table_lower}_sku ON {target} ([{col_sku}])",
+                    ),
+                ]
+            elif table_lower == "upc":
+                # Composite index for duplicate checking (UPC + SKU)
+                indexes = [
+                    (
+                        "idx_upc_upc_sku",
+                        f"CREATE INDEX idx_upc_upc_sku ON {target} ([{col_upc}], [{col_sku}])",
+                    ),
+                ]
+            elif table_lower == "hst":
+                # Composite index for duplicate checking (SKU + date)
+                indexes = [
+                    (
+                        "idx_hst_sku_date",
+                        f"CREATE INDEX idx_hst_sku_date ON {target} ([{col_sku}], [{col_date}])",
+                    ),
+                ]
+            elif table_lower in ("slh", "sll"):
+                # Index for duplicate checking (listnum)
+                indexes = [
+                    (
+                        f"idx_{table_lower}_listnum",
+                        f"CREATE INDEX idx_{table_lower}_listnum ON {target} ([{col_listnum}])",
+                    ),
+                ]
+            elif table_lower in ("poh", "pod"):
+                # Index for duplicate checking (order)
+                indexes = [
+                    (
+                        f"idx_{table_lower}_order",
+                        f"CREATE INDEX idx_{table_lower}_order ON {target} ([{col_order}])",
+                    ),
+                ]
+            elif table_lower == "glb":
+                # Index for duplicate checking (date)
+                indexes = [
+                    (
+                        "idx_glb_date",
+                        f"CREATE INDEX idx_glb_date ON {target} ([{col_date}])",
+                    ),
+                ]
+            elif table_lower == "cnt":
+                # Index for duplicate checking (code)
+                indexes = [
+                    (
+                        "idx_cnt_code",
+                        f"CREATE INDEX idx_cnt_code ON {target} ([{col_code}])",
+                    ),
+                ]
+            elif table_lower == "cus":
+                # Index for duplicate checking (customer)
+                indexes = [
+                    (
+                        "idx_cus_customer",
+                        f"CREATE INDEX idx_cus_customer ON {target} ([{col_customer}])",
+                    ),
+                ]
+            elif table_lower == "vnd":
+                # Composite index for duplicate checking (vendor + vcode)
+                indexes = [
+                    (
+                        "idx_vnd_vendor_vcode",
+                        f"CREATE INDEX idx_vnd_vendor_vcode ON {target} ([{col_vendor}], [{col_vcode}])",
+                    ),
+                ]
+            elif table_lower == "str":
+                # Index for duplicate checking (store)
+                indexes = [
+                    (
+                        "idx_str_store",
+                        f"CREATE INDEX idx_str_store ON {target} ([{col_store}])",
+                    ),
+                ]
+            else:
+                # No indexes for other tables
+                indexes = []
         else:  # mysql
             target = f"`{safe_sql_name(table)}`"
 
             if table_lower == "jnh":
-                # Indexes for jnh table
+                # Indexes for jnh table (performance + duplicate checking)
                 indexes = [
                     (
                         "idx_jnh_tstamp_sale",
@@ -922,8 +1030,8 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
                         f"CREATE INDEX idx_jnh_sale ON {target} (`{col_sale}`)",
                     ),
                 ]
-            else:  # jnl
-                # Indexes for jnl table
+            elif table_lower == "jnl":
+                # Indexes for jnl table (performance + duplicate checking)
                 indexes = [
                     (
                         "idx_jnl_sale_line_rflag",
@@ -938,6 +1046,89 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
                         f"CREATE INDEX idx_jnl_sale ON {target} (`{col_sale}`)",
                     ),
                 ]
+            elif table_lower in ("inv", "stk", "prc"):
+                # Index for duplicate checking (SKU)
+                indexes = [
+                    (
+                        f"idx_{table_lower}_sku",
+                        f"CREATE INDEX idx_{table_lower}_sku ON {target} (`{col_sku}`)",
+                    ),
+                ]
+            elif table_lower == "upc":
+                # Composite index for duplicate checking (UPC + SKU)
+                indexes = [
+                    (
+                        "idx_upc_upc_sku",
+                        f"CREATE INDEX idx_upc_upc_sku ON {target} (`{col_upc}`, `{col_sku}`)",
+                    ),
+                ]
+            elif table_lower == "hst":
+                # Composite index for duplicate checking (SKU + date)
+                indexes = [
+                    (
+                        "idx_hst_sku_date",
+                        f"CREATE INDEX idx_hst_sku_date ON {target} (`{col_sku}`, `{col_date}`)",
+                    ),
+                ]
+            elif table_lower in ("slh", "sll"):
+                # Index for duplicate checking (listnum)
+                indexes = [
+                    (
+                        f"idx_{table_lower}_listnum",
+                        f"CREATE INDEX idx_{table_lower}_listnum ON {target} (`{col_listnum}`)",
+                    ),
+                ]
+            elif table_lower in ("poh", "pod"):
+                # Index for duplicate checking (order)
+                indexes = [
+                    (
+                        f"idx_{table_lower}_order",
+                        f"CREATE INDEX idx_{table_lower}_order ON {target} (`{col_order}`)",
+                    ),
+                ]
+            elif table_lower == "glb":
+                # Index for duplicate checking (date)
+                indexes = [
+                    (
+                        "idx_glb_date",
+                        f"CREATE INDEX idx_glb_date ON {target} (`{col_date}`)",
+                    ),
+                ]
+            elif table_lower == "cnt":
+                # Index for duplicate checking (code)
+                indexes = [
+                    (
+                        "idx_cnt_code",
+                        f"CREATE INDEX idx_cnt_code ON {target} (`{col_code}`)",
+                    ),
+                ]
+            elif table_lower == "cus":
+                # Index for duplicate checking (customer)
+                indexes = [
+                    (
+                        "idx_cus_customer",
+                        f"CREATE INDEX idx_cus_customer ON {target} (`{col_customer}`)",
+                    ),
+                ]
+            elif table_lower == "vnd":
+                # Composite index for duplicate checking (vendor + vcode)
+                indexes = [
+                    (
+                        "idx_vnd_vendor_vcode",
+                        f"CREATE INDEX idx_vnd_vendor_vcode ON {target} (`{col_vendor}`, `{col_vcode}`)",
+                    ),
+                ]
+            elif table_lower == "str":
+                # Index for duplicate checking (store)
+                indexes = [
+                    (
+                        "idx_str_store",
+                        f"CREATE INDEX idx_str_store ON {target} (`{col_store}`)",
+                    ),
+                ]
+            else:
+                # No indexes for other tables
+                indexes = []
 
         # Create each index (ignore errors if index already exists)
         for idx_name, idx_sql in indexes:
@@ -2100,6 +2291,122 @@ def get_existing_keys(
                     if row[0] is not None:
                         existing_keys.add((str(row[0]).strip(),))
 
+        elif table_lower == "cnt":
+            # Check for existing code
+            code_col = None
+            for col in col_names:
+                if col.lower() in ("code", "code_id", "cnt_code"):
+                    code_col = find_db_col(col)
+                    if code_col:
+                        break
+
+            if code_col:
+                code_col_safe = safe_sql_name(code_col)
+                if engine == "mssql":
+                    target = (
+                        f"[{schema}].[{safe_sql_name(table)}]"
+                        if schema
+                        else f"[{safe_sql_name(table)}]"
+                    )
+                    sql = f"SELECT [{code_col_safe}] FROM {target} WHERE [{code_col_safe}] IS NOT NULL"
+                else:
+                    target = f"`{safe_sql_name(table)}`"
+                    sql = f"SELECT `{code_col_safe}` FROM {target} WHERE `{code_col_safe}` IS NOT NULL"
+
+                cur.execute(sql)
+                for row in cur.fetchall():
+                    if row[0] is not None:
+                        existing_keys.add((str(row[0]).strip(),))
+
+        elif table_lower == "cus":
+            # Check for existing customer
+            customer_col = None
+            for col in col_names:
+                if col.lower() in ("customer", "cust", "customer_id", "cus_id"):
+                    customer_col = find_db_col(col)
+                    if customer_col:
+                        break
+
+            if customer_col:
+                customer_col_safe = safe_sql_name(customer_col)
+                if engine == "mssql":
+                    target = (
+                        f"[{schema}].[{safe_sql_name(table)}]"
+                        if schema
+                        else f"[{safe_sql_name(table)}]"
+                    )
+                    sql = f"SELECT [{customer_col_safe}] FROM {target} WHERE [{customer_col_safe}] IS NOT NULL"
+                else:
+                    target = f"`{safe_sql_name(table)}`"
+                    sql = f"SELECT `{customer_col_safe}` FROM {target} WHERE `{customer_col_safe}` IS NOT NULL"
+
+                cur.execute(sql)
+                for row in cur.fetchall():
+                    if row[0] is not None:
+                        existing_keys.add((str(row[0]).strip(),))
+
+        elif table_lower == "vnd":
+            # Check for existing vendor + vcode combination
+            vendor_col = None
+            vcode_col = None
+            for col in col_names:
+                if col.lower() in ("vendor", "vnd", "vendor_id", "vnd_id"):
+                    vendor_col = find_db_col(col)
+                elif col.lower() in ("vcode", "vendor_code", "vnd_code"):
+                    vcode_col = find_db_col(col)
+
+            if vendor_col and vcode_col:
+                vendor_col_safe = safe_sql_name(vendor_col)
+                vcode_col_safe = safe_sql_name(vcode_col)
+                if engine == "mssql":
+                    target = (
+                        f"[{schema}].[{safe_sql_name(table)}]"
+                        if schema
+                        else f"[{safe_sql_name(table)}]"
+                    )
+                    sql = f"SELECT [{vendor_col_safe}], [{vcode_col_safe}] FROM {target} WHERE [{vendor_col_safe}] IS NOT NULL AND [{vcode_col_safe}] IS NOT NULL"
+                else:
+                    target = f"`{safe_sql_name(table)}`"
+                    sql = f"SELECT `{vendor_col_safe}`, `{vcode_col_safe}` FROM {target} WHERE `{vendor_col_safe}` IS NOT NULL AND `{vcode_col_safe}` IS NOT NULL"
+
+                cur.execute(sql)
+                for row in cur.fetchall():
+                    if row[0] is not None and row[1] is not None:
+                        existing_keys.add((str(row[0]).strip(), str(row[1]).strip()))
+
+        elif table_lower == "str":
+            # Check for existing store
+            store_col = None
+            for col in col_names:
+                if col.lower() in (
+                    "store",
+                    "store_id",
+                    "store_num",
+                    "store_number",
+                    "str_store",
+                ):
+                    store_col = find_db_col(col)
+                    if store_col:
+                        break
+
+            if store_col:
+                store_col_safe = safe_sql_name(store_col)
+                if engine == "mssql":
+                    target = (
+                        f"[{schema}].[{safe_sql_name(table)}]"
+                        if schema
+                        else f"[{safe_sql_name(table)}]"
+                    )
+                    sql = f"SELECT [{store_col_safe}] FROM {target} WHERE [{store_col_safe}] IS NOT NULL"
+                else:
+                    target = f"`{safe_sql_name(table)}`"
+                    sql = f"SELECT `{store_col_safe}` FROM {target} WHERE `{store_col_safe}` IS NOT NULL"
+
+                cur.execute(sql)
+                for row in cur.fetchall():
+                    if row[0] is not None:
+                        existing_keys.add((str(row[0]).strip(),))
+
     except Exception as e:
         log_to_gui(
             f"WARNING: Could not check existing keys for {table}: {e}. Proceeding without duplicate check."
@@ -2198,6 +2505,10 @@ def bulk_insert(
         "hst",
         "slh",
         "sll",
+        "cnt",
+        "cus",
+        "vnd",
+        "str",
     ):
         duplicate_check_enabled = True
         log_to_gui(f"Checking for existing records in {table} to prevent duplicates...")
@@ -2438,6 +2749,81 @@ def bulk_insert(
                             listnum_val = row[listnum_idx]
                             if listnum_val is not None:
                                 key = (str(listnum_val).strip(),)
+                                if key in existing_keys:
+                                    is_duplicate = True
+
+                    elif table_lower == "cnt":
+                        # Check code
+                        code_idx = None
+                        for i, col in enumerate(col_names):
+                            if col.lower() in ("code", "code_id", "cnt_code"):
+                                code_idx = i
+                                break
+                        if code_idx is not None and code_idx < len(row):
+                            code_val = row[code_idx]
+                            if code_val is not None:
+                                key = (str(code_val).strip(),)
+                                if key in existing_keys:
+                                    is_duplicate = True
+
+                    elif table_lower == "cus":
+                        # Check customer
+                        customer_idx = None
+                        for i, col in enumerate(col_names):
+                            if col.lower() in (
+                                "customer",
+                                "cust",
+                                "customer_id",
+                                "cus_id",
+                            ):
+                                customer_idx = i
+                                break
+                        if customer_idx is not None and customer_idx < len(row):
+                            customer_val = row[customer_idx]
+                            if customer_val is not None:
+                                key = (str(customer_val).strip(),)
+                                if key in existing_keys:
+                                    is_duplicate = True
+
+                    elif table_lower == "vnd":
+                        # Check vendor + vcode combination
+                        vendor_idx = None
+                        vcode_idx = None
+                        for i, col in enumerate(col_names):
+                            if col.lower() in ("vendor", "vnd", "vendor_id", "vnd_id"):
+                                vendor_idx = i
+                            elif col.lower() in ("vcode", "vendor_code", "vnd_code"):
+                                vcode_idx = i
+                        if (
+                            vendor_idx is not None
+                            and vcode_idx is not None
+                            and vendor_idx < len(row)
+                            and vcode_idx < len(row)
+                        ):
+                            vendor_val = row[vendor_idx]
+                            vcode_val = row[vcode_idx]
+                            if vendor_val is not None and vcode_val is not None:
+                                key = (str(vendor_val).strip(), str(vcode_val).strip())
+                                if key in existing_keys:
+                                    is_duplicate = True
+
+                    elif table_lower == "str":
+                        # Check store
+                        store_idx = None
+                        for i, col in enumerate(col_names):
+                            if col.lower() in (
+                                "store",
+                                "store_id",
+                                "store_num",
+                                "store_number",
+                                "str_store",
+                            ):
+                                store_idx = i
+                                break
+                        if store_idx is not None and store_idx < len(row):
+                            store_val = row[store_idx]
+                            if store_val is not None:
+                                key = (str(store_val).strip(),)
                                 if key in existing_keys:
                                     is_duplicate = True
                 except (IndexError, TypeError, AttributeError):
