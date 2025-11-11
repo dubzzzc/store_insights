@@ -1826,6 +1826,141 @@ def build_insert_sql(
         return f"INSERT INTO {target} ({cols}) VALUES ({placeholders})", dest_cols
 
 
+def get_existing_keys(
+    conn,
+    engine: str,
+    table: str,
+    table_lower: str,
+    col_names: List[str],
+    existing_cols: List[str],
+    schema: str = None,
+    recreate: bool = False,
+) -> set:
+    """
+    Get existing keys from table to prevent duplicates.
+    Returns a set of tuples representing unique keys.
+
+    Args:
+        col_names: DBF column names (from iter_dbf_rows)
+        existing_cols: Actual database column names (from existing_columns)
+    """
+    if recreate or not table_exists(conn, engine, table, schema):
+        return set()  # No existing keys if recreating or table doesn't exist
+
+    cur = conn.cursor()
+    existing_keys = set()
+
+    try:
+        # Map DBF column names to database column names
+        def find_db_col(dbf_col_name: str) -> Optional[str]:
+            """Find the actual database column name for a DBF column name."""
+            dbf_lower = dbf_col_name.lower()
+            # Try exact match first
+            for db_col in existing_cols:
+                if (
+                    db_col.lower() == dbf_lower
+                    or db_col.lower() == safe_sql_name(dbf_col_name).lower()
+                ):
+                    return db_col
+            # Try to find by matching normalized names
+            dbf_safe = safe_sql_name(dbf_col_name)
+            for db_col in existing_cols:
+                if db_col.lower() == dbf_safe.lower():
+                    return db_col
+            return None
+
+        if table_lower in ("inv", "stk", "prc"):
+            # Check for existing SKU
+            sku_col = None
+            for col in col_names:
+                if col.lower() in ("sku", "item", "item_id"):
+                    sku_col = find_db_col(col)
+                    if sku_col:
+                        break
+
+            if sku_col:
+                sku_col_safe = safe_sql_name(sku_col)
+                if engine == "mssql":
+                    target = (
+                        f"[{schema}].[{safe_sql_name(table)}]"
+                        if schema
+                        else f"[{safe_sql_name(table)}]"
+                    )
+                    sql = f"SELECT [{sku_col_safe}] FROM {target} WHERE [{sku_col_safe}] IS NOT NULL"
+                else:
+                    target = f"`{safe_sql_name(table)}`"
+                    sql = f"SELECT `{sku_col_safe}` FROM {target} WHERE `{sku_col_safe}` IS NOT NULL"
+
+                cur.execute(sql)
+                for row in cur.fetchall():
+                    if row[0] is not None:
+                        existing_keys.add((str(row[0]).strip(),))
+
+        elif table_lower == "upc":
+            # Check for existing UPC + SKU combination
+            upc_col = None
+            sku_col = None
+            for col in col_names:
+                if col.lower() in ("upc", "barcode", "ean"):
+                    upc_col = find_db_col(col)
+                elif col.lower() in ("sku", "item", "item_id"):
+                    sku_col = find_db_col(col)
+
+            if upc_col and sku_col:
+                upc_col_safe = safe_sql_name(upc_col)
+                sku_col_safe = safe_sql_name(sku_col)
+                if engine == "mssql":
+                    target = (
+                        f"[{schema}].[{safe_sql_name(table)}]"
+                        if schema
+                        else f"[{safe_sql_name(table)}]"
+                    )
+                    sql = f"SELECT [{upc_col_safe}], [{sku_col_safe}] FROM {target} WHERE [{upc_col_safe}] IS NOT NULL AND [{sku_col_safe}] IS NOT NULL"
+                else:
+                    target = f"`{safe_sql_name(table)}`"
+                    sql = f"SELECT `{upc_col_safe}`, `{sku_col_safe}` FROM {target} WHERE `{upc_col_safe}` IS NOT NULL AND `{sku_col_safe}` IS NOT NULL"
+
+                cur.execute(sql)
+                for row in cur.fetchall():
+                    if row[0] is not None and row[1] is not None:
+                        existing_keys.add((str(row[0]).strip(), str(row[1]).strip()))
+
+        elif table_lower in ("jnh", "jnl"):
+            # Check for existing sale
+            sale_col = None
+            for col in col_names:
+                if col.lower() in ("sale", "sale_id", "invno", "invoice"):
+                    sale_col = find_db_col(col)
+                    if sale_col:
+                        break
+
+            if sale_col:
+                sale_col_safe = safe_sql_name(sale_col)
+                if engine == "mssql":
+                    target = (
+                        f"[{schema}].[{safe_sql_name(table)}]"
+                        if schema
+                        else f"[{safe_sql_name(table)}]"
+                    )
+                    sql = f"SELECT [{sale_col_safe}] FROM {target} WHERE [{sale_col_safe}] IS NOT NULL"
+                else:
+                    target = f"`{safe_sql_name(table)}`"
+                    sql = f"SELECT `{sale_col_safe}` FROM {target} WHERE `{sale_col_safe}` IS NOT NULL"
+
+                cur.execute(sql)
+                for row in cur.fetchall():
+                    if row[0] is not None:
+                        existing_keys.add((str(row[0]).strip(),))
+
+    except Exception as e:
+        log_to_gui(
+            f"WARNING: Could not check existing keys for {table}: {e}. Proceeding without duplicate check."
+        )
+        return set()
+
+    return existing_keys
+
+
 def bulk_insert(
     conn,
     engine: str,
@@ -1897,6 +2032,26 @@ def bulk_insert(
             raise RuntimeError(f"Critical error when reading DBF file: {e}")
         raise
 
+    # Get existing keys to prevent duplicates (only for specific tables and when not recreating)
+    table_lower = table.lower()
+    existing_keys = set()
+    duplicate_check_enabled = False
+
+    if not recreate and table_lower in ("inv", "stk", "prc", "upc", "jnh", "jnl"):
+        duplicate_check_enabled = True
+        log_to_gui(f"Checking for existing records in {table} to prevent duplicates...")
+        existing_keys = get_existing_keys(
+            conn, engine, table, table_lower, col_names, cols_existing, schema, recreate
+        )
+        if existing_keys:
+            log_to_gui(
+                f"Found {len(existing_keys)} existing record(s) in {table}. Duplicates will be skipped."
+            )
+        else:
+            log_to_gui(
+                f"No existing records found in {table}. All records will be inserted."
+            )
+
     insert_sql, _dest_cols = build_insert_sql(
         table, col_names, engine, schema, cols_existing
     )
@@ -1905,9 +2060,71 @@ def bulk_insert(
     buf = []
     inserted = 0
     batches = 0
+    skipped_duplicates = 0
 
     try:
         for row in row_iter:
+            # Check for duplicates if enabled
+            if duplicate_check_enabled:
+                is_duplicate = False
+                try:
+                    if table_lower in ("inv", "stk", "prc"):
+                        # Check SKU
+                        sku_idx = None
+                        for i, col in enumerate(col_names):
+                            if col.lower() in ("sku", "item", "item_id"):
+                                sku_idx = i
+                                break
+                        if sku_idx is not None and sku_idx < len(row):
+                            sku_val = row[sku_idx]
+                            if sku_val is not None:
+                                key = (str(sku_val).strip(),)
+                                if key in existing_keys:
+                                    is_duplicate = True
+
+                    elif table_lower == "upc":
+                        # Check UPC + SKU combination
+                        upc_idx = None
+                        sku_idx = None
+                        for i, col in enumerate(col_names):
+                            if col.lower() in ("upc", "barcode", "ean"):
+                                upc_idx = i
+                            elif col.lower() in ("sku", "item", "item_id"):
+                                sku_idx = i
+                        if (
+                            upc_idx is not None
+                            and sku_idx is not None
+                            and upc_idx < len(row)
+                            and sku_idx < len(row)
+                        ):
+                            upc_val = row[upc_idx]
+                            sku_val = row[sku_idx]
+                            if upc_val is not None and sku_val is not None:
+                                key = (str(upc_val).strip(), str(sku_val).strip())
+                                if key in existing_keys:
+                                    is_duplicate = True
+
+                    elif table_lower in ("jnh", "jnl"):
+                        # Check sale
+                        sale_idx = None
+                        for i, col in enumerate(col_names):
+                            if col.lower() in ("sale", "sale_id", "invno", "invoice"):
+                                sale_idx = i
+                                break
+                        if sale_idx is not None and sale_idx < len(row):
+                            sale_val = row[sale_idx]
+                            if sale_val is not None:
+                                key = (str(sale_val).strip(),)
+                                if key in existing_keys:
+                                    is_duplicate = True
+                except (IndexError, TypeError, AttributeError):
+                    # If we can't check, allow the insert (better to insert than skip incorrectly)
+                    pass
+
+                if is_duplicate:
+                    skipped_duplicates += 1
+                    continue
+
             buf.append(row)
             if len(buf) >= batch_size:
                 cur.executemany(insert_sql, buf)
@@ -1939,6 +2156,11 @@ def bulk_insert(
             raise
 
     conn.commit()
+
+    # Log duplicate skipping summary
+    if duplicate_check_enabled and skipped_duplicates > 0:
+        log_to_gui(f"Skipped {skipped_duplicates} duplicate record(s) in {table}")
+
     return inserted, batches
 
 
