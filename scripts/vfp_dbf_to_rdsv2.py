@@ -5553,126 +5553,6 @@ def run_gui_tk():
         highlightcolor=accent_color,
     ).grid(row=admin_row, column=1, sticky="w", padx=3, pady=row_pad)
 
-    # Delta sync section (collapsible)
-    delta_content_frame, next_row = create_collapsible_section(
-        right_frame, "Delta Sync", row
-    )
-    row = next_row
-
-    delta_row = 0
-    tk.Checkbutton(
-        delta_content_frame,
-        text="Enable delta sync",
-        variable=delta_enabled_var,
-        font=label_font,
-        bg=entry_bg,
-        fg=text_color,
-        selectcolor=entry_bg,
-        activebackground=entry_bg,
-        activeforeground=text_color,
-    ).grid(row=delta_row, column=0, columnspan=2, sticky="w", pady=row_pad)
-    delta_row += 1
-    # Add explanation for delta sync (on separate row below checkbox)
-    delta_explain_label = tk.Label(
-        delta_content_frame,
-        text="Only syncs records where the date field is newer than the last sync time (based on system time). Tracks last sync per table automatically. Use with Auto-Sync below to run on a schedule (hourly, etc.).",
-        font=("Segoe UI", max(7, base_font_size - 2)),
-        bg=entry_bg,
-        fg="#666",
-        wraplength=400,
-        justify="left",
-    )
-    delta_explain_label.grid(
-        row=delta_row,
-        column=0,
-        columnspan=2,
-        sticky="w",
-        padx=(20, 0),
-        pady=(0, row_pad),
-    )
-    delta_row += 1
-
-    tk.Label(
-        delta_content_frame,
-        text="Date field (column name in DBF)",
-        font=label_font,
-        bg=entry_bg,
-        fg=text_color,
-    ).grid(row=delta_row, column=0, sticky="w", pady=row_pad)
-    date_entry = tk.Entry(
-        delta_content_frame,
-        textvariable=delta_date_field_var,
-        width=date_field_width,
-        font=label_font,
-        bg=entry_bg,
-        relief="flat",
-        bd=1,
-        highlightthickness=1,
-        highlightbackground="#ddd",
-        highlightcolor=accent_color,
-    )
-    date_entry.grid(row=delta_row, column=1, sticky="we", padx=3, pady=row_pad)
-    delta_row += 1
-    # Add tooltip-style help text for delta sync date field (on next row to not interfere with entry box)
-    delta_help_label = tk.Label(
-        delta_content_frame,
-        text="(e.g., 'tstamp', 'time', 'created' - used to find records newer than last sync)",
-        font=("Segoe UI", max(7, base_font_size - 2)),
-        bg=entry_bg,
-        fg="#666",
-        wraplength=400,
-        justify="left",
-    )
-    delta_help_label.grid(
-        row=delta_row,
-        column=0,
-        columnspan=2,
-        sticky="w",
-        padx=(20, 0),
-        pady=(0, row_pad),
-    )
-    delta_row += 1
-
-    tk.Label(
-        delta_content_frame,
-        text="Auto-sync interval (seconds)",
-        font=label_font,
-        bg=entry_bg,
-        fg=text_color,
-    ).grid(row=delta_row, column=0, sticky="w", pady=row_pad)
-    auto_interval_entry = tk.Entry(
-        delta_content_frame,
-        textvariable=delta_interval_var,
-        width=date_field_width,
-        font=label_font,
-        bg=entry_bg,
-        relief="flat",
-        bd=1,
-        highlightthickness=1,
-        highlightbackground="#ddd",
-        highlightcolor=accent_color,
-    )
-    auto_interval_entry.grid(row=delta_row, column=1, sticky="we", padx=3, pady=row_pad)
-    delta_row += 1
-    # Add help text for auto-sync interval (on next row to not interfere with entry box)
-    auto_interval_help = tk.Label(
-        delta_content_frame,
-        text="(e.g., 3600 = hourly, 1800 = every 30 min, 86400 = daily. Set to 0 to disable auto-sync)",
-        font=("Segoe UI", max(7, base_font_size - 2)),
-        bg=entry_bg,
-        fg="#666",
-        wraplength=400,
-        justify="left",
-    )
-    auto_interval_help.grid(
-        row=delta_row,
-        column=0,
-        columnspan=2,
-        sticky="w",
-        padx=(20, 0),
-        pady=(0, row_pad),
-    )
-
     # Date Range Filter section (collapsible)
     date_range_content_frame, next_row = create_collapsible_section(
         right_frame, "Date Range Filter", row
@@ -5795,6 +5675,126 @@ def run_gui_tk():
         highlightbackground="#ddd",
         highlightcolor=accent_color,
     ).grid(row=date_range_row, column=1, sticky="we", padx=3, pady=row_pad)
+
+    # Delta sync section (collapsible)
+    delta_content_frame, next_row = create_collapsible_section(
+        right_frame, "Delta Sync", row
+    )
+    row = next_row
+
+    delta_row = 0
+    tk.Checkbutton(
+        delta_content_frame,
+        text="Enable delta sync",
+        variable=delta_enabled_var,
+        font=label_font,
+        bg=entry_bg,
+        fg=text_color,
+        selectcolor=entry_bg,
+        activebackground=entry_bg,
+        activeforeground=text_color,
+    ).grid(row=delta_row, column=0, columnspan=2, sticky="w", pady=row_pad)
+    delta_row += 1
+    # Add explanation for delta sync (on separate row below checkbox)
+    delta_explain_label = tk.Label(
+        delta_content_frame,
+        text="Only syncs records where the date field is newer than the last sync time (based on system time). Tracks last sync per table automatically. Use with Auto-Sync below to run on a schedule (hourly, etc.).",
+        font=("Segoe UI", max(7, base_font_size - 2)),
+        bg=entry_bg,
+        fg="#666",
+        wraplength=400,
+        justify="left",
+    )
+    delta_explain_label.grid(
+        row=delta_row,
+        column=0,
+        columnspan=2,
+        sticky="w",
+        padx=(20, 0),
+        pady=(0, row_pad),
+    )
+    delta_row += 1
+
+    tk.Label(
+        delta_content_frame,
+        text="Date field (column name in DBF)",
+        font=label_font,
+        bg=entry_bg,
+        fg=text_color,
+    ).grid(row=delta_row, column=0, sticky="w", pady=row_pad)
+    date_entry = tk.Entry(
+        delta_content_frame,
+        textvariable=delta_date_field_var,
+        width=date_field_width,
+        font=label_font,
+        bg=entry_bg,
+        relief="flat",
+        bd=1,
+        highlightthickness=1,
+        highlightbackground="#ddd",
+        highlightcolor=accent_color,
+    )
+    date_entry.grid(row=delta_row, column=1, sticky="we", padx=3, pady=row_pad)
+    delta_row += 1
+    # Add tooltip-style help text for delta sync date field (on next row to not interfere with entry box)
+    delta_help_label = tk.Label(
+        delta_content_frame,
+        text="(e.g., 'tstamp', 'time', 'created' - used to find records newer than last sync)",
+        font=("Segoe UI", max(7, base_font_size - 2)),
+        bg=entry_bg,
+        fg="#666",
+        wraplength=400,
+        justify="left",
+    )
+    delta_help_label.grid(
+        row=delta_row,
+        column=0,
+        columnspan=2,
+        sticky="w",
+        padx=(20, 0),
+        pady=(0, row_pad),
+    )
+    delta_row += 1
+
+    tk.Label(
+        delta_content_frame,
+        text="Auto-sync interval (seconds)",
+        font=label_font,
+        bg=entry_bg,
+        fg=text_color,
+    ).grid(row=delta_row, column=0, sticky="w", pady=row_pad)
+    auto_interval_entry = tk.Entry(
+        delta_content_frame,
+        textvariable=delta_interval_var,
+        width=date_field_width,
+        font=label_font,
+        bg=entry_bg,
+        relief="flat",
+        bd=1,
+        highlightthickness=1,
+        highlightbackground="#ddd",
+        highlightcolor=accent_color,
+    )
+    auto_interval_entry.grid(row=delta_row, column=1, sticky="we", padx=3, pady=row_pad)
+    delta_row += 1
+    # Add help text for auto-sync interval (on next row to not interfere with entry box)
+    auto_interval_help = tk.Label(
+        delta_content_frame,
+        text="(e.g., 3600 = hourly, 1800 = every 30 min, 86400 = daily. Set to 0 to disable auto-sync)",
+        font=("Segoe UI", max(7, base_font_size - 2)),
+        bg=entry_bg,
+        fg="#666",
+        wraplength=400,
+        justify="left",
+    )
+    auto_interval_help.grid(
+        row=delta_row,
+        column=0,
+        columnspan=2,
+        sticky="w",
+        padx=(20, 0),
+        pady=(0, row_pad),
+    )
 
     # Show last sync time for selected table (collapsible)
     last_sync_frame, next_row = create_collapsible_section(
