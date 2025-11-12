@@ -4057,17 +4057,15 @@ const ModuleNav = ({ active, onChange }) => {
 
         // Auto-set end date to start date when start changes (unless end was manually set)
         const handleDateRangeChange = useCallback((newRange) => {
-          // Clear cache when dates change to prevent showing stale data
-          const startChanged = newRange.start !== undefined && newRange.start !== dateRange?.start;
-          const endChanged = newRange.end !== undefined && newRange.end !== dateRange?.end;
-          if (startChanged || endChanged) {
-            clearSalesCache();
-          }
-          
           setDateRange((prev) => {
-            const updated = { ...(prev || {}), ...newRange };
+            // Clear cache when dates change to prevent showing stale data
             const startChanged = newRange.start !== undefined && newRange.start !== prev?.start;
             const endChanged = newRange.end !== undefined && newRange.end !== prev?.end;
+            if (startChanged || endChanged) {
+              clearSalesCache();
+            }
+            
+            const updated = { ...(prev || {}), ...newRange };
             
             // If start changed and end wasn't manually set, update end to match start
             if (startChanged && !dateRangeEndManual) {
@@ -4084,7 +4082,7 @@ const ModuleNav = ({ active, onChange }) => {
           if (newRange.end !== undefined && newRange.end !== newRange.start) {
             setDateRangeEndManual(true);
           }
-        }, [dateRangeEndManual, dateRange]);
+        }, [dateRangeEndManual]);
 
         const handlePoRangeChange = useCallback((newRange) => {
           setPoRange((prev) => {
