@@ -2914,6 +2914,7 @@ const AdminView = ({
                     <th>#</th>
                     <th>SKU</th>
                     <th>Product</th>
+                    <th>Size</th>
                     <th>Items</th>
                     <th>Sales</th>
                   </tr>
@@ -2924,6 +2925,7 @@ const AdminView = ({
                       <td>{index + 1}</td>
                       <td>{item.sku || '—'}</td>
                       <td>{item.description || '—'}</td>
+                      <td>{item.size_name || '—'}</td>
                       <td>{formatQuantity(item.total_items_sold)}</td>
                       <td>{formatCurrency(item.total_sales)}</td>
                     </tr>

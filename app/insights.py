@@ -442,25 +442,38 @@ def get_sales_insights(
                 # Calculate daily sales from tenders (lines 980-989) to match total_net calculation
                 jnl_cols = _get_columns(conn, db_name, "jnl")
                 jnh_cols = _get_columns(conn, db_name, "jnh")
-                
+
                 jnl_line_col = _pick_column(jnl_cols, ["line", "line_code"]) or "line"
-                jnl_amt_col = _pick_column(jnl_cols, ["amount", "price", "total"]) or None
+                jnl_amt_col = (
+                    _pick_column(jnl_cols, ["amount", "price", "total"]) or None
+                )
                 jnl_rflag = "rflag" if "rflag" in jnl_cols else None
-                jnl_sale_col = _pick_column(jnl_cols, ["sale", "sale_id", "invno"]) or "sale"
-                jnl_sku_col = _pick_column(jnl_cols, ["sku", "item", "item_id"]) or "sku"
-                jnl_descript_col = _pick_column(jnl_cols, ["descript", "description", "desc"]) or None
+                jnl_sale_col = (
+                    _pick_column(jnl_cols, ["sale", "sale_id", "invno"]) or "sale"
+                )
+                jnl_sku_col = (
+                    _pick_column(jnl_cols, ["sku", "item", "item_id"]) or "sku"
+                )
+                jnl_descript_col = (
+                    _pick_column(jnl_cols, ["descript", "description", "desc"]) or None
+                )
                 jnl_cat_col = "cat" if "cat" in jnl_cols else None
                 jnl_promo_col = "promo" if "promo" in jnl_cols else None
-                
-                jnh_time = _pick_column(jnh_cols, ["tstamp", "timestamp", "time", "t_time"]) or "tstamp"
-                jnh_sale = _pick_column(jnh_cols, ["sale", "sale_id", "invno"]) or jnl_sale_col
-                
+
+                jnh_time = (
+                    _pick_column(jnh_cols, ["tstamp", "timestamp", "time", "t_time"])
+                    or "tstamp"
+                )
+                jnh_sale = (
+                    _pick_column(jnh_cols, ["sale", "sale_id", "invno"]) or jnl_sale_col
+                )
+
                 if jnl_line_col and jnl_amt_col:
                     # Build daily sales query: sum tenders (980-989) grouped by DATE(jnh.tstamp)
                     # Use same logic as payment methods but group by date instead of payment method
                     where_parts = []
                     params: Dict[str, Any] = {}
-                    
+
                     # Date filter using jnh.tstamp
                     if start:
                         where_parts.append(f"jnh.`{jnh_time}` >= :start_dt")
@@ -468,17 +481,20 @@ def get_sales_insights(
                     if end:
                         try:
                             from datetime import timedelta
-                            end_next = (datetime.fromisoformat(end) + timedelta(days=1)).strftime("%Y-%m-%d 00:00:00")
+
+                            end_next = (
+                                datetime.fromisoformat(end) + timedelta(days=1)
+                            ).strftime("%Y-%m-%d 00:00:00")
                         except:
                             end_next = f"{end} 23:59:59"
                         where_parts.append(f"jnh.`{jnh_time}` < :end_dt")
                         params["end_dt"] = end_next
-                    
+
                     # Filter: RFLAG <= 0 and LINE 980-989 (tenders only)
                     if jnl_rflag:
                         where_parts.append(f"jnl.`{jnl_rflag}` <= 0")
                     where_parts.append(f"jnl.`{jnl_line_col}` BETWEEN 980 AND 989")
-                    
+
                     # Exclude void sales
                     void_check = ""
                     if jnl_rflag:
@@ -491,15 +507,22 @@ def get_sales_insights(
                                 LIMIT 1
                             )
                         """
-                    
+
                     # Cash adjustment: use same logic as payment methods - pre-calculate cash change per sale
                     # Build cash change subquery (same as payment methods query)
                     cash_change_subquery = ""
                     if jnl_cat_col and _table_exists(conn, db_name, "cat"):
                         cat_cols = _get_columns(conn, db_name, "cat")
-                        cat_code_col = _pick_column(cat_cols, ["cat", "code", "id"]) or "cat"
-                        cat_name_col = _pick_column(cat_cols, ["name", "desc", "description", "label"]) or "name"
-                        
+                        cat_code_col = (
+                            _pick_column(cat_cols, ["cat", "code", "id"]) or "cat"
+                        )
+                        cat_name_col = (
+                            _pick_column(
+                                cat_cols, ["name", "desc", "description", "label"]
+                            )
+                            or "name"
+                        )
+
                         # Cash change subquery: get LINE 999 amounts for sales with cash tenders
                         cash_change_subquery = f"""
                             LEFT JOIN (
@@ -525,7 +548,7 @@ def get_sales_insights(
                                 GROUP BY jnl_cc.`{jnl_sale_col}`
                             ) cash_change_per_sale ON cash_change_per_sale.sale_id = jnh.`{jnh_sale}`
                         """
-                        
+
                         # Amount expression with cash adjustment
                         cat_lookup_expr = (
                             f"COALESCE(NULLIF(jnl.`{jnl_cat_col}`, 0), NULLIF(jnl.`{jnl_promo_col}`, 0), 0)"
@@ -547,7 +570,7 @@ def get_sales_insights(
                         """
                     else:
                         amount_expr = f"SUM(jnl.`{jnl_amt_col}`)"
-                    
+
                     # Daily sales SQL: sum tenders grouped by date (matches total_net calculation)
                     daily_sql = f"""
                         SELECT 
@@ -563,16 +586,20 @@ def get_sales_insights(
                         ORDER BY DATE(jnh.`{jnh_time}`) DESC
                         {"LIMIT 7" if not (start or end) else ""}
                     """
-                    
+
                     result = conn.execute(text(daily_sql), params).mappings()
                     sales_data = []
                     for row in result:
                         freshness.track(row.get("date"))
-                        sales_data.append({
-                            "date": row["date"].strftime('%Y-%m-%d'),
-                            "total_items_sold": int(row.get("transaction_count", 0)),  # Use transaction count as items sold
-                            "total_sales": float(row.get("total_sales", 0))
-                        })
+                        sales_data.append(
+                            {
+                                "date": row["date"].strftime("%Y-%m-%d"),
+                                "total_items_sold": int(
+                                    row.get("transaction_count", 0)
+                                ),  # Use transaction count as items sold
+                                "total_sales": float(row.get("total_sales", 0)),
+                            }
+                        )
                 else:
                     # Fallback to original logic if columns missing
                     sales_data = []
@@ -596,12 +623,17 @@ def get_sales_insights(
                 if end:
                     try:
                         from datetime import timedelta
-                        end_next = (datetime.fromisoformat(end) + timedelta(days=1)).strftime("%Y-%m-%d 00:00:00")
+
+                        end_next = (
+                            datetime.fromisoformat(end) + timedelta(days=1)
+                        ).strftime("%Y-%m-%d 00:00:00")
                     except Exception:
                         end_next = f"{end} 23:59:59"
                     where_clauses.append(f"`{date_col}` < :end_dt")
                     params["end_dt"] = end_next
-                where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+                where_sql = (
+                    f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+                )
 
                 # Optimize: Aggregate directly without subquery to avoid materializing large intermediate results
                 # WHERE clause uses index-friendly half-open intervals, DATE() only in SELECT/GROUP BY
@@ -622,11 +654,13 @@ def get_sales_insights(
                 sales_data = []
                 for row in result:
                     freshness.track(row.get("date"))
-                    sales_data.append({
-                        "date": row["date"].strftime('%Y-%m-%d'),
-                        "total_items_sold": int(row["total_items_sold"]),
-                        "total_sales": float(row["total_sales"])
-                    })
+                    sales_data.append(
+                        {
+                            "date": row["date"].strftime("%Y-%m-%d"),
+                            "total_items_sold": int(row["total_items_sold"]),
+                            "total_sales": float(row["total_sales"]),
+                        }
+                    )
 
             response_meta = {
                 "store_db": db_name,
@@ -1426,12 +1460,18 @@ def get_sales_insights(
                     inv_cols = _get_columns(conn, db_name, "inv")
                     inv_sku = _pick_column(inv_cols, ["sku"]) or "sku"
                     inv_name = _pick_column(inv_cols, ["desc", "description", "name"]) or inv_sku
-                    inv_sname = _pick_column(inv_cols, ["sname", "size", "size_name"]) if "sname" in inv_cols or "size" in inv_cols else None
+                    inv_sname = (
+                        _pick_column(inv_cols, ["sname", "size", "size_name"])
+                        if "sname" in inv_cols or "size" in inv_cols
+                        else None
+                    )
                     in_params = {"skus": tuple(skus)}
                     select_cols = [f"`{inv_sku}` AS sku", f"`{inv_name}` AS name"]
                     if inv_sname:
                         select_cols.append(f"`{inv_sname}` AS sname")
-                    inv_sql = text(f"SELECT {', '.join(select_cols)} FROM inv WHERE `{inv_sku}` IN :skus").bindparams()
+                    inv_sql = text(
+                        f"SELECT {', '.join(select_cols)} FROM inv WHERE `{inv_sku}` IN :skus"
+                    ).bindparams()
                     inv_rows = conn.execute(inv_sql, in_params).mappings()
                     for r in inv_rows:
                         inv_names[str(r["sku"])] = (
