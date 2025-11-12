@@ -462,6 +462,10 @@ def get_sales_insights(
 
         with engine.connect() as conn:
             freshness = FreshnessTracker()
+
+            # Get store number from str table to filter store-specific data
+            store_number = _get_store_number(conn, db_name, selected_store)
+
             detected = _detect_sales_source(conn, db_name)
 
             if not detected:
@@ -506,6 +510,12 @@ def get_sales_insights(
                 jnh_sale = (
                     _pick_column(jnh_cols, ["sale", "sale_id", "invno"]) or jnl_sale_col
                 )
+                jnh_store_col = (
+                    _pick_column(jnh_cols, ["store", "store_id", "store_num"]) or None
+                )
+                jnl_store_col = (
+                    _pick_column(jnl_cols, ["store", "store_id", "store_num"]) or None
+                )
 
                 if jnl_line_col and jnl_amt_col:
                     # Build daily sales query: sum tenders (980-989) grouped by DATE(jnh.tstamp)
@@ -534,6 +544,21 @@ def get_sales_insights(
                     if jnl_rflag:
                         where_parts.append(f"jnl.`{jnl_rflag}` <= 0")
                     where_parts.append(f"jnl.`{jnl_line_col}` BETWEEN 980 AND 989")
+
+                    # Add store filter if store_number is available
+                    # Filter by store number from str table to show only store-specific sales
+                    if store_number is not None:
+                        # Try JNH store column first (header table), then JNL store column
+                        if jnh_store_col:
+                            where_parts.append(
+                                f"jnh.`{jnh_store_col}` = :jnh_store_number"
+                            )
+                            params["jnh_store_number"] = store_number
+                        elif jnl_store_col:
+                            where_parts.append(
+                                f"jnl.`{jnl_store_col}` = :jnl_store_number"
+                            )
+                            params["jnl_store_number"] = store_number
 
                     # Exclude void sales
                     void_check = ""
@@ -577,6 +602,16 @@ def get_sales_insights(
                             cash_subquery_where.append(
                                 f"jnh_cc.`{jnh_time}` < :cash_end_dt"
                             )
+                        # Add store filter to cash change subquery
+                        if store_number is not None:
+                            if jnh_store_col:
+                                cash_subquery_where.append(
+                                    f"jnh_cc.`{jnh_store_col}` = :cash_jnh_store_number"
+                                )
+                            elif jnl_store_col:
+                                cash_subquery_where.append(
+                                    f"jnl_cc.`{jnl_store_col}` = :cash_jnl_store_number"
+                                )
 
                         cash_change_subquery = f"""
                             LEFT JOIN (
@@ -611,6 +646,12 @@ def get_sales_insights(
                             params["cash_end_dt"] = params.get(
                                 "end_dt", end_next if end_next else f"{end} 23:59:59"
                             )
+                        # Add store params for cash subquery if needed
+                        if store_number is not None:
+                            if jnh_store_col:
+                                params["cash_jnh_store_number"] = store_number
+                            elif jnl_store_col:
+                                params["cash_jnl_store_number"] = store_number
 
                         # Amount expression with cash adjustment
                         cat_lookup_expr = (
@@ -3499,14 +3540,13 @@ def get_product_history(
                                 pod_where_parts = [f"pod.`{pod_sku_col}` = :sku"]
                                 pod_params = {"sku": sku}
 
-                                # Add store filter if store_number is available (make it optional to not filter out all records)
-                                # Only filter if we have a valid store number and store column exists
-                                # Note: Commenting out store filter for now since it might be too restrictive
-                                # if store_number is not None and pod_store_col:
-                                #     pod_where_parts.append(
-                                #         f"pod.`{pod_store_col}` = :pod_store_number"
-                                #     )
-                                #     pod_params["pod_store_number"] = store_number
+                                # Add store filter if store_number is available
+                                # Filter by store number from str table to show only store-specific purchase orders
+                                if store_number is not None and pod_store_col:
+                                    pod_where_parts.append(
+                                        f"pod.`{pod_store_col}` = :pod_store_number"
+                                    )
+                                    pod_params["pod_store_number"] = store_number
 
                                 # Order by date (most recent first) if available, otherwise by po_id
                                 order_by = f"pod.`{pod_po_col}` DESC"
