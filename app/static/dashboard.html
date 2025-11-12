@@ -3367,7 +3367,7 @@ const HistoryModule = ({ token, storeQueryValue }) => {
                             </thead>
                             <tbody>
                               {selectedProduct.purchase_orders.map((po, idx) => (
-                                <tr key={idx}>
+                                <tr key={`po-${po.po_id || idx}-${idx}`}>
                                   <td>{po.po_id || '—'}</td>
                                   <td>{po.date || '—'}</td>
                                   <td>{formatQuantity(po.qty || 0)}</td>
@@ -3400,7 +3400,7 @@ const HistoryModule = ({ token, storeQueryValue }) => {
                             </thead>
                             <tbody>
                               {selectedProduct.recent_sales.map((sale, idx) => (
-                                <tr key={idx}>
+                                <tr key={`sale-${sale.sale_id || idx}-${idx}`}>
                                   <td>{sale.sale_id || '—'}</td>
                                   <td>{sale.date || '—'}</td>
                                   <td>{formatQuantity(sale.qty || 0)}</td>
@@ -3425,9 +3425,9 @@ const HistoryModule = ({ token, storeQueryValue }) => {
               <div>
                 <h3 style={{ margin: '0 0 1rem 0', fontSize: '0.95rem' }}>Products ({products.length})</h3>
                 <div style={{ maxHeight: '70vh', overflowY: 'auto' }}>
-                  {products.map((product) => (
+                  {products.map((product, idx) => (
                     <div
-                      key={product.sku}
+                      key={`product-${product.sku || idx}-${product.upc || idx}-${idx}`}
                       onClick={() => setSelectedProduct(product)}
                       style={{
                         padding: '0.75rem',
@@ -3460,9 +3460,9 @@ const HistoryModule = ({ token, storeQueryValue }) => {
               <div style={{ flex: '0 0 300px', borderRight: '1px solid var(--panel-border)', paddingRight: '1rem' }}>
                 <h3 style={{ margin: '0 0 1rem 0', fontSize: '1rem' }}>Products ({products.length})</h3>
                 <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
-                  {products.map((product) => (
+                  {products.map((product, idx) => (
                     <div
-                      key={product.sku}
+                      key={`product-${product.sku || idx}-${product.upc || idx}-${idx}`}
                       onClick={() => setSelectedProduct(product)}
                       style={{
                         padding: '0.75rem',
@@ -3526,7 +3526,7 @@ const HistoryModule = ({ token, storeQueryValue }) => {
                             </thead>
                             <tbody>
                               {selectedProduct.purchase_orders.map((po, idx) => (
-                                <tr key={idx}>
+                                <tr key={`po-${po.po_id || idx}-${idx}`}>
                                   <td>{po.po_id || '—'}</td>
                                   <td>{po.date || '—'}</td>
                                   <td>{formatQuantity(po.qty || 0)}</td>
@@ -3559,7 +3559,7 @@ const HistoryModule = ({ token, storeQueryValue }) => {
                             </thead>
                             <tbody>
                               {selectedProduct.recent_sales.map((sale, idx) => (
-                                <tr key={idx}>
+                                <tr key={`sale-${sale.sale_id || idx}-${idx}`}>
                                   <td>{sale.sale_id || '—'}</td>
                                   <td>{sale.date || '—'}</td>
                                   <td>{formatQuantity(sale.qty || 0)}</td>
