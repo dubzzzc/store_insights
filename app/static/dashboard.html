@@ -2686,12 +2686,21 @@ const AdminView = ({
       ? toNumber(base.total_net, 0)
       : grossSales; // Fallback to grossSales if total_net not available
 
+    const totalEcommerce = base.total_ecommerce_sales !== undefined && base.total_ecommerce_sales !== null
+      ? toNumber(base.total_ecommerce_sales, 0)
+      : 0;
+    const totalInStore = base.total_in_store_sales !== undefined && base.total_in_store_sales !== null
+      ? toNumber(base.total_in_store_sales, 0)
+      : totalNet - totalEcommerce; // Fallback calculation if not provided
+
     return {
       grossSales,
       totalItems,
       daysCaptured: rawDays,
       averageDollarsPerSale,
       totalNet,
+      totalEcommerce,
+      totalInStore,
     };
   }, [sales, summary]);
 
@@ -2912,6 +2921,20 @@ const AdminView = ({
             {topDay ? `${formatCurrency(topDay.totalSales)} in sales` : 'Waiting for activity'}
           </span>
         </div>
+        {derivedSummary.totalEcommerce > 0 && (
+          <>
+            <div className="summary-card">
+              <h3>Ecommerce Sales</h3>
+              <strong>{formatCurrency(derivedSummary.totalEcommerce)}</strong>
+              <span>Online/Web orders</span>
+            </div>
+            <div className="summary-card">
+              <h3>In-Store Sales</h3>
+              <strong>{formatCurrency(derivedSummary.totalInStore)}</strong>
+              <span>Physical store transactions</span>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="insight-grid two-column">

@@ -1060,6 +1060,10 @@ def get_sales_insights(
             # LINE 980-989 are just tender slots (order received), payment type is identified by CAT column
             # For cash payments, subtract CASH CHANGE (LINE 999) from the total
             payment_methods: List[Dict[str, Any]] = []
+
+            # Get store number from str table to filter store-specific data
+            store_number = _get_store_number(conn, db_name, selected_store)
+
             if _table_exists(conn, db_name, "jnl") and _table_exists(
                 conn, db_name, "jnh"
             ):
@@ -1088,6 +1092,12 @@ def get_sales_insights(
                 jnl_sale_col = (
                     _pick_column(cols, ["sale", "sale_id", "invno"]) or "sale"
                 )
+                jnh_store_col = (
+                    _pick_column(jnh_cols, ["store", "store_id", "store_num"]) or None
+                )
+                jnl_store_col = (
+                    _pick_column(cols, ["store", "store_id", "store_num"]) or None
+                )
 
                 where_parts = []
                 params3: Dict[str, Any] = {}
@@ -1109,6 +1119,21 @@ def get_sales_insights(
                 # Filter: RFLAG <= 0 (excludes returns/voids, includes all valid tenders)
                 if jnl_rflag:
                     where_parts.append(f"jnl.`{jnl_rflag}` <= 0")
+
+                # Add store filter if store_number is available
+                # Filter by store number from str table to show only store-specific payment methods
+                if store_number is not None:
+                    # Try JNH store column first (header table), then JNL store column
+                    if jnh_store_col:
+                        where_parts.append(
+                            f"jnh.`{jnh_store_col}` = :pm_jnh_store_number"
+                        )
+                        params3["pm_jnh_store_number"] = store_number
+                    elif jnl_store_col:
+                        where_parts.append(
+                            f"jnl.`{jnl_store_col}` = :pm_jnl_store_number"
+                        )
+                        params3["pm_jnl_store_number"] = store_number
 
                 if line_col and amt_col:
                     # Get sale identifier column to match CASH CHANGE to sales with cash tenders
@@ -1192,6 +1217,16 @@ def get_sales_insights(
                                 cash_change_where.append(
                                     f"jnh_cc.`{jnh_time}` < :cc_end_dt"
                                 )
+                            # Add store filter to cash change subquery
+                            if store_number is not None:
+                                if jnh_store_col:
+                                    cash_change_where.append(
+                                        f"jnh_cc.`{jnh_store_col}` = :cc_jnh_store_number"
+                                    )
+                                elif jnl_store_col:
+                                    cash_change_where.append(
+                                        f"jnl_cc.`{jnl_store_col}` = :cc_jnl_store_number"
+                                    )
 
                             # Build void sales check for cash change subquery
                             cash_change_void_where = []
@@ -1232,6 +1267,13 @@ def get_sales_insights(
                                 void_sales_where.append(f"jnl_void.`{jnl_rflag}` = 4")
                             void_sales_where.append(f"jnl_void.`{jnl_sku_col}` > 0")
 
+                            # Build ecommerce detection: check both cat.name and descript for ecommerce indicators
+                            ecom_cat_check = f"UPPER(COALESCE((SELECT cat.`{cat_name_col}` FROM cat WHERE cat.`{cat_code_col}` = {cat_lookup_expr} LIMIT 1), '')) LIKE '%WEB%'"
+                            ecom_descript_check = f"UPPER(COALESCE(jnl.`{descript_col}`, '')) LIKE '%WEB%' OR UPPER(COALESCE(jnl.`{descript_col}`, '')) LIKE '%ECOMMERCE%' OR UPPER(COALESCE(jnl.`{descript_col}`, '')) LIKE '%ONLINE%' OR UPPER(COALESCE(jnl.`{descript_col}`, '')) LIKE '%ECOM%' OR UPPER(COALESCE(jnl.`{descript_col}`, '')) LIKE '%E-COMMERCE%' OR UPPER(COALESCE(jnl.`{descript_col}`, '')) LIKE '%INTERNET%'"
+                            ecom_condition = (
+                                f"({ecom_cat_check} OR {ecom_descript_check})"
+                            )
+
                             tender_sql = f"""
                                 SELECT 
                                     {cat_lookup_expr} AS code,
@@ -1250,7 +1292,13 @@ def get_sales_insights(
                                             ELSE 
                                                 jnl.`{amt_col}`
                                         END
-                                    ) AS total
+                                    ) AS total,
+                                    SUM(
+                                        CASE 
+                                            WHEN {ecom_condition} THEN jnl.`{amt_col}`
+                                            ELSE 0
+                                        END
+                                    ) AS ecommerce_total
                                 FROM jnl
                                 INNER JOIN jnh ON jnh.`{jnh_sale}` = jnl.`{jnl_sale_col}`
                                 LEFT JOIN (
@@ -1296,6 +1344,12 @@ def get_sales_insights(
                                 params3["cc_start_dt"] = params3["p_start_dt"]
                             if end:
                                 params3["cc_end_dt"] = params3["p_end_dt"]
+                            # Add store params for cash change subquery if needed
+                            if store_number is not None:
+                                if jnh_store_col:
+                                    params3["cc_jnh_store_number"] = store_number
+                                elif jnl_store_col:
+                                    params3["cc_jnl_store_number"] = store_number
                         else:
                             # No cat table: use DESCRIPT as fallback
                             # Exclude void sales: sales where any SKU line (sku > 0) has rflag = 4
@@ -1405,15 +1459,27 @@ def get_sales_insights(
                     # Process payment methods - cash change is already handled in SQL query
                     # All payment types (including cash) use the same calculation logic
                     total_sum = 0.0
+                    total_ecommerce = 0.0
                     tmp = []
                     for r in rows:
                         code_raw = r.get("code")
                         method_name = r.get("method_name") or str(code_raw) or "Unknown"
                         amount = float(r.get("total") or 0)
+                        ecommerce_amount = (
+                            float(r.get("ecommerce_total") or 0)
+                            if "ecommerce_total" in r
+                            else 0.0
+                        )
                         # Amount is already correct (cash change subtracted in SQL for cash, others unchanged)
                         total_sum += amount
+                        total_ecommerce += ecommerce_amount
                         # Use method_name from query (from cat.name or descript)
-                        tmp.append({"method": str(method_name), "total_sales": amount})
+                        # Include ecommerce amount if available
+                        item = {"method": str(method_name), "total_sales": amount}
+                        if ecommerce_amount > 0:
+                            item["ecommerce_sales"] = round(ecommerce_amount, 2)
+                            item["in_store_sales"] = round(amount - ecommerce_amount, 2)
+                        tmp.append(item)
                     # Calculate percentages based on total_sum (which includes adjusted cash, not raw cash)
                     if total_sum:
                         payment_methods = [
@@ -1422,6 +1488,12 @@ def get_sales_insights(
                         # Update total_net in summary - sum of all payment methods (tenders)
                         total_net = total_sum
                         summary["total_net"] = round(total_net, 2)
+                        # Add ecommerce summary if we have ecommerce data
+                        if total_ecommerce > 0:
+                            summary["total_ecommerce_sales"] = round(total_ecommerce, 2)
+                            summary["total_in_store_sales"] = round(
+                                total_net - total_ecommerce, 2
+                            )
 
             # Categories: aggregate by jnl.cat for ALL product sales (sku > 0) in the selected date range
             # Shows ALL categories with sales for the date range, joined to cat table for category names
