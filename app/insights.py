@@ -284,6 +284,45 @@ def _select_store(user: dict, requested_store: Optional[str]) -> Dict[str, Any]:
     return stores[0]
 
 
+def _get_store_number(
+    conn, db_name: str, selected_store: Dict[str, Any]
+) -> Optional[Any]:
+    """Get the store number from str table to use for filtering store-specific data.
+
+    Returns the store number if found, None otherwise.
+    """
+    if not _table_exists(conn, db_name, "str"):
+        return None
+
+    try:
+        str_cols = _get_columns(conn, db_name, "str")
+        str_store_col = (
+            _pick_column(str_cols, ["store", "store_id", "store_num"]) or "store"
+        )
+        str_db_col = _pick_column(str_cols, ["store_db", "db", "database"]) or None
+
+        # Try to match by store_db first, then by store_id
+        str_where = []
+        str_params = {}
+        if str_db_col:
+            str_where.append(f"`{str_db_col}` = :store_db")
+            str_params["store_db"] = db_name
+        elif selected_store.get("store_id") is not None:
+            # Fallback: try to match by store_id if available
+            str_where.append(f"`{str_store_col}` = :store_id")
+            str_params["store_id"] = selected_store.get("store_id")
+
+        if str_where:
+            str_sql = f"SELECT `{str_store_col}` AS store_num FROM str WHERE {' AND '.join(str_where)} LIMIT 1"
+            str_row = conn.execute(text(str_sql), str_params).mappings().first()
+            if str_row and str_row.get("store_num") is not None:
+                return str_row.get("store_num")
+    except:
+        pass  # If lookup fails, return None
+
+    return None
+
+
 def _detect_sales_source(conn, db_name: str) -> Optional[Dict[str, str]]:
     """
     Detect a sales-like table and appropriate columns for date, quantity, and amount.
@@ -3007,6 +3046,9 @@ def get_product_history(
                 "store_name": selected_store.get("store_name"),
             }
 
+            # Get store number from str table to filter store-specific data
+            store_number = _get_store_number(conn, db_name, selected_store)
+
             products = []
 
             # Require minimum search length to prevent slow queries
@@ -3158,7 +3200,14 @@ def get_product_history(
                 # Stock information from stk table
                 stock_select = []
                 join_stk = ""
+                stk_store_col = None
                 if stk_table_exists and stk_sku_col:
+                    # Get stk.store column for filtering
+                    stk_store_col = (
+                        _pick_column(stk_cols, ["store", "store_id", "store_num"])
+                        or None
+                    )
+
                     if stk_back_col:
                         stock_select.append(f"stk.`{stk_back_col}` AS stock_qty")
                     else:
@@ -3171,9 +3220,14 @@ def get_product_history(
                         stock_select.append(f"stk.`{stk_kit_col}` AS stock_kit")
                     else:
                         stock_select.append("NULL AS stock_kit")
-                    join_stk = (
-                        f"INNER JOIN stk ON stk.`{stk_sku_col}` = inv.`{inv_sku_col}`"
-                    )
+
+                    # Build join with store filter if store_number is available
+                    join_conditions = [f"stk.`{stk_sku_col}` = inv.`{inv_sku_col}`"]
+                    if store_number is not None and stk_store_col:
+                        join_conditions.append(f"stk.`{stk_store_col}` = :store_number")
+                        params["store_number"] = store_number
+
+                    join_stk = f"INNER JOIN stk ON {' AND '.join(join_conditions)}"
                 else:
                     stock_select = [
                         "NULL AS stock_qty",
@@ -3280,6 +3334,10 @@ def get_product_history(
                             _pick_column(pod_cols, ["date", "pdate", "created_at"])
                             or None
                         )
+                        pod_store_col = (
+                            _pick_column(pod_cols, ["store", "store_id", "store_num"])
+                            or None
+                        )
 
                         if pod_sku_col and pod_po_col:
                             pod_select_parts = [f"`{pod_po_col}` AS po_id"]
@@ -3297,17 +3355,27 @@ def get_product_history(
                                     f"SUM(`{pod_price_col}`) AS amount"
                                 )
 
+                            pod_where_parts = [f"`{pod_sku_col}` = :sku"]
+                            pod_params = {"sku": sku}
+
+                            # Add store filter if store_number is available
+                            if store_number is not None and pod_store_col:
+                                pod_where_parts.append(
+                                    f"`{pod_store_col}` = :pod_store_number"
+                                )
+                                pod_params["pod_store_number"] = store_number
+
                             pod_sql = f"""
                                 SELECT {', '.join(pod_select_parts)}
                                 FROM pod
-                                WHERE `{pod_sku_col}` = :sku
+                                WHERE {' AND '.join(pod_where_parts)}
                                 GROUP BY {', '.join(pod_group_parts)}
                                 ORDER BY `{pod_po_col}` DESC
                                 LIMIT 5
                             """
 
                             pod_rows = conn.execute(
-                                text(pod_sql), {"sku": sku}
+                                text(pod_sql), pod_params
                             ).mappings()
                             for pod_row in pod_rows:
                                 product["purchase_orders"].append(
@@ -3359,6 +3427,10 @@ def get_product_history(
                             _pick_column(jnl_cols, ["amount", "price", "total"]) or None
                         )
                         jnl_rflag_col = _pick_column(jnl_cols, ["rflag"]) or None
+                        jnl_store_col = (
+                            _pick_column(jnl_cols, ["store", "store_id", "store_num"])
+                            or None
+                        )
 
                         if jnl_sku_col and jnl_sale_col and jnl_date_col:
                             jnl_where = [f"`{jnl_sku_col}` = :sku"]
@@ -3366,6 +3438,13 @@ def get_product_history(
 
                             if jnl_rflag_col:
                                 jnl_where.append(f"`{jnl_rflag_col}` = 0")
+
+                            # Add store filter if store_number is available
+                            if store_number is not None and jnl_store_col:
+                                jnl_where.append(
+                                    f"`{jnl_store_col}` = :jnl_store_number"
+                                )
+                                jnl_params["jnl_store_number"] = store_number
 
                             sales_select_parts = [
                                 f"`{jnl_sale_col}` AS sale_id",

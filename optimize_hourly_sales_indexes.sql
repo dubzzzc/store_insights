@@ -21,3 +21,5 @@ CREATE INDEX idx_jnh_sale ON jnh(sale);
 -- Index on jnl.sale for general joins
 CREATE INDEX idx_jnl_sale ON jnl(sale);
 
+CREATE INDEX idx_jnl_date_rflag_sku ON jnl(date, rflag, sku);
+
