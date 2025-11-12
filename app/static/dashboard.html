@@ -1179,6 +1179,14 @@
     background: rgba(15, 23, 42, 0.5);
     color: rgba(226, 232, 240, 0.7);
     border-color: rgba(148, 163, 184, 0.2);
+    cursor: default;
+  }
+
+  .mobility-form input[readonly] {
+    background: rgba(15, 23, 42, 0.5);
+    color: rgba(226, 232, 240, 0.7);
+    border-color: rgba(148, 163, 184, 0.2);
+    cursor: default;
   }
 
   .mobility-form input::placeholder {
@@ -2871,12 +2879,13 @@ const AdminView = ({
       };
 
       const MobilityConnectionForm = ({ onConnect, onBack, isLoading, error }) => {
-        const savedIp = localStorage.getItem('spirits_mobility_ip') || '';
-        const savedPort = localStorage.getItem('spirits_mobility_port') || '8080';
-        const hasSavedConnection = savedIp && savedPort;
+        // Check if there's actually a saved connection (not just defaults)
+        const savedIp = localStorage.getItem('spirits_mobility_ip');
+        const savedPort = localStorage.getItem('spirits_mobility_port');
+        const hasSavedConnection = Boolean(savedIp && savedPort);
         
-        const [serverIp, setServerIp] = useState(savedIp);
-        const [serverPort, setServerPort] = useState(savedPort);
+        const [serverIp, setServerIp] = useState(savedIp || '');
+        const [serverPort, setServerPort] = useState(savedPort || '8080');
         const [isEditing, setIsEditing] = useState(!hasSavedConnection);
         const [countdown, setCountdown] = useState(hasSavedConnection ? 12 : null);
         const [isConnecting, setIsConnecting] = useState(false);
@@ -2920,14 +2929,15 @@ const AdminView = ({
                 <input
                   id="server-ip"
                   type="text"
-                  placeholder="52.201.116.107"
+                  placeholder="192.168.1.100"
                   value={serverIp}
                   onChange={(event) => setServerIp(event.target.value)}
                   required
                   disabled={!isEditing || isConnecting}
+                  readOnly={!isEditing}
                   className={!isEditing ? 'readonly-input' : ''}
-                  pattern="^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$|^[a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?)*$"
-                  title="Enter a valid IP address or hostname"
+                  pattern={isEditing ? "^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$|^[a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?)*$" : undefined}
+                  title={isEditing ? "Enter a valid IP address or hostname" : undefined}
                 />
               </label>
               <div className="mobility-form-row">
@@ -2943,6 +2953,7 @@ const AdminView = ({
                     min="1"
                     max="65535"
                     disabled={!isEditing || isConnecting}
+                    readOnly={!isEditing}
                     className={!isEditing ? 'readonly-input' : ''}
                   />
                 </label>
