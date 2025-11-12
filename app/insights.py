@@ -3221,6 +3221,12 @@ def get_product_history(
                     else:
                         stock_select.append("NULL AS stock_kit")
 
+                    # Always include store number in SELECT so we can display it
+                    if stk_store_col:
+                        stock_select.append(f"stk.`{stk_store_col}` AS store_num")
+                    else:
+                        stock_select.append("NULL AS store_num")
+
                     # Build join with store filter if store_number is available
                     join_conditions = [f"stk.`{stk_sku_col}` = inv.`{inv_sku_col}`"]
                     if store_number is not None and stk_store_col:
@@ -3233,6 +3239,7 @@ def get_product_history(
                         "NULL AS stock_qty",
                         "NULL AS stock_floor",
                         "NULL AS stock_kit",
+                        "NULL AS store_num",
                     ]
 
                 stock_select_str = (
@@ -3281,6 +3288,7 @@ def get_product_history(
                     stock_qty = None
                     stock_floor = None
                     stock_kit = None
+                    store_num = None
                     if stk_table_exists:
                         stock_qty_val = inv_row.get("stock_qty")
                         if stock_qty_val is not None:
@@ -3303,6 +3311,14 @@ def get_product_history(
                             except:
                                 stock_kit = None
 
+                        # Get store number
+                        store_num_val = inv_row.get("store_num")
+                        if store_num_val is not None:
+                            try:
+                                store_num = str(store_num_val)
+                            except:
+                                store_num = None
+
                     product = {
                         "sku": sku,
                         "upc": upc_value,
@@ -3312,6 +3328,7 @@ def get_product_history(
                         "stock_qty": stock_qty,
                         "stock_floor": stock_floor,
                         "stock_kit": stock_kit,
+                        "store_num": store_num,
                         "purchase_orders": [],
                         "recent_sales": [],
                     }

@@ -3334,8 +3334,22 @@ const HistoryModule = ({ token, storeQueryValue }) => {
                     e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
                   }}
                 >
-                  <div style={{ fontWeight: '600', marginBottom: '0.5rem', fontSize: '1rem', color: 'var(--text)' }}>
-                    {product.name || '—'}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                    <div style={{ fontWeight: '600', fontSize: '1rem', color: 'var(--text)' }}>
+                      {product.name || '—'}
+                    </div>
+                    {product.store_num && (
+                      <div style={{ 
+                        fontSize: '0.75rem', 
+                        fontWeight: '600',
+                        color: 'var(--primary)',
+                        backgroundColor: 'var(--primary-soft)',
+                        padding: '0.25rem 0.5rem',
+                        borderRadius: '4px'
+                      }}>
+                        Store #{product.store_num}
+                      </div>
+                    )}
                   </div>
                   <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                     <div><strong>SKU:</strong> {product.sku || '—'}</div>
@@ -3380,6 +3394,9 @@ const HistoryModule = ({ token, storeQueryValue }) => {
                       {selectedProduct.upc && <div><strong>UPC:</strong> {selectedProduct.upc}</div>}
                       <div><strong>Price:</strong> {formatCurrency(selectedProduct.price || 0)}</div>
                       <div><strong>Cost:</strong> {formatCurrency(selectedProduct.cost || 0)}</div>
+                      {selectedProduct.store_num && (
+                        <div><strong>Store #:</strong> {selectedProduct.store_num}</div>
+                      )}
                       {selectedProduct.stock_qty !== null && selectedProduct.stock_qty !== undefined && (
                         <div><strong>Stock Qty:</strong> {formatQuantity(selectedProduct.stock_qty)}</div>
                       )}
