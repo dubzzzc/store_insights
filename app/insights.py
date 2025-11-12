@@ -3039,6 +3039,29 @@ def get_product_history(
                 inv_deleted_col = (
                     _pick_column(inv_cols, ["deleted", "del", "is_deleted"]) or None
                 )
+                inv_stat_col = (
+                    _pick_column(inv_cols, ["stat", "status", "active"]) or None
+                )
+
+                # Get stock information from stk table
+                stk_table_exists = _table_exists(conn, db_name, "stk")
+                stk_sku_col = None
+                stk_back_col = None
+                stk_floor_col = None
+                stk_kit_col = None
+                stk_stat_col = None
+                if stk_table_exists:
+                    stk_cols = _get_columns(conn, db_name, "stk")
+                    stk_sku_col = _pick_column(stk_cols, ["sku"]) or "sku"
+                    stk_back_col = (
+                        _pick_column(stk_cols, ["back", "qty", "quantity", "onhand"])
+                        or None
+                    )
+                    stk_floor_col = _pick_column(stk_cols, ["floor"]) or None
+                    stk_kit_col = _pick_column(stk_cols, ["kit"]) or None
+                    stk_stat_col = (
+                        _pick_column(stk_cols, ["stat", "status", "active"]) or None
+                    )
 
                 # Get UPC from upc table if it exists
                 upc_table_exists = _table_exists(conn, db_name, "upc")
@@ -3052,6 +3075,12 @@ def get_product_history(
                 # Build search query
                 where_parts = []
                 params: Dict[str, Any] = {}
+
+                # Filter for active items: inv.stat=2 and stk.stat=2
+                if inv_stat_col:
+                    where_parts.append(f"inv.`{inv_stat_col}` = 2")
+                if stk_table_exists and stk_stat_col:
+                    where_parts.append(f"stk.`{stk_stat_col}` = 2")
 
                 if inv_deleted_col:
                     where_parts.append(f"UPPER(inv.`{inv_deleted_col}`) != 'T'")
@@ -3126,12 +3155,44 @@ def get_product_history(
                 else:
                     cost_select = "NULL AS cost"
 
+                # Stock information from stk table
+                stock_select = []
+                join_stk = ""
+                if stk_table_exists and stk_sku_col:
+                    if stk_back_col:
+                        stock_select.append(f"stk.`{stk_back_col}` AS stock_qty")
+                    else:
+                        stock_select.append("NULL AS stock_qty")
+                    if stk_floor_col:
+                        stock_select.append(f"stk.`{stk_floor_col}` AS stock_floor")
+                    else:
+                        stock_select.append("NULL AS stock_floor")
+                    if stk_kit_col:
+                        stock_select.append(f"stk.`{stk_kit_col}` AS stock_kit")
+                    else:
+                        stock_select.append("NULL AS stock_kit")
+                    join_stk = (
+                        f"INNER JOIN stk ON stk.`{stk_sku_col}` = inv.`{inv_sku_col}`"
+                    )
+                else:
+                    stock_select = [
+                        "NULL AS stock_qty",
+                        "NULL AS stock_floor",
+                        "NULL AS stock_kit",
+                    ]
+
+                stock_select_str = (
+                    ", " + ", ".join(stock_select) if stock_select else ""
+                )
+
                 inv_sql = f"""
                     SELECT DISTINCT inv.`{inv_sku_col}` AS sku,
                            inv.`{inv_name_col}` AS name,
                            {price_select},
                            {cost_select}
+                           {stock_select_str}
                     FROM inv
+                    {join_stk}
                     WHERE {' AND '.join(where_parts) if where_parts else '1=1'}
                     ORDER BY inv.`{inv_sku_col}`
                     LIMIT 50
@@ -3162,12 +3223,41 @@ def get_product_history(
                         if upc_row:
                             upc_value = str(upc_row.get("upc", "")) or None
 
+                    # Get stock information
+                    stock_qty = None
+                    stock_floor = None
+                    stock_kit = None
+                    if stk_table_exists:
+                        stock_qty_val = inv_row.get("stock_qty")
+                        if stock_qty_val is not None:
+                            try:
+                                stock_qty = float(stock_qty_val)
+                            except:
+                                stock_qty = None
+
+                        stock_floor_val = inv_row.get("stock_floor")
+                        if stock_floor_val is not None and stock_floor_val != 0:
+                            try:
+                                stock_floor = float(stock_floor_val)
+                            except:
+                                stock_floor = None
+
+                        stock_kit_val = inv_row.get("stock_kit")
+                        if stock_kit_val is not None and stock_kit_val != 0:
+                            try:
+                                stock_kit = float(stock_kit_val)
+                            except:
+                                stock_kit = None
+
                     product = {
                         "sku": sku,
                         "upc": upc_value,
                         "name": str(inv_row.get("name", "")) or None,
                         "price": float(inv_row.get("price", 0) or 0),
                         "cost": float(inv_row.get("cost", 0) or 0),
+                        "stock_qty": stock_qty,
+                        "stock_floor": stock_floor,
+                        "stock_kit": stock_kit,
                         "purchase_orders": [],
                         "recent_sales": [],
                     }

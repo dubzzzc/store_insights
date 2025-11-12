@@ -3321,6 +3321,9 @@ const HistoryModule = ({ token, storeQueryValue }) => {
                     <div>SKU: {product.sku || '—'}</div>
                     {product.upc && <div>UPC: {product.upc}</div>}
                     <div>Price: {formatCurrency(product.price || 0)}</div>
+                    {product.stock_qty !== null && product.stock_qty !== undefined && (
+                      <div>Stock: {formatQuantity(product.stock_qty)}</div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -3337,6 +3340,15 @@ const HistoryModule = ({ token, storeQueryValue }) => {
                   {selectedProduct.upc && <span><strong>UPC:</strong> {selectedProduct.upc}</span>}
                   <span><strong>Price:</strong> {formatCurrency(selectedProduct.price || 0)}</span>
                   <span><strong>Cost:</strong> {formatCurrency(selectedProduct.cost || 0)}</span>
+                  {selectedProduct.stock_qty !== null && selectedProduct.stock_qty !== undefined && (
+                    <span><strong>Stock Qty:</strong> {formatQuantity(selectedProduct.stock_qty)}</span>
+                  )}
+                  {selectedProduct.stock_floor !== null && selectedProduct.stock_floor !== undefined && (
+                    <span><strong>Floor:</strong> {formatQuantity(selectedProduct.stock_floor)}</span>
+                  )}
+                  {selectedProduct.stock_kit !== null && selectedProduct.stock_kit !== undefined && (
+                    <span><strong>Kit:</strong> {formatQuantity(selectedProduct.stock_kit)}</span>
+                  )}
                 </div>
               </div>
 
