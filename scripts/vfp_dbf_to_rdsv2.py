@@ -944,6 +944,10 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
                         "idx_jnl_date_rflag_sku",
                         f"CREATE INDEX idx_jnl_date_rflag_sku ON {target} ([{col_date}], [{col_rflag}], [{col_sku}])",
                     ),
+                    (
+                        "idx_jnl_sku_rflag_date",
+                        f"CREATE INDEX idx_jnl_sku_rflag_date ON {target} ([{col_sku}], [{col_rflag}], [{col_date}])",
+                    ),
                 ]
             elif table_lower in ("inv", "stk", "prc"):
                 # Index for duplicate checking (SKU)
@@ -1121,6 +1125,10 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
                     (
                         "idx_jnl_date_rflag_sku",
                         f"CREATE INDEX idx_jnl_date_rflag_sku ON {target} (`{col_date}`, `{col_rflag}`, `{col_sku}`)",
+                    ),
+                    (
+                        "idx_jnl_sku_rflag_date",
+                        f"CREATE INDEX idx_jnl_sku_rflag_date ON {target} (`{col_sku}`, `{col_rflag}`, `{col_date}`)",
                     ),
                 ]
             elif table_lower in ("inv", "stk", "prc"):

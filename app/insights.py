@@ -1620,12 +1620,21 @@ def get_sales_insights(
                     amount_expr_hist = "SUM(0)"
                 where_parts = ["1=1"]
                 params7: Dict[str, Any] = {}
+                # Use date range comparison (not DATE() function) to allow index usage
                 if start:
-                    where_parts.append(f"DATE(`{hst_date}`) >= :h2_start")
-                    params7["h2_start"] = start
+                    where_parts.append(f"`{hst_date}` >= :h2_start_dt")
+                    params7["h2_start_dt"] = f"{start} 00:00:00"
                 if end:
-                    where_parts.append(f"DATE(`{hst_date}`) <= :h2_end")
-                    params7["h2_end"] = end
+                    try:
+                        from datetime import timedelta
+
+                        h2_end_next = (
+                            datetime.fromisoformat(end) + timedelta(days=1)
+                        ).strftime("%Y-%m-%d 00:00:00")
+                    except:
+                        h2_end_next = f"{end} 23:59:59"
+                    where_parts.append(f"`{hst_date}` < :h2_end_dt")
+                    params7["h2_end_dt"] = h2_end_next
                 hist_sql = f"""
                     SELECT `{hst_sku}` AS sku, YEAR(`{hst_date}`) AS year, {amount_expr_hist} AS total
                     FROM hst
@@ -1747,14 +1756,12 @@ def get_operations_insights(
                     if jnl_rflag_col:
                         where_parts.append(f"`{jnl_rflag_col}` = 0")
                     # Filter by current month up to current date/time
-                    # Use DATE() on column to handle both DATE and DATETIME columns properly
-                    where_parts.append(f"DATE(`{jnl_date_col}`) >= :month_start")
-                    where_parts.append(f"DATE(`{jnl_date_col}`) <= :month_end")
-                    # Extract just the date part for comparison (YYYY-MM-DD)
-                    params["month_start"] = month_start_str.split()[
-                        0
-                    ]  # Get date part only
-                    params["month_end"] = month_end_str.split()[0]  # Get date part only
+                    # Use date range comparison (not DATE() function) to allow index usage
+                    # DATE() prevents index usage, so use direct date comparison
+                    where_parts.append(f"`{jnl_date_col}` >= :month_start")
+                    where_parts.append(f"`{jnl_date_col}` <= :month_end")
+                    params["month_start"] = month_start_str
+                    params["month_end"] = month_end_str
 
                     # Get all rows for grouping by sale (current month only)
                     sql = f"""
@@ -2356,12 +2363,22 @@ def get_gateway_insights(
                 if jnl_date_col and jnl_line_col and jnl_price_col and jnl_descript_col:
                     where_parts = [f"`{jnl_line_col}` BETWEEN 980 AND 989"]
                     params: Dict[str, Any] = {}
+                    # Use date range comparison (not DATE() function) to allow index usage
                     if start:
-                        where_parts.append(f"DATE(`{jnl_date_col}`) >= :start")
-                        params["start"] = start
+                        where_parts.append(f"`{jnl_date_col}` >= :start_dt")
+                        params["start_dt"] = f"{start} 00:00:00"
                     if end:
-                        where_parts.append(f"DATE(`{jnl_date_col}`) <= :end")
-                        params["end"] = end
+                        # Use < (exclusive) for end date to match half-open interval pattern
+                        try:
+                            from datetime import timedelta
+
+                            end_next = (
+                                datetime.fromisoformat(end) + timedelta(days=1)
+                            ).strftime("%Y-%m-%d 00:00:00")
+                        except:
+                            end_next = f"{end} 23:59:59"
+                        where_parts.append(f"`{jnl_date_col}` < :end_dt")
+                        params["end_dt"] = end_next
 
                     sql = f"""
                         SELECT `{jnl_price_col}` AS price, `{jnl_descript_col}` AS descript,
@@ -2466,7 +2483,13 @@ def get_quick_insights(
                 jnl_rflag_col = _pick_column(jnl_cols, ["rflag"]) or None
 
                 if jnl_date_col and jnl_line_col and jnl_sale_col:
-                    where_parts = [f"DATE(`{jnl_date_col}`) = :today"]
+                    # Use date range instead of DATE() function to allow index usage
+                    today_start = f"{today} 00:00:00"
+                    today_end = f"{today} 23:59:59"
+                    where_parts = [
+                        f"`{jnl_date_col}` >= :today_start",
+                        f"`{jnl_date_col}` <= :today_end",
+                    ]
                     if jnl_rflag_col:
                         where_parts.append(f"`{jnl_rflag_col}` = 0")
 
@@ -2477,7 +2500,9 @@ def get_quick_insights(
                         WHERE {' AND '.join(where_parts)}
                         ORDER BY `{jnl_sale_col}`, `{jnl_line_col}`
                     """
-                    rows = conn.execute(text(sql), {"today": today}).mappings()
+                    rows = conn.execute(
+                        text(sql), {"today_start": today_start, "today_end": today_end}
+                    ).mappings()
 
                     current_sale = None
                     current_group = []
@@ -2528,15 +2553,19 @@ def get_quick_insights(
                 else:
                     qty_expr_today = f"SUM(COALESCE(`{hst_qty}`,0))"
 
+                today_start = f"{today} 00:00:00"
+                today_end = f"{today} 23:59:59"
                 sql = f"""
                     SELECT `{hst_sku}` AS sku, {qty_expr_today} AS total_qty
                     FROM hst
-                    WHERE DATE(`{hst_date}`) = :today AND `{hst_sku}` > 0
+                    WHERE `{hst_date}` >= :today_start AND `{hst_date}` <= :today_end AND `{hst_sku}` > 0
                     GROUP BY `{hst_sku}`
                     ORDER BY total_qty DESC
                     LIMIT 5
                 """
-                rows = conn.execute(text(sql), {"today": today}).mappings()
+                rows = conn.execute(
+                    text(sql), {"today_start": today_start, "today_end": today_end}
+                ).mappings()
                 skus = [str(r["sku"]) for r in rows]
 
                 inv_names = {}
@@ -2569,13 +2598,17 @@ def get_quick_insights(
                 jnl_descript_col = _pick_column(jnl_cols, ["descript", "description", "desc"]) or None
 
                 if jnl_date_col and jnl_line_col and jnl_price_col and jnl_descript_col:
+                    today_start = f"{today} 00:00:00"
+                    today_end = f"{today} 23:59:59"
                     sql = f"""
                         SELECT `{jnl_price_col}` AS price, `{jnl_descript_col}` AS descript
                         FROM jnl
-                        WHERE DATE(`{jnl_date_col}`) = :today 
+                        WHERE `{jnl_date_col}` >= :today_start AND `{jnl_date_col}` <= :today_end
                           AND `{jnl_line_col}` BETWEEN 980 AND 989
                     """
-                    rows = conn.execute(text(sql), {"today": today}).mappings()
+                    rows = conn.execute(
+                        text(sql), {"today_start": today_start, "today_end": today_end}
+                    ).mappings()
 
                     from collections import defaultdict
                     by_type = defaultdict(lambda: 0.0)
@@ -2605,14 +2638,18 @@ def get_quick_insights(
                 jnl_descript_col = _pick_column(jnl_cols, ["descript", "description", "desc"]) or None
 
                 if jnl_date_col and jnl_line_col and jnl_sale_col and jnl_price_col and jnl_descript_col:
+                    today_start = f"{today} 00:00:00"
+                    today_end = f"{today} 23:59:59"
                     sql = f"""
                         SELECT `{jnl_sale_col}` AS sale_id, `{jnl_line_col}` AS line_code,
                                `{jnl_price_col}` AS price, `{jnl_descript_col}` AS descript
                         FROM jnl
-                        WHERE DATE(`{jnl_date_col}`) = :today
+                        WHERE `{jnl_date_col}` >= :today_start AND `{jnl_date_col}` <= :today_end
                         ORDER BY `{jnl_sale_col}`, `{jnl_line_col}`
                     """
-                    rows = conn.execute(text(sql), {"today": today}).mappings()
+                    rows = conn.execute(
+                        text(sql), {"today_start": today_start, "today_end": today_end}
+                    ).mappings()
 
                     current_sale = None
                     current_group = []
@@ -2689,10 +2726,21 @@ def get_quick_insights(
 
                 where_parts = [f"poh.`{poh_status_col}` IN (4, 6, 8)"]
                 date_filters = []
+                params: Dict[str, Any] = {}
+                # Use date range comparison (not DATE() function) to allow index usage
                 if poh_rcv_col:
-                    date_filters.append(f"(poh.`{poh_status_col}` IN (4, 6) AND DATE(poh.`{poh_rcv_col}`) >= :three_days_ago)")
+                    three_days_ago_dt = f"{three_days_ago} 00:00:00"
+                    date_filters.append(
+                        f"(poh.`{poh_status_col}` IN (4, 6) AND poh.`{poh_rcv_col}` >= :three_days_ago_dt)"
+                    )
+                    params["three_days_ago_dt"] = three_days_ago_dt
                 if poh_ord_col:
-                    date_filters.append(f"(poh.`{poh_status_col}` = 8 AND DATE(poh.`{poh_ord_col}`) >= :three_days_ago)")
+                    three_days_ago_dt = f"{three_days_ago} 00:00:00"
+                    date_filters.append(
+                        f"(poh.`{poh_status_col}` = 8 AND poh.`{poh_ord_col}` >= :three_days_ago_dt)"
+                    )
+                    if "three_days_ago_dt" not in params:
+                        params["three_days_ago_dt"] = three_days_ago_dt
                 if date_filters:
                     where_parts.append(f"({' OR '.join(date_filters)})")
 
@@ -2968,19 +3016,20 @@ def get_product_history(
                                 jnl_where.append(f"`{jnl_rflag_col}` = 0")
 
                             # Limit to last 2 years to prevent timeout
+                            # Use date range comparison (not DATE() function) to allow index usage
                             from datetime import datetime, timedelta
 
                             two_years_ago = (
                                 datetime.now() - timedelta(days=730)
-                            ).strftime("%Y-%m-%d")
-                            jnl_where.append(f"DATE(`{jnl_date_col}`) >= :date_limit")
+                            ).strftime("%Y-%m-%d 00:00:00")
+                            jnl_where.append(f"`{jnl_date_col}` >= :date_limit")
                             jnl_params["date_limit"] = two_years_ago
 
                             # Group by year-month for monthly totals
                             qty_expr = f"`{jnl_qty_col}`" if jnl_qty_col else "1"
                             price_expr = f"`{jnl_price_col}`" if jnl_price_col else "0"
 
-                            # Use DATE() to extract date part, then format in Python for cross-database compatibility
+                            # Use DATE() only in SELECT/GROUP BY, use date range in WHERE to allow index usage
                             # Limit to 365 days (1 year) of daily data to prevent timeout
                             monthly_sql = f"""
                                 SELECT 

@@ -3178,7 +3178,7 @@ const InventoryModule = ({ snapshot, dateRange, onDateRangeChange }) => {
 const fetchProductHistory = async (authToken, storeQuery, searchQuery, signal) => {
   // Check cache first - cache key includes search query
   const cacheKey = `product_history_${storeQuery}_${searchQuery || 'all'}`;
-  const cached = getCachedData(cacheKey, STORAGE_KEYS.salesCache, 10); // 10 min cache for product history
+  const cached = getCachedData(cacheKey, STORAGE_KEYS.salesCache, 15); // 15 min cache for product history
   if (cached) {
     return cached;
   }
@@ -4201,7 +4201,7 @@ const ModuleNav = ({ active, onChange }) => {
         const fetchSales = async (authToken, query, signal) => {
           // Check cache first
           const cacheKey = createCacheKey('sales', query);
-          const cached = getCachedData(cacheKey, STORAGE_KEYS.salesCache, 5);
+          const cached = getCachedData(cacheKey, STORAGE_KEYS.salesCache, 10); // Increased to 10 min for better performance
           if (cached) {
             return cached;
           }
@@ -4272,7 +4272,7 @@ const ModuleNav = ({ active, onChange }) => {
         const fetchTenders = async (authToken, query, signal) => {
           // Check cache first
           const cacheKey = createCacheKey('tenders', query);
-          const cached = getCachedData(cacheKey, STORAGE_KEYS.tendersCache, 5);
+          const cached = getCachedData(cacheKey, STORAGE_KEYS.tendersCache, 10); // Increased to 10 min
           if (cached) {
             return cached;
           }
@@ -4302,7 +4302,7 @@ const ModuleNav = ({ active, onChange }) => {
         const fetchGateway = async (authToken, query, signal) => {
           // Check cache first
           const cacheKey = createCacheKey('gateway', query);
-          const cached = getCachedData(cacheKey, STORAGE_KEYS.gatewayCache, 5);
+          const cached = getCachedData(cacheKey, STORAGE_KEYS.gatewayCache, 10); // Increased to 10 min
           if (cached) {
             return cached;
           }
@@ -4332,7 +4332,7 @@ const ModuleNav = ({ active, onChange }) => {
         const fetchOperations = async (authToken, query, signal) => {
           // Check cache first - operations data is cached per store and month
           const cacheKey = createCacheKey('operations', query);
-          const cached = getCachedData(cacheKey, STORAGE_KEYS.operationsCache, 5);
+          const cached = getCachedData(cacheKey, STORAGE_KEYS.operationsCache, 10); // Increased to 10 min
           if (cached) {
             return cached;
           }
@@ -4362,7 +4362,7 @@ const ModuleNav = ({ active, onChange }) => {
         const fetchQuick = async (authToken, query, signal) => {
           // Check cache first
           const cacheKey = createCacheKey('quick', query);
-          const cached = getCachedData(cacheKey, STORAGE_KEYS.quickCache, 5);
+          const cached = getCachedData(cacheKey, STORAGE_KEYS.quickCache, 10); // Increased to 10 min
           if (cached) {
             return cached;
           }
