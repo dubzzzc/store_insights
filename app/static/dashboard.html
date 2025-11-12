@@ -5308,20 +5308,21 @@ const ModuleNav = ({ active, onChange }) => {
           setMobilityError('');
           
           // Construct the URL for Spirits Mobility
-          const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
-          const mobilityUrl = `${protocol}//${ip}:${port}`;
+          // Spirits Mobility is a PHP program where index.html controls the login process
+          // Always use unsecured HTTP (not HTTPS)
+          const mobilityUrl = `http://${ip}:${port}/index.html`;
           
-          // Try to connect to the Mobility server
-          // First, verify the server is reachable (optional check)
-          fetch(`${mobilityUrl}/`, { 
+          // Try to connect to the Mobility server (optional check)
+          // This helps verify the server is reachable before redirecting
+          fetch(`${mobilityUrl}`, { 
             method: 'HEAD',
             mode: 'no-cors',
             cache: 'no-cache'
           }).catch(() => {
-            // Ignore CORS errors, just try to navigate
+            // Ignore CORS errors - the server might not allow CORS, but we'll still try to navigate
           });
           
-          // Redirect to the Mobility server
+          // Redirect to the Spirits Mobility login screen (index.html) using unsecured HTTP
           setTimeout(() => {
             window.location.href = mobilityUrl;
           }, 500);
