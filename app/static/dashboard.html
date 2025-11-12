@@ -3308,33 +3308,74 @@ const HistoryModule = ({ token, storeQueryValue }) => {
         <div className="empty-state" style={{ color: 'var(--danger)' }}>{error}</div>
       ) : products.length ? (
         <div>
-          {/* Mobile: Show list or details, not both */}
-          {isMobile ? (
-            selectedProduct ? (
-              <div>
-                {/* Back button for mobile */}
-                <button
-                  onClick={() => setSelectedProduct(null)}
+          {/* Product List - Brief Summary */}
+          <div>
+            <h3 style={{ margin: '0 0 1rem 0', fontSize: '1rem' }}>Products ({products.length})</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+              {products.map((product, idx) => (
+                <div
+                  key={`product-${product.sku || idx}-${product.upc || idx}-${idx}`}
+                  onClick={() => setSelectedProduct(product)}
                   style={{
-                    marginBottom: '1rem',
-                    padding: '0.5rem 1rem',
-                    backgroundColor: 'var(--neutral)',
+                    padding: '1rem',
                     border: '1px solid var(--panel-border)',
-                    borderRadius: '4px',
+                    borderRadius: '8px',
                     cursor: 'pointer',
-                    fontSize: '0.9rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem'
+                    backgroundColor: 'var(--panel-bg)',
+                    transition: 'all 0.2s',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--panel-bg-hover)';
+                    e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--panel-bg)';
+                    e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
                   }}
                 >
-                  ← Back to List
-                </button>
-                {/* Product Details */}
-                <div>
-                  <div style={{ marginBottom: '1.5rem' }}>
-                    <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem' }}>{selectedProduct.name || '—'}</h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                  <div style={{ fontWeight: '600', marginBottom: '0.5rem', fontSize: '1rem', color: 'var(--text)' }}>
+                    {product.name || '—'}
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                    <div><strong>SKU:</strong> {product.sku || '—'}</div>
+                    {product.upc && <div><strong>UPC:</strong> {product.upc}</div>}
+                    <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                      <div><strong>Price:</strong> {formatCurrency(product.price || 0)}</div>
+                      <div><strong>Cost:</strong> {formatCurrency(product.cost || 0)}</div>
+                    </div>
+                    {product.stock_qty !== null && product.stock_qty !== undefined && (
+                      <div style={{ marginTop: '0.5rem' }}>
+                        <strong>Stock:</strong> {formatQuantity(product.stock_qty)}
+                        {product.stock_floor !== null && product.stock_floor !== undefined && product.stock_floor !== 0 && (
+                          <span> | <strong>Floor:</strong> {formatQuantity(product.stock_floor)}</span>
+                        )}
+                        {product.stock_kit !== null && product.stock_kit !== undefined && product.stock_kit !== 0 && (
+                          <span> | <strong>Kit:</strong> {formatQuantity(product.stock_kit)}</span>
+                        )}
+                      </div>
+                    )}
+                    <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--primary)', fontWeight: '500' }}>
+                      Click to view details →
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Modal for Product Details */}
+          {selectedProduct && (
+            <div className="modal-overlay" onClick={() => setSelectedProduct(null)}>
+              <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: isMobile ? '95%' : '900px', maxHeight: '90vh', overflowY: 'auto' }}>
+                <div className="modal-header">
+                  <h3>{selectedProduct.name || 'Product Details'}</h3>
+                  <button className="modal-close" onClick={() => setSelectedProduct(null)}>×</button>
+                </div>
+                <div style={{ padding: '1.5rem' }}>
+                  {/* Product Information */}
+                  <div style={{ marginBottom: '2rem', paddingBottom: '1.5rem', borderBottom: '1px solid var(--panel-border)' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '1rem', fontSize: '0.9rem' }}>
                       <div><strong>SKU:</strong> {selectedProduct.sku || '—'}</div>
                       {selectedProduct.upc && <div><strong>UPC:</strong> {selectedProduct.upc}</div>}
                       <div><strong>Price:</strong> {formatCurrency(selectedProduct.price || 0)}</div>
@@ -3351,12 +3392,14 @@ const HistoryModule = ({ token, storeQueryValue }) => {
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    {selectedProduct.purchase_orders?.length > 0 ? (
-                      <div>
-                        <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.95rem' }}>Last 5 Purchase Orders</h4>
+                  {/* Purchase Orders and Sales */}
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1.5rem' }}>
+                    {/* Last 5 Purchase Orders */}
+                    <div>
+                      <h4 style={{ margin: '0 0 1rem 0', fontSize: '1rem', fontWeight: '600' }}>Last 5 Purchase Orders</h4>
+                      {selectedProduct.purchase_orders?.length > 0 ? (
                         <div className="table-wrapper" style={{ overflowX: 'auto' }}>
-                          <table style={{ fontSize: '0.85rem', minWidth: '100%' }}>
+                          <table style={{ fontSize: '0.9rem', width: '100%' }}>
                             <thead>
                               <tr>
                                 <th>PO ID</th>
@@ -3377,19 +3420,17 @@ const HistoryModule = ({ token, storeQueryValue }) => {
                             </tbody>
                           </table>
                         </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.95rem' }}>Last 5 Purchase Orders</h4>
-                        <div className="empty-state" style={{ padding: '1rem', fontSize: '0.85rem' }}>No purchase orders found</div>
-                      </div>
-                    )}
+                      ) : (
+                        <div className="empty-state" style={{ padding: '1rem', fontSize: '0.9rem' }}>No purchase orders found</div>
+                      )}
+                    </div>
 
-                    {selectedProduct.recent_sales?.length > 0 ? (
-                      <div>
-                        <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.95rem' }}>Last 5 Sales</h4>
+                    {/* Last 5 Sales */}
+                    <div>
+                      <h4 style={{ margin: '0 0 1rem 0', fontSize: '1rem', fontWeight: '600' }}>Last 5 Sales</h4>
+                      {selectedProduct.recent_sales?.length > 0 ? (
                         <div className="table-wrapper" style={{ overflowX: 'auto' }}>
-                          <table style={{ fontSize: '0.85rem', minWidth: '100%' }}>
+                          <table style={{ fontSize: '0.9rem', width: '100%' }}>
                             <thead>
                               <tr>
                                 <th>Sale ID</th>
@@ -3410,179 +3451,13 @@ const HistoryModule = ({ token, storeQueryValue }) => {
                             </tbody>
                           </table>
                         </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.95rem' }}>Last 5 Sales</h4>
-                        <div className="empty-state" style={{ padding: '1rem', fontSize: '0.85rem' }}>No sales found</div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              /* Product List for Mobile */
-              <div>
-                <h3 style={{ margin: '0 0 1rem 0', fontSize: '0.95rem' }}>Products ({products.length})</h3>
-                <div style={{ maxHeight: '70vh', overflowY: 'auto' }}>
-                  {products.map((product, idx) => (
-                    <div
-                      key={`product-${product.sku || idx}-${product.upc || idx}-${idx}`}
-                      onClick={() => setSelectedProduct(product)}
-                      style={{
-                        padding: '0.75rem',
-                        marginBottom: '0.5rem',
-                        border: '1px solid var(--panel-border)',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        backgroundColor: 'transparent',
-                        transition: 'all 0.2s'
-                      }}
-                    >
-                      <div style={{ fontWeight: '500', marginBottom: '0.25rem', fontSize: '0.9rem' }}>{product.name || '—'}</div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                        <div>SKU: {product.sku || '—'}</div>
-                        {product.upc && <div>UPC: {product.upc}</div>}
-                        <div>Price: {formatCurrency(product.price || 0)}</div>
-                        {product.stock_qty !== null && product.stock_qty !== undefined && (
-                          <div>Stock: {formatQuantity(product.stock_qty)}</div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )
-          ) : (
-            /* Desktop: Show list and details side by side */
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              {/* Product List */}
-              <div style={{ flex: '0 0 300px', borderRight: '1px solid var(--panel-border)', paddingRight: '1rem' }}>
-                <h3 style={{ margin: '0 0 1rem 0', fontSize: '1rem' }}>Products ({products.length})</h3>
-                <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
-                  {products.map((product, idx) => (
-                    <div
-                      key={`product-${product.sku || idx}-${product.upc || idx}-${idx}`}
-                      onClick={() => setSelectedProduct(product)}
-                      style={{
-                        padding: '0.75rem',
-                        marginBottom: '0.5rem',
-                        border: selectedProduct?.sku === product.sku ? '2px solid var(--primary)' : '1px solid var(--panel-border)',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        backgroundColor: selectedProduct?.sku === product.sku ? 'var(--panel-bg-hover)' : 'transparent',
-                        transition: 'all 0.2s'
-                      }}
-                    >
-                      <div style={{ fontWeight: '500', marginBottom: '0.25rem' }}>{product.name || '—'}</div>
-                      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                        <div>SKU: {product.sku || '—'}</div>
-                        {product.upc && <div>UPC: {product.upc}</div>}
-                        <div>Price: {formatCurrency(product.price || 0)}</div>
-                        {product.stock_qty !== null && product.stock_qty !== undefined && (
-                          <div>Stock: {formatQuantity(product.stock_qty)}</div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              
-              {/* Product Details */}
-              {selectedProduct ? (
-                <div style={{ flex: '1', paddingLeft: '1rem' }}>
-                  <div style={{ marginBottom: '1.5rem' }}>
-                    <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.2rem' }}>{selectedProduct.name || '—'}</h3>
-                    <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.9rem', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
-                      <span><strong>SKU:</strong> {selectedProduct.sku || '—'}</span>
-                      {selectedProduct.upc && <span><strong>UPC:</strong> {selectedProduct.upc}</span>}
-                      <span><strong>Price:</strong> {formatCurrency(selectedProduct.price || 0)}</span>
-                      <span><strong>Cost:</strong> {formatCurrency(selectedProduct.cost || 0)}</span>
-                      {selectedProduct.stock_qty !== null && selectedProduct.stock_qty !== undefined && (
-                        <span><strong>Stock Qty:</strong> {formatQuantity(selectedProduct.stock_qty)}</span>
-                      )}
-                      {selectedProduct.stock_floor !== null && selectedProduct.stock_floor !== undefined && (
-                        <span><strong>Floor:</strong> {formatQuantity(selectedProduct.stock_floor)}</span>
-                      )}
-                      {selectedProduct.stock_kit !== null && selectedProduct.stock_kit !== undefined && (
-                        <span><strong>Kit:</strong> {formatQuantity(selectedProduct.stock_kit)}</span>
+                      ) : (
+                        <div className="empty-state" style={{ padding: '1rem', fontSize: '0.9rem' }}>No sales found</div>
                       )}
                     </div>
                   </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                    {selectedProduct.purchase_orders?.length > 0 ? (
-                      <div>
-                        <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Last 5 Purchase Orders</h4>
-                        <div className="table-wrapper">
-                          <table style={{ fontSize: '0.9rem' }}>
-                            <thead>
-                              <tr>
-                                <th>PO ID</th>
-                                <th>Date</th>
-                                <th>Qty</th>
-                                <th>Amount</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {selectedProduct.purchase_orders.map((po, idx) => (
-                                <tr key={`po-${po.po_id || idx}-${idx}`}>
-                                  <td>{po.po_id || '—'}</td>
-                                  <td>{po.date || '—'}</td>
-                                  <td>{formatQuantity(po.qty || 0)}</td>
-                                  <td>{formatCurrency(po.amount || 0)}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Last 5 Purchase Orders</h4>
-                        <div className="empty-state" style={{ padding: '1rem' }}>No purchase orders found</div>
-                      </div>
-                    )}
-
-                    {selectedProduct.recent_sales?.length > 0 ? (
-                      <div>
-                        <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Last 5 Sales</h4>
-                        <div className="table-wrapper">
-                          <table style={{ fontSize: '0.9rem' }}>
-                            <thead>
-                              <tr>
-                                <th>Sale ID</th>
-                                <th>Date</th>
-                                <th>Qty</th>
-                                <th>Amount</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {selectedProduct.recent_sales.map((sale, idx) => (
-                                <tr key={`sale-${sale.sale_id || idx}-${idx}`}>
-                                  <td>{sale.sale_id || '—'}</td>
-                                  <td>{sale.date || '—'}</td>
-                                  <td>{formatQuantity(sale.qty || 0)}</td>
-                                  <td>{formatCurrency(sale.amount || 0)}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Last 5 Sales</h4>
-                        <div className="empty-state" style={{ padding: '1rem' }}>No sales found</div>
-                      </div>
-                    )}
-                  </div>
                 </div>
-              ) : (
-                <div style={{ flex: '1', paddingLeft: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-                  <p>Select a product from the list to view details</p>
-                </div>
-              )}
+              </div>
             </div>
           )}
         </div>
