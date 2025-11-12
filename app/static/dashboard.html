@@ -5404,9 +5404,17 @@ const ModuleNav = ({ active, onChange }) => {
           setSelectedStore(nextStore || null);
         }, []);
 
+        // Always start with selection view when no token (user can be coming back from Spirits Mobility)
         const [loginView, setLoginView] = useState('selection'); // 'selection', 'insights', 'mobility'
         const [isConnectingMobility, setIsConnectingMobility] = useState(false);
         const [mobilityError, setMobilityError] = useState('');
+
+        // Reset to selection view when component mounts without token (handles browser back button)
+        useEffect(() => {
+          if (!token && loginView !== 'selection') {
+            setLoginView('selection');
+          }
+        }, [token, loginView]);
 
         const handleMobilityConnect = (ip, port) => {
           setIsConnectingMobility(true);
@@ -5427,9 +5435,10 @@ const ModuleNav = ({ active, onChange }) => {
             // Ignore CORS errors - the server might not allow CORS, but we'll still try to navigate
           });
           
-          // Redirect to the Spirits Mobility login screen (index.html) using unsecured HTTP
+          // Use replace() instead of href to remove the connection form from browser history
+          // This way, when user clicks back from Spirits Mobility, they'll go to the login selector
           setTimeout(() => {
-            window.location.href = mobilityUrl;
+            window.location.replace(mobilityUrl);
           }, 500);
         };
 
