@@ -3334,130 +3334,157 @@ def get_product_history(
                     }
 
                     # Get last 5 purchase orders from pod
-                    if _table_exists(conn, db_name, "pod"):
-                        pod_cols = _get_columns(conn, db_name, "pod")
-                        pod_sku_col = _pick_column(pod_cols, ["sku"]) or "sku"
-                        pod_po_col = (
-                            _pick_column(pod_cols, ["po", "po_id", "poh_id", "invno"])
-                            or None
-                        )
-                        # Use oqty column for order quantity (as specified by user)
-                        pod_oqty_col = (
-                            _pick_column(
-                                pod_cols, ["oqty", "order_qty", "qty", "quantity"]
+                    try:
+                        if _table_exists(conn, db_name, "pod"):
+                            pod_cols = _get_columns(conn, db_name, "pod")
+                            pod_sku_col = _pick_column(pod_cols, ["sku"]) or "sku"
+                            pod_po_col = (
+                                _pick_column(
+                                    pod_cols,
+                                    ["order", "po", "po_id", "poh_id", "invno"],
+                                )
+                                or None
                             )
-                            or None
-                        )
-                        pod_name_col = (
-                            _pick_column(pod_cols, ["name", "desc", "description"])
-                            or None
-                        )
-                        pod_date_col = (
-                            _pick_column(pod_cols, ["date", "pdate", "created_at"])
-                            or None
-                        )
-                        pod_store_col = (
-                            _pick_column(pod_cols, ["store", "store_id", "store_num"])
-                            or None
-                        )
-
-                        # Get sname from inv table (size name)
-                        inv_sname_col = None
-                        if _table_exists(conn, db_name, "inv"):
-                            inv_cols = _get_columns(conn, db_name, "inv")
-                            inv_sname_col = (
-                                _pick_column(inv_cols, ["sname", "size_name", "size"])
+                            # Use oqty column for order quantity (as specified by user)
+                            pod_oqty_col = (
+                                _pick_column(
+                                    pod_cols, ["oqty", "order_qty", "qty", "quantity"]
+                                )
+                                or None
+                            )
+                            pod_name_col = (
+                                _pick_column(pod_cols, ["name", "desc", "description"])
+                                or None
+                            )
+                            pod_date_col = (
+                                _pick_column(pod_cols, ["date", "pdate", "created_at"])
+                                or None
+                            )
+                            pod_store_col = (
+                                _pick_column(
+                                    pod_cols, ["store", "store_id", "store_num"]
+                                )
                                 or None
                             )
 
-                        if pod_sku_col and pod_po_col:
-                            # Select columns: order number, sname (from inv), oqty, name, sku
-                            pod_select_parts = [
-                                f"pod.`{pod_po_col}` AS po_id",
-                                f"pod.`{pod_sku_col}` AS sku",
-                            ]
-
-                            # Add sname from inv if available
-                            if inv_sname_col:
-                                pod_select_parts.append(
-                                    f"inv.`{inv_sname_col}` AS sname"
-                                )
-                            else:
-                                pod_select_parts.append("NULL AS sname")
-
-                            # Add oqty (order quantity)
-                            if pod_oqty_col:
-                                pod_select_parts.append(f"pod.`{pod_oqty_col}` AS oqty")
-                            else:
-                                pod_select_parts.append("NULL AS oqty")
-
-                            # Add name from pod
-                            if pod_name_col:
-                                pod_select_parts.append(f"pod.`{pod_name_col}` AS name")
-                            else:
-                                pod_select_parts.append("NULL AS name")
-
-                            # Add date if available
-                            if pod_date_col:
-                                pod_select_parts.append(
-                                    f"DATE(pod.`{pod_date_col}`) AS po_date"
+                            # Get sname from inv table (size name)
+                            inv_sname_col = None
+                            if _table_exists(conn, db_name, "inv"):
+                                inv_cols = _get_columns(conn, db_name, "inv")
+                                inv_sname_col = (
+                                    _pick_column(
+                                        inv_cols, ["sname", "size_name", "size"]
+                                    )
+                                    or None
                                 )
 
-                            # Build JOIN with inv to get sname
-                            join_inv = ""
-                            if inv_sname_col:
-                                join_inv = f"INNER JOIN inv ON inv.`{inv_sku_col}` = pod.`{pod_sku_col}`"
+                            if pod_sku_col and pod_po_col:
+                                # Select columns: order number, sname (from inv), oqty, name, sku
+                                pod_select_parts = [
+                                    f"pod.`{pod_po_col}` AS po_id",
+                                    f"pod.`{pod_sku_col}` AS sku",
+                                ]
 
-                            pod_where_parts = [f"pod.`{pod_sku_col}` = :sku"]
-                            pod_params = {"sku": sku}
+                                # Add sname from inv if available
+                                if inv_sname_col:
+                                    pod_select_parts.append(
+                                        f"inv.`{inv_sname_col}` AS sname"
+                                    )
+                                else:
+                                    pod_select_parts.append("NULL AS sname")
 
-                            # Add store filter if store_number is available
-                            if store_number is not None and pod_store_col:
-                                pod_where_parts.append(
-                                    f"pod.`{pod_store_col}` = :pod_store_number"
-                                )
-                                pod_params["pod_store_number"] = store_number
+                                # Add oqty (order quantity)
+                                if pod_oqty_col:
+                                    pod_select_parts.append(
+                                        f"pod.`{pod_oqty_col}` AS oqty"
+                                    )
+                                else:
+                                    pod_select_parts.append("NULL AS oqty")
 
-                            pod_sql = f"""
-                                SELECT {', '.join(pod_select_parts)}
-                                FROM pod
-                                {join_inv}
-                                WHERE {' AND '.join(pod_where_parts)}
-                                ORDER BY pod.`{pod_po_col}` DESC
-                                LIMIT 5
-                            """
+                                # Add name from pod
+                                if pod_name_col:
+                                    pod_select_parts.append(
+                                        f"pod.`{pod_name_col}` AS name"
+                                    )
+                                else:
+                                    pod_select_parts.append("NULL AS name")
 
-                            pod_rows = conn.execute(
-                                text(pod_sql), pod_params
-                            ).mappings()
-                            for pod_row in pod_rows:
-                                product["purchase_orders"].append(
-                                    {
-                                        "po_id": str(pod_row.get("po_id", "")),
-                                        "sku": str(pod_row.get("sku", "")),
-                                        "sname": (
-                                            str(pod_row.get("sname", ""))
-                                            if pod_row.get("sname")
-                                            else None
-                                        ),
-                                        "oqty": (
-                                            float(pod_row.get("oqty", 0) or 0)
-                                            if pod_oqty_col
-                                            and pod_row.get("oqty") is not None
-                                            else 0
-                                        ),
-                                        "name": (
-                                            str(pod_row.get("name", ""))
-                                            if pod_row.get("name")
-                                            else None
-                                        ),
-                                        "date": (
-                                            str(pod_row.get("po_date", ""))
-                                            if pod_date_col and pod_row.get("po_date")
-                                            else None
-                                        ),
-                                    }
-                                )
+                                # Add date if available
+                                if pod_date_col:
+                                    pod_select_parts.append(
+                                        f"DATE(pod.`{pod_date_col}`) AS po_date"
+                                    )
+
+                                # Build JOIN with inv to get sname (LEFT JOIN so we don't filter out pod records)
+                                join_inv = ""
+                                if inv_sname_col:
+                                    join_inv = f"LEFT JOIN inv ON inv.`{inv_sku_col}` = pod.`{pod_sku_col}`"
+
+                                pod_where_parts = [f"pod.`{pod_sku_col}` = :sku"]
+                                pod_params = {"sku": sku}
+
+                                # Add store filter if store_number is available
+                                if store_number is not None and pod_store_col:
+                                    pod_where_parts.append(
+                                        f"pod.`{pod_store_col}` = :pod_store_number"
+                                    )
+                                    pod_params["pod_store_number"] = store_number
+
+                                # Order by date (most recent first) if available, otherwise by po_id
+                                order_by = f"pod.`{pod_po_col}` DESC"
+                                if pod_date_col:
+                                    order_by = f"pod.`{pod_date_col}` DESC, pod.`{pod_po_col}` DESC"
+
+                                pod_sql = f"""
+                                    SELECT {', '.join(pod_select_parts)}
+                                    FROM pod
+                                    {join_inv}
+                                    WHERE {' AND '.join(pod_where_parts)}
+                                    ORDER BY {order_by}
+                                    LIMIT 5
+                                """
+
+                                pod_rows = conn.execute(
+                                    text(pod_sql), pod_params
+                                ).mappings()
+                                for pod_row in pod_rows:
+                                    product["purchase_orders"].append(
+                                        {
+                                            "po_id": str(pod_row.get("po_id", "")),
+                                            "sku": str(pod_row.get("sku", "")),
+                                            "sname": (
+                                                str(pod_row.get("sname", ""))
+                                                if pod_row.get("sname")
+                                                else None
+                                            ),
+                                            "oqty": (
+                                                float(pod_row.get("oqty", 0) or 0)
+                                                if pod_oqty_col
+                                                and pod_row.get("oqty") is not None
+                                                else 0
+                                            ),
+                                            "name": (
+                                                str(pod_row.get("name", ""))
+                                                if pod_row.get("name")
+                                                else None
+                                            ),
+                                            "date": (
+                                                str(pod_row.get("po_date", ""))
+                                                if pod_date_col
+                                                and pod_row.get("po_date")
+                                                else None
+                                            ),
+                                        }
+                                    )
+                    except Exception as pod_error:
+                        # Log error but don't fail the entire request
+                        # Purchase orders are optional, so we'll just leave the list empty
+                        import logging
+
+                        logging.warning(
+                            f"Error fetching purchase orders for SKU {sku}: {str(pod_error)}"
+                        )
+                        pass
 
                     # Get last 5 sales from jnl
                     if _table_exists(conn, db_name, "jnl"):
