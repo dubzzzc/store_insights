@@ -973,11 +973,19 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
                     ),
                 ]
             elif table_lower == "hst":
-                # Composite index for duplicate checking (SKU + date)
+                # Indexes for hst table (sales history)
                 indexes = [
                     (
                         "idx_hst_sku_date",
                         f"CREATE INDEX idx_hst_sku_date ON {target} ([{col_sku}], [{col_date}])",
+                    ),
+                    (
+                        "idx_hst_date_sku",
+                        f"CREATE INDEX idx_hst_date_sku ON {target} ([{col_date}], [{col_sku}])",
+                    ),
+                    (
+                        "idx_hst_date",
+                        f"CREATE INDEX idx_hst_date ON {target} ([{col_date}])",
                     ),
                 ]
             elif table_lower in ("slh", "sll"):
@@ -1033,7 +1041,7 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
                     index_list.append(("idx_pod_store", col_store))
                 # Composite index for common query pattern: sku + order
                 index_list.append(("idx_pod_sku_order", f"{col_sku}, {col_order}"))
-                
+
                 indexes = [
                     (name, f"CREATE INDEX {name} ON {target} ([{cols}])")
                     for name, cols in index_list
@@ -1166,11 +1174,19 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
                     ),
                 ]
             elif table_lower == "hst":
-                # Composite index for duplicate checking (SKU + date)
+                # Indexes for hst table (sales history)
                 indexes = [
                     (
                         "idx_hst_sku_date",
                         f"CREATE INDEX idx_hst_sku_date ON {target} (`{col_sku}`, `{col_date}`)",
+                    ),
+                    (
+                        "idx_hst_date_sku",
+                        f"CREATE INDEX idx_hst_date_sku ON {target} (`{col_date}`, `{col_sku}`)",
+                    ),
+                    (
+                        "idx_hst_date",
+                        f"CREATE INDEX idx_hst_date ON {target} (`{col_date}`)",
                     ),
                 ]
             elif table_lower in ("slh", "sll"):
@@ -1226,7 +1242,7 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
                     index_list.append(("idx_pod_store", col_store))
                 # Composite index for common query pattern: sku + order
                 index_list.append(("idx_pod_sku_order", f"`{col_sku}`, `{col_order}`"))
-                
+
                 indexes = [
                     (name, f"CREATE INDEX {name} ON {target} ({cols})")
                     for name, cols in index_list

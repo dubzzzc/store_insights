@@ -1493,6 +1493,24 @@ def get_sales_insights(
 
                 where_parts = [f"`{hst_sku}` > 0"]
                 params5: Dict[str, Any] = {}
+
+                # Limit date range to prevent excessive queries (max 90 days)
+                date_range_limited = False
+                if start and end:
+                    try:
+                        from datetime import datetime, timedelta
+
+                        start_dt = datetime.fromisoformat(start)
+                        end_dt = datetime.fromisoformat(end)
+                        days_diff = (end_dt - start_dt).days
+                        if days_diff > 90:
+                            # Limit to last 90 days from end date
+                            start_dt = end_dt - timedelta(days=90)
+                            start = start_dt.strftime("%Y-%m-%d")
+                            date_range_limited = True
+                    except Exception:
+                        pass
+
                 if start:
                     where_parts.append(f"`{hst_date}` >= :t_start_dt")
                     params5["t_start_dt"] = f"{start} 00:00:00"
