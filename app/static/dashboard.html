@@ -1110,6 +1110,14 @@
     text-align: center;
     position: relative;
     overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    min-height: 48px; /* Better touch target for mobile */
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .login-option-btn::before {
@@ -1136,6 +1144,21 @@
 
   .login-option-btn:active {
     transform: translateY(0);
+    background: rgba(14, 165, 233, 0.2);
+  }
+
+  /* Mobile-specific improvements */
+  @media (max-width: 768px) {
+    .login-option-btn {
+      padding: 1.5rem 1.5rem;
+      font-size: 1.1rem;
+      min-height: 56px;
+    }
+
+    .login-option-btn:active {
+      transform: scale(0.98);
+      background: rgba(14, 165, 233, 0.25);
+    }
   }
 
   .mobility-form {
@@ -2865,19 +2888,48 @@ const AdminView = ({
       };
 
       const LoginSelection = ({ onSelectInsights, onSelectMobility }) => {
+        // Handle both click and touch events for better mobile support
+        const handleInsightsClick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onSelectInsights();
+        };
+
+        const handleMobilityClick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onSelectMobility();
+        };
+
         return (
           <div className="login-options">
             <button
               type="button"
               className="login-option-btn"
-              onClick={onSelectInsights}
+              onClick={handleInsightsClick}
+              onTouchStart={(e) => {
+                // Prevent double-tap zoom on mobile
+                e.currentTarget.style.transform = 'scale(0.98)';
+              }}
+              onTouchEnd={(e) => {
+                e.currentTarget.style.transform = '';
+                handleInsightsClick(e);
+              }}
             >
               Login to Spirits Insights
             </button>
             <button
               type="button"
               className="login-option-btn"
-              onClick={onSelectMobility}
+              onClick={handleMobilityClick}
+              onTouchStart={(e) => {
+                // Prevent double-tap zoom on mobile
+                e.currentTarget.style.transform = 'scale(0.98)';
+              }}
+              onTouchEnd={(e) => {
+                e.currentTarget.style.transform = '';
+                handleMobilityClick(e);
+              }}
             >
               Login to Spirits Mobility
             </button>
@@ -5419,7 +5471,18 @@ const ModuleNav = ({ active, onChange }) => {
         // Reset to selection view only when token changes from truthy to falsy (handles logout/browser back)
         // Don't reset when user is actively selecting a login option
         const prevTokenRef = useRef(token);
+        const isInitialMount = useRef(true);
+        
         useEffect(() => {
+          // On initial mount, ensure we start with selection view (important for mobile)
+          if (isInitialMount.current) {
+            isInitialMount.current = false;
+            if (!token) {
+              setLoginView('selection');
+            }
+            return;
+          }
+          
           // Only reset if token changed from truthy to falsy (user logged out or came back from Spirits Mobility)
           // This prevents the flash when user clicks login options
           if (prevTokenRef.current && !token) {
@@ -5564,14 +5627,33 @@ const ModuleNav = ({ active, onChange }) => {
 
       // Register Service Worker for PWA functionality
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/service-worker.js')
-            .then((registration) => {
-              console.log('ServiceWorker registration successful:', registration.scope);
-            })
-            .catch((error) => {
-              console.log('ServiceWorker registration failed:', error);
+        // Register immediately, don't wait for load event (better for mobile)
+        navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
+          .then((registration) => {
+            console.log('ServiceWorker registration successful:', registration.scope);
+            
+            // Check for updates
+            registration.addEventListener('updatefound', () => {
+              const newWorker = registration.installing;
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  // New service worker available, can prompt user to refresh
+                  console.log('New service worker available');
+                }
+              });
             });
+          })
+          .catch((error) => {
+            console.log('ServiceWorker registration failed:', error);
+          });
+
+        // Handle service worker updates
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (!refreshing) {
+            refreshing = true;
+            window.location.reload();
+          }
         });
       }
 

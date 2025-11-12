@@ -1,8 +1,10 @@
 // Service Worker for Spirits Store Insights PWA
 const CACHE_NAME = 'spirits-insights-v1';
 const urlsToCache = [
+  '/',
   '/dashboard.html',
-  '/manifest.json'
+  '/manifest.json',
+  '/service-worker.js'
 ];
 
 // Install event - cache resources
@@ -39,8 +41,13 @@ self.addEventListener('activate', (event) => {
 
 // Fetch event - serve from cache, fallback to network
 self.addEventListener('fetch', (event) => {
-  // Skip non-GET requests and API calls
-  if (event.request.method !== 'GET' || event.request.url.includes('/api/')) {
+  // Skip non-GET requests, API calls, and external URLs
+  if (event.request.method !== 'GET' || 
+      event.request.url.includes('/api/') ||
+      event.request.url.includes('/auth/') ||
+      event.request.url.includes('/insights/') ||
+      event.request.url.includes('/admin/') ||
+      !event.request.url.startsWith(self.location.origin)) {
     return; // Let it go to network
   }
 
