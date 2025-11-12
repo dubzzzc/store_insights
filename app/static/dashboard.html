@@ -1480,6 +1480,20 @@
         }
       };
 
+      const clearAllCaches = () => {
+        try {
+          // Clear all cache keys to force fresh data when store changes
+          storage.set(STORAGE_KEYS.salesCache, {});
+          storage.set(STORAGE_KEYS.operationsCache, {});
+          storage.set(STORAGE_KEYS.tendersCache, {});
+          storage.set(STORAGE_KEYS.gatewayCache, {});
+          storage.set(STORAGE_KEYS.quickCache, {});
+          storage.set(STORAGE_KEYS.syncCache, {});
+        } catch (e) {
+          // Ignore errors
+        }
+      };
+
       const getStoreIdentifier = (store) => {
         if (!store) return '';
         if (store.store_id !== undefined && store.store_id !== null) {
@@ -4490,8 +4504,8 @@ const ModuleNav = ({ active, onChange }) => {
           if (stores.length > 1 && !selectedStore) return;
           // Update ref with latest storeQueryValue
           storeQueryValueRef.current = storeQueryValue;
-          // Always load insights when storeQueryValue changes (includes date changes)
-          // This handles initial load and date range changes
+          // Always load insights when storeQueryValue changes (includes date changes and store changes)
+          // This handles initial load, date range changes, and store changes
           loadInsights(token, storeQueryValue);
         }, [token, storeQueryValue, stores, selectedStore, userRole]);
 
@@ -4926,9 +4940,28 @@ const ModuleNav = ({ active, onChange }) => {
           );
         }
 
-        const handleStoreChange = (nextStore) => {
+        const handleStoreChange = useCallback((nextStore) => {
+          // Clear all caches when store changes to ensure fresh data
+          clearAllCaches();
+          
+          // Reset all data states to show loading state immediately
+          setSales([]);
+          setSalesSummary(null);
+          setTopItems([]);
+          setStoreMeta(null);
+          setSalesBreakdowns({ hourly: [], payment: [], payment_methods: [], categories: [] });
+          setPurchaseOrders([]);
+          setInventorySnapshot(null);
+          setSalesHistory([]);
+          setTendersData(null);
+          setGatewayData(null);
+          setOperationsData(null);
+          setQuickData(null);
+          setIsLoadingData(true);
+          
+          // Update store - this will trigger storeQueryValue to update, which triggers useEffect to load data
           setSelectedStore(nextStore || null);
-        };
+        }, []);
 
         const mainContent = userRole === 'admin'
           ? (
