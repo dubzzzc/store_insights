@@ -3024,12 +3024,17 @@ def get_product_history(
                     _pick_column(inv_cols, ["desc", "description", "name"])
                     or inv_sku_col
                 )
+                # Use invprice for price (as specified by user)
                 inv_price_col = (
-                    _pick_column(inv_cols, ["price", "sprice", "sell_price"]) or None
-                )
-                inv_cost_col = (
-                    _pick_column(inv_cols, ["lcost", "last_cost", "acost", "avg_cost"])
+                    _pick_column(
+                        inv_cols, ["invprice", "price", "sprice", "sell_price"]
+                    )
                     or None
+                )
+                # Use lcost and pack for cost calculation (cost = lcost/pack)
+                inv_cost_col = _pick_column(inv_cols, ["lcost", "last_cost"]) or None
+                inv_pack_col = (
+                    _pick_column(inv_cols, ["pack", "mult", "casepack"]) or None
                 )
                 inv_deleted_col = (
                     _pick_column(inv_cols, ["deleted", "del", "is_deleted"]) or None
@@ -3107,14 +3112,19 @@ def get_product_history(
                     where_parts.append(f"({' OR '.join(search_conditions)})")
 
                 # Limit results to top 50 products for performance
+                # Price from invprice
                 price_select = (
                     f"inv.`{inv_price_col}` AS price"
                     if inv_price_col
                     else "NULL AS price"
                 )
-                cost_select = (
-                    f"inv.`{inv_cost_col}` AS cost" if inv_cost_col else "NULL AS cost"
-                )
+                # Cost = lcost/pack (as specified by user)
+                if inv_cost_col and inv_pack_col:
+                    cost_select = f"COALESCE(inv.`{inv_cost_col}`, 0) / NULLIF(COALESCE(inv.`{inv_pack_col}`, 1), 0) AS cost"
+                elif inv_cost_col:
+                    cost_select = f"inv.`{inv_cost_col}` AS cost"
+                else:
+                    cost_select = "NULL AS cost"
 
                 inv_sql = f"""
                     SELECT DISTINCT inv.`{inv_sku_col}` AS sku,
@@ -3158,126 +3168,9 @@ def get_product_history(
                         "name": str(inv_row.get("name", "")) or None,
                         "price": float(inv_row.get("price", 0) or 0),
                         "cost": float(inv_row.get("cost", 0) or 0),
-                        "monthly_sales": [],
                         "purchase_orders": [],
                         "recent_sales": [],
                     }
-
-                    # Get monthly sales from jnl
-                    if _table_exists(conn, db_name, "jnl"):
-                        jnl_cols = _get_columns(conn, db_name, "jnl")
-                        jnl_sku_col = _pick_column(jnl_cols, ["sku"]) or "sku"
-                        jnl_date_col = (
-                            _pick_column(
-                                jnl_cols,
-                                [
-                                    "sale_date",
-                                    "trans_date",
-                                    "transaction_date",
-                                    "tdate",
-                                    "date",
-                                ],
-                            )
-                            or None
-                        )
-                        jnl_qty_col = (
-                            _pick_column(jnl_cols, ["qty", "quantity"]) or None
-                        )
-                        jnl_price_col = (
-                            _pick_column(jnl_cols, ["amount", "price", "total"]) or None
-                        )
-                        jnl_rflag_col = _pick_column(jnl_cols, ["rflag"]) or None
-
-                        if jnl_sku_col and jnl_date_col:
-                            jnl_where = [f"`{jnl_sku_col}` = :sku"]
-                            jnl_params = {"sku": sku}
-
-                            if jnl_rflag_col:
-                                jnl_where.append(f"`{jnl_rflag_col}` = 0")
-
-                            # Limit to last 2 years to prevent timeout
-                            # Use date range comparison (not DATE() function) to allow index usage
-                            from datetime import datetime, timedelta
-
-                            two_years_ago = (
-                                datetime.now() - timedelta(days=730)
-                            ).strftime("%Y-%m-%d 00:00:00")
-                            jnl_where.append(f"`{jnl_date_col}` >= :date_limit")
-                            jnl_params["date_limit"] = two_years_ago
-
-                            # Group by year-month for monthly totals
-                            qty_expr = f"`{jnl_qty_col}`" if jnl_qty_col else "1"
-                            price_expr = f"`{jnl_price_col}`" if jnl_price_col else "0"
-
-                            # Use DATE() only in SELECT/GROUP BY, use date range in WHERE to allow index usage
-                            # Limit to 365 days (1 year) of daily data to prevent timeout
-                            monthly_sql = f"""
-                                SELECT 
-                                    DATE(`{jnl_date_col}`) AS sale_date,
-                                    SUM({qty_expr}) AS total_qty,
-                                    SUM({price_expr}) AS total_amount
-                                FROM jnl
-                                WHERE {' AND '.join(jnl_where)}
-                                GROUP BY DATE(`{jnl_date_col}`)
-                                ORDER BY sale_date DESC
-                                LIMIT 365
-                            """
-
-                            monthly_rows = conn.execute(
-                                text(monthly_sql), jnl_params
-                            ).mappings()
-
-                            # Group by month in Python
-                            monthly_data = {}
-                            for month_row in monthly_rows:
-                                sale_date = month_row.get("sale_date")
-                                if sale_date:
-                                    # Format as YYYY-MM
-                                    if isinstance(sale_date, str):
-                                        # Parse date string
-                                        try:
-                                            dt = datetime.strptime(
-                                                sale_date.split()[0], "%Y-%m-%d"
-                                            )
-                                            month_key = dt.strftime("%Y-%m")
-                                        except:
-                                            month_key = (
-                                                sale_date[:7]
-                                                if len(sale_date) >= 7
-                                                else sale_date
-                                            )
-                                    else:
-                                        # datetime object
-                                        month_key = sale_date.strftime("%Y-%m")
-
-                                    if month_key not in monthly_data:
-                                        monthly_data[month_key] = {
-                                            "total_qty": 0.0,
-                                            "total_amount": 0.0,
-                                        }
-
-                                    monthly_data[month_key]["total_qty"] += float(
-                                        month_row.get("total_qty", 0) or 0
-                                    )
-                                    monthly_data[month_key]["total_amount"] += float(
-                                        month_row.get("total_amount", 0) or 0
-                                    )
-
-                            # Convert to list and sort by month (descending), limit to 24 months
-                            for month_key in sorted(monthly_data.keys(), reverse=True)[
-                                :24
-                            ]:
-                                product["monthly_sales"].append(
-                                    {
-                                        "month": month_key,
-                                        "total_qty": monthly_data[month_key][
-                                            "total_qty"
-                                        ],
-                                        "total_amount": monthly_data[month_key][
-                                            "total_amount"
-                                        ],
-                                    }
-                                )
 
                     # Get last 5 purchase orders from pod
                     if _table_exists(conn, db_name, "pod"):

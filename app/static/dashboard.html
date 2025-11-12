@@ -3225,12 +3225,21 @@ const fetchProductHistory = async (authToken, storeQuery, searchQuery, signal) =
 const HistoryModule = ({ token, storeQueryValue }) => {
   const [query, setQuery] = useState('');
   const [products, setProducts] = useState([]);
+  const [selectedProduct, setSelectedProduct] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const debounceRef = useRef(null);
 
   useEffect(() => {
     if (!token || !storeQueryValue) return;
+    
+    // Only search if query has at least 2 characters
+    if (!query || query.trim().length < 2) {
+      setProducts([]);
+      setIsLoading(false);
+      setError('');
+      return;
+    }
 
     // Debounce search to avoid too many API calls
     if (debounceRef.current) {
@@ -3246,13 +3255,15 @@ const HistoryModule = ({ token, storeQueryValue }) => {
         const payload = await fetchProductHistory(token, storeQueryValue, query, controller.signal);
         setProducts(payload.products || []);
         setIsLoading(false);
+        // Clear selected product when new search results come in
+        setSelectedProduct(null);
       } catch (err) {
         if (err.name !== 'AbortError') {
           setError(err.message || 'Unable to load product history');
           setIsLoading(false);
         }
       }
-    }, 500);
+    }, 300);
 
     return () => {
       if (debounceRef.current) {
@@ -3271,59 +3282,70 @@ const HistoryModule = ({ token, storeQueryValue }) => {
           type="text"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search product by UPC / SKU / Name"
+          placeholder="Enter SKU, scan/enter UPC, or type product name"
+          autoFocus
         />
       </div>
-      {isLoading ? (
+      
+      {!query || query.trim().length < 2 ? (
+        <div className="empty-state" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+          <p style={{ fontSize: '1rem', margin: '0.5rem 0' }}>Enter a SKU, scan or enter a UPC, or type a name of a product</p>
+          <p style={{ fontSize: '0.9rem', margin: '0.5rem 0' }}>Results will appear as you type</p>
+        </div>
+      ) : isLoading ? (
         <div className="empty-state">Loading product history...</div>
       ) : error ? (
         <div className="empty-state" style={{ color: 'var(--danger)' }}>{error}</div>
       ) : products.length ? (
-        <div className="history-table">
-          {products.map((product) => (
-            <div key={product.sku} style={{ marginBottom: '2rem', borderBottom: '1px solid var(--panel-border)', paddingBottom: '1.5rem' }}>
-              <div style={{ marginBottom: '1rem' }}>
-                <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem' }}>{product.name || '—'}</h3>
-                <div style={{ display: 'flex', gap: '1rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-                  <span><strong>SKU:</strong> {product.sku || '—'}</span>
-                  {product.upc && <span><strong>UPC:</strong> {product.upc}</span>}
-                  <span><strong>Price:</strong> {formatCurrency(product.price || 0)}</span>
-                  <span><strong>Cost:</strong> {formatCurrency(product.cost || 0)}</span>
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          {/* Product List */}
+          <div style={{ flex: '0 0 300px', borderRight: '1px solid var(--panel-border)', paddingRight: '1rem' }}>
+            <h3 style={{ margin: '0 0 1rem 0', fontSize: '1rem' }}>Products ({products.length})</h3>
+            <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
+              {products.map((product) => (
+                <div
+                  key={product.sku}
+                  onClick={() => setSelectedProduct(product)}
+                  style={{
+                    padding: '0.75rem',
+                    marginBottom: '0.5rem',
+                    border: selectedProduct?.sku === product.sku ? '2px solid var(--primary)' : '1px solid var(--panel-border)',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    backgroundColor: selectedProduct?.sku === product.sku ? 'var(--panel-bg-hover)' : 'transparent',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <div style={{ fontWeight: '500', marginBottom: '0.25rem' }}>{product.name || '—'}</div>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                    <div>SKU: {product.sku || '—'}</div>
+                    {product.upc && <div>UPC: {product.upc}</div>}
+                    <div>Price: {formatCurrency(product.price || 0)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          {/* Product Details */}
+          {selectedProduct ? (
+            <div style={{ flex: '1', paddingLeft: '1rem' }}>
+              <div style={{ marginBottom: '1.5rem' }}>
+                <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.2rem' }}>{selectedProduct.name || '—'}</h3>
+                <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.9rem', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+                  <span><strong>SKU:</strong> {selectedProduct.sku || '—'}</span>
+                  {selectedProduct.upc && <span><strong>UPC:</strong> {selectedProduct.upc}</span>}
+                  <span><strong>Price:</strong> {formatCurrency(selectedProduct.price || 0)}</span>
+                  <span><strong>Cost:</strong> {formatCurrency(selectedProduct.cost || 0)}</span>
                 </div>
               </div>
 
-              {product.monthly_sales?.length > 0 && (
-                <div style={{ marginBottom: '1rem' }}>
-                  <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.95rem' }}>Monthly Sales</h4>
-                  <div className="table-wrapper">
-                    <table style={{ fontSize: '0.85rem' }}>
-                      <thead>
-                        <tr>
-                          <th>Month</th>
-                          <th>Qty Sold</th>
-                          <th>Total Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {product.monthly_sales.map((month, idx) => (
-                          <tr key={idx}>
-                            <td>{month.month || '—'}</td>
-                            <td>{formatQuantity(month.total_qty || 0)}</td>
-                            <td>{formatCurrency(month.total_amount || 0)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                {product.purchase_orders?.length > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                {selectedProduct.purchase_orders?.length > 0 ? (
                   <div>
-                    <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.95rem' }}>Last 5 Purchase Orders</h4>
+                    <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Last 5 Purchase Orders</h4>
                     <div className="table-wrapper">
-                      <table style={{ fontSize: '0.85rem' }}>
+                      <table style={{ fontSize: '0.9rem' }}>
                         <thead>
                           <tr>
                             <th>PO ID</th>
@@ -3333,7 +3355,7 @@ const HistoryModule = ({ token, storeQueryValue }) => {
                           </tr>
                         </thead>
                         <tbody>
-                          {product.purchase_orders.map((po, idx) => (
+                          {selectedProduct.purchase_orders.map((po, idx) => (
                             <tr key={idx}>
                               <td>{po.po_id || '—'}</td>
                               <td>{po.date || '—'}</td>
@@ -3345,13 +3367,18 @@ const HistoryModule = ({ token, storeQueryValue }) => {
                       </table>
                     </div>
                   </div>
+                ) : (
+                  <div>
+                    <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Last 5 Purchase Orders</h4>
+                    <div className="empty-state" style={{ padding: '1rem' }}>No purchase orders found</div>
+                  </div>
                 )}
 
-                {product.recent_sales?.length > 0 && (
+                {selectedProduct.recent_sales?.length > 0 ? (
                   <div>
-                    <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.95rem' }}>Last 5 Sales</h4>
+                    <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Last 5 Sales</h4>
                     <div className="table-wrapper">
-                      <table style={{ fontSize: '0.85rem' }}>
+                      <table style={{ fontSize: '0.9rem' }}>
                         <thead>
                           <tr>
                             <th>Sale ID</th>
@@ -3361,7 +3388,7 @@ const HistoryModule = ({ token, storeQueryValue }) => {
                           </tr>
                         </thead>
                         <tbody>
-                          {product.recent_sales.map((sale, idx) => (
+                          {selectedProduct.recent_sales.map((sale, idx) => (
                             <tr key={idx}>
                               <td>{sale.sale_id || '—'}</td>
                               <td>{sale.date || '—'}</td>
@@ -3373,14 +3400,23 @@ const HistoryModule = ({ token, storeQueryValue }) => {
                       </table>
                     </div>
                   </div>
+                ) : (
+                  <div>
+                    <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Last 5 Sales</h4>
+                    <div className="empty-state" style={{ padding: '1rem' }}>No sales found</div>
+                  </div>
                 )}
               </div>
             </div>
-          ))}
+          ) : (
+            <div style={{ flex: '1', paddingLeft: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+              <p>Select a product from the list to view details</p>
+            </div>
+          )}
         </div>
       ) : (
         <div className="empty-state">
-          {query ? 'No products found matching your search.' : 'Enter a search term to find product history.'}
+          No products found matching your search.
         </div>
       )}
     </div>
