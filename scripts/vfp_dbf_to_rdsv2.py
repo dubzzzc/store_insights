@@ -877,6 +877,9 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
             col_listnum = safe_sql_name("listnum")
         elif table_lower in ("poh", "pod"):
             col_order = safe_sql_name("order")
+            if table_lower == "pod":
+                col_sku = safe_sql_name("sku")
+                col_store = safe_sql_name("store") if "store" in existing_cols else None
         elif table_lower == "glb":
             col_date = safe_sql_name("date")
         elif table_lower == "cnt":
@@ -948,6 +951,10 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
                         "idx_jnl_sku_rflag_date",
                         f"CREATE INDEX idx_jnl_sku_rflag_date ON {target} ([{col_sku}], [{col_rflag}], [{col_date}])",
                     ),
+                    (
+                        "idx_jnl_line_rflag_sale",
+                        f"CREATE INDEX idx_jnl_line_rflag_sale ON {target} ([{col_line}], [{col_rflag}], [{col_sale}])",
+                    ),
                 ]
             elif table_lower in ("inv", "stk", "prc"):
                 # Index for duplicate checking (SKU)
@@ -1017,12 +1024,19 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
                     for name, cols in index_list
                 ]
             elif table_lower == "pod":
-                # Index for duplicate checking (order)
+                # Indexes for pod table (purchase order details)
+                index_list = [
+                    ("idx_pod_order", col_order),
+                    ("idx_pod_sku", col_sku),
+                ]
+                if col_store:
+                    index_list.append(("idx_pod_store", col_store))
+                # Composite index for common query pattern: sku + order
+                index_list.append(("idx_pod_sku_order", f"{col_sku}, {col_order}"))
+                
                 indexes = [
-                    (
-                        "idx_pod_order",
-                        f"CREATE INDEX idx_pod_order ON {target} ([{col_order}])",
-                    ),
+                    (name, f"CREATE INDEX {name} ON {target} ([{cols}])")
+                    for name, cols in index_list
                 ]
             elif table_lower == "glb":
                 # Index for duplicate checking (date)
@@ -1130,6 +1144,10 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
                         "idx_jnl_sku_rflag_date",
                         f"CREATE INDEX idx_jnl_sku_rflag_date ON {target} (`{col_sku}`, `{col_rflag}`, `{col_date}`)",
                     ),
+                    (
+                        "idx_jnl_line_rflag_sale",
+                        f"CREATE INDEX idx_jnl_line_rflag_sale ON {target} (`{col_line}`, `{col_rflag}`, `{col_sale}`)",
+                    ),
                 ]
             elif table_lower in ("inv", "stk", "prc"):
                 # Index for duplicate checking (SKU)
@@ -1199,12 +1217,19 @@ def create_table_indexes(conn, engine: str, table: str, schema: str = None):
                     for name, cols in index_list
                 ]
             elif table_lower == "pod":
-                # Index for duplicate checking (order)
+                # Indexes for pod table (purchase order details)
+                index_list = [
+                    ("idx_pod_order", col_order),
+                    ("idx_pod_sku", col_sku),
+                ]
+                if col_store:
+                    index_list.append(("idx_pod_store", col_store))
+                # Composite index for common query pattern: sku + order
+                index_list.append(("idx_pod_sku_order", f"`{col_sku}`, `{col_order}`"))
+                
                 indexes = [
-                    (
-                        "idx_pod_order",
-                        f"CREATE INDEX idx_pod_order ON {target} (`{col_order}`)",
-                    ),
+                    (name, f"CREATE INDEX {name} ON {target} ({cols})")
+                    for name, cols in index_list
                 ]
             elif table_lower == "glb":
                 # Index for duplicate checking (date)
