@@ -5416,12 +5416,17 @@ const ModuleNav = ({ active, onChange }) => {
         const [isConnectingMobility, setIsConnectingMobility] = useState(false);
         const [mobilityError, setMobilityError] = useState('');
 
-        // Reset to selection view when component mounts without token (handles browser back button)
+        // Reset to selection view only when token changes from truthy to falsy (handles logout/browser back)
+        // Don't reset when user is actively selecting a login option
+        const prevTokenRef = useRef(token);
         useEffect(() => {
-          if (!token && loginView !== 'selection') {
+          // Only reset if token changed from truthy to falsy (user logged out or came back from Spirits Mobility)
+          // This prevents the flash when user clicks login options
+          if (prevTokenRef.current && !token) {
             setLoginView('selection');
           }
-        }, [token, loginView]);
+          prevTokenRef.current = token;
+        }, [token]); // Only depend on token - don't include loginView to prevent reset loop
 
         const handleMobilityConnect = (ip, port) => {
           setIsConnectingMobility(true);
