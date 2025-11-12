@@ -5746,22 +5746,30 @@ const ModuleNav = ({ active, onChange }) => {
 
         const mainContent = userRole === 'admin'
           ? (
-              <div className="admin-layout">
-                <AdminView
-                  hasKey={Boolean(adminKey)}
-                  users={adminUsers}
-                  selectedUserId={selectedAdminUserId}
-                  onSelectUser={setSelectedAdminUserId}
-                  onRefresh={handleAdminRefresh}
-                  onCreateUser={handleAdminCreateUser}
-                  onAddStore={handleAdminAddStore}
-                  onRemoveStore={handleAdminRemoveStore}
-                  onEnsureStore={handleAdminEnsureStore}
-                  isLoading={isAdminLoading}
-                  isProcessing={isAdminProcessing}
-                  error={adminError}
-                  message={adminMessage}
-                />
+              <div style={{ padding: '2rem', textAlign: 'center' }}>
+                <div style={{ background: 'white', padding: '3rem', borderRadius: '1rem', maxWidth: '600px', margin: '0 auto', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+                  <h2 style={{ marginBottom: '1rem', fontSize: '1.5rem' }}>Admin Panel</h2>
+                  <p style={{ marginBottom: '2rem', color: '#64748b' }}>
+                    The admin panel has been moved to a dedicated page optimized for desktop use.
+                  </p>
+                  <a
+                    href="/admin.html"
+                    style={{
+                      display: 'inline-block',
+                      padding: '0.75rem 1.5rem',
+                      background: '#2563eb',
+                      color: 'white',
+                      textDecoration: 'none',
+                      borderRadius: '0.5rem',
+                      fontWeight: 500,
+                      transition: 'background 0.2s'
+                    }}
+                    onMouseOver={(e) => e.target.style.background = '#1d4ed8'}
+                    onMouseOut={(e) => e.target.style.background = '#2563eb'}
+                  >
+                    Open Admin Panel
+                  </a>
+                </div>
               </div>
             )
           : (

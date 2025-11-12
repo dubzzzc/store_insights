@@ -1,0 +1,1465 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Admin panel for Store Insights - User and database management" />
+    <title>Store Insights - Admin Panel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        --bg-primary: #f8fafc;
+        --bg-secondary: #ffffff;
+        --border: #e2e8f0;
+        --border-hover: #cbd5e1;
+        --text-primary: #0f172a;
+        --text-secondary: #64748b;
+        --text-muted: #94a3b8;
+        --primary: #2563eb;
+        --primary-hover: #1d4ed8;
+        --primary-light: #dbeafe;
+        --success: #10b981;
+        --success-light: #d1fae5;
+        --warning: #f59e0b;
+        --warning-light: #fef3c7;
+        --danger: #ef4444;
+        --danger-light: #fee2e2;
+        --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+        --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+        --radius: 0.5rem;
+        --radius-lg: 0.75rem;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        font-size: 14px;
+        line-height: 1.5;
+        min-height: 100vh;
+      }
+
+      /* Header */
+      .header {
+        background: var(--bg-secondary);
+        border-bottom: 1px solid var(--border);
+        padding: 1.5rem 2rem;
+        box-shadow: var(--shadow-sm);
+      }
+
+      .header-content {
+        max-width: 1600px;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 2rem;
+      }
+
+      .header-title {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+      }
+
+      .header-title h1 {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: var(--text-primary);
+      }
+
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+      }
+
+      /* Main Container */
+      .container {
+        max-width: 1600px;
+        margin: 0 auto;
+        padding: 2rem;
+      }
+
+      /* Grid Layout */
+      .admin-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2rem;
+        margin-bottom: 2rem;
+      }
+
+      @media (min-width: 1400px) {
+        .admin-grid {
+          grid-template-columns: 1fr 1fr 1fr;
+        }
+      }
+
+      /* Cards */
+      .card {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 2rem;
+        box-shadow: var(--shadow);
+        transition: box-shadow 0.2s, border-color 0.2s;
+      }
+
+      .card:hover {
+        box-shadow: var(--shadow-md);
+        border-color: var(--border-hover);
+      }
+
+      .card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .card-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--text-primary);
+      }
+
+      .card-subtitle {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        margin-top: 0.25rem;
+      }
+
+      /* Forms */
+      .form-group {
+        margin-bottom: 1.5rem;
+      }
+
+      .form-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 1.5rem;
+      }
+
+      label {
+        display: block;
+        font-weight: 500;
+        color: var(--text-primary);
+        margin-bottom: 0.5rem;
+        font-size: 0.875rem;
+      }
+
+      input[type="text"],
+      input[type="email"],
+      input[type="password"],
+      select {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        font-size: 0.875rem;
+        transition: border-color 0.2s, box-shadow 0.2s;
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+      }
+
+      input:focus,
+      select:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px var(--primary-light);
+      }
+
+      input::placeholder {
+        color: var(--text-muted);
+      }
+
+      /* Buttons */
+      .btn {
+        padding: 0.75rem 1.5rem;
+        border: none;
+        border-radius: var(--radius);
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .btn-primary {
+        background: var(--primary);
+        color: white;
+      }
+
+      .btn-primary:hover:not(:disabled) {
+        background: var(--primary-hover);
+      }
+
+      .btn-secondary {
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+        border: 1px solid var(--border);
+      }
+
+      .btn-secondary:hover:not(:disabled) {
+        background: var(--bg-primary);
+        border-color: var(--border-hover);
+      }
+
+      .btn-danger {
+        background: var(--danger);
+        color: white;
+      }
+
+      .btn-danger:hover:not(:disabled) {
+        background: #dc2626;
+      }
+
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .btn-group {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+
+      /* Lists */
+      .user-list,
+      .store-list {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+        max-height: 500px;
+        overflow-y: auto;
+      }
+
+      .user-item,
+      .store-item {
+        padding: 1.25rem;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        transition: background-color 0.2s;
+        cursor: pointer;
+      }
+
+      .user-item:last-child,
+      .store-item:last-child {
+        border-bottom: none;
+      }
+
+      .user-item:hover,
+      .store-item:hover {
+        background: var(--bg-primary);
+      }
+
+      .user-item.active {
+        background: var(--primary-light);
+      }
+
+      .user-info {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .user-name {
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 0.25rem;
+      }
+
+      .user-details {
+        font-size: 0.8125rem;
+        color: var(--text-secondary);
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+      }
+
+      /* Badges */
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.375rem 0.75rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .badge-read-only {
+        background: var(--warning-light);
+        color: #92400e;
+      }
+
+      .badge-read-write {
+        background: var(--primary-light);
+        color: #1e40af;
+      }
+
+      .badge-full-access {
+        background: var(--success-light);
+        color: #065f46;
+      }
+
+      /* Alerts */
+      .alert {
+        padding: 1rem 1.25rem;
+        border-radius: var(--radius);
+        margin-bottom: 1.5rem;
+        font-size: 0.875rem;
+      }
+
+      .alert-error {
+        background: var(--danger-light);
+        color: #991b1b;
+        border: 1px solid #fecaca;
+      }
+
+      .alert-success {
+        background: var(--success-light);
+        color: #065f46;
+        border: 1px solid #a7f3d0;
+      }
+
+      .alert-info {
+        background: var(--primary-light);
+        color: #1e40af;
+        border: 1px solid #93c5fd;
+      }
+
+      /* Empty State */
+      .empty-state {
+        text-align: center;
+        padding: 3rem 2rem;
+        color: var(--text-secondary);
+        font-size: 0.875rem;
+      }
+
+      /* Login */
+      .login-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        padding: 2rem;
+      }
+
+      .login-card {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 3rem;
+        box-shadow: var(--shadow-lg);
+        width: 100%;
+        max-width: 400px;
+      }
+
+      .login-card h1 {
+        font-size: 1.75rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        text-align: center;
+      }
+
+      .login-card p {
+        text-align: center;
+        color: var(--text-secondary);
+        margin-bottom: 2rem;
+      }
+
+      /* Password Strength */
+      .password-strength {
+        margin-top: 0.5rem;
+      }
+
+      .password-strength-bars {
+        display: flex;
+        gap: 0.25rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .password-strength-bar {
+        flex: 1;
+        height: 4px;
+        border-radius: 2px;
+        background: #e5e7eb;
+        transition: background-color 0.2s;
+      }
+
+      .password-strength-bar.active {
+        background: var(--success);
+      }
+
+      .password-strength-bar.medium {
+        background: var(--warning);
+      }
+
+      .password-strength-bar.weak {
+        background: var(--danger);
+      }
+
+      .password-strength-text {
+        font-size: 0.75rem;
+        font-weight: 500;
+      }
+
+      /* Help Text */
+      .help-text {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        margin-top: 0.25rem;
+      }
+
+      /* Loading */
+      .loading {
+        text-align: center;
+        padding: 2rem;
+        color: var(--text-secondary);
+      }
+
+      /* Scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: var(--bg-primary);
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: var(--border);
+        border-radius: 4px;
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--border-hover);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script type="text/babel">
+      const { useState, useEffect, useCallback, useMemo, useRef } = React;
+
+      const API_BASE = window.location.origin;
+
+      // Storage helper
+      const storage = {
+        get: (key, defaultValue) => {
+          try {
+            const item = localStorage.getItem(key);
+            return item ? JSON.parse(item) : defaultValue;
+          } catch {
+            return defaultValue;
+          }
+        },
+        set: (key, value) => {
+          try {
+            localStorage.setItem(key, JSON.stringify(value));
+          } catch {}
+        },
+        remove: (key) => {
+          try {
+            localStorage.removeItem(key);
+          } catch {}
+        },
+      };
+
+      const STORAGE_KEYS = {
+        token: 'store-insights/token',
+        adminKey: 'store-insights/admin-key',
+      };
+
+      // Helper functions
+      const getStoreIdentifier = (store) => {
+        if (store?.id) return String(store.id);
+        if (store?.store_db) return store.store_db;
+        return null;
+      };
+
+      const formatRole = (role) => {
+        if (!role) return 'User';
+        return role.charAt(0).toUpperCase() + role.slice(1);
+      };
+
+      const getPrivilegeBadge = (privilegeLevel) => {
+        if (!privilegeLevel) return null;
+        const level = privilegeLevel.toLowerCase();
+        const badgeClass = {
+          read_only: 'badge-read-only',
+          read_write: 'badge-read-write',
+          full_access: 'badge-full-access',
+        }[level] || 'badge-read-write';
+        
+        const label = {
+          read_only: 'Read Only',
+          read_write: 'Read/Write',
+          full_access: 'Full Access',
+        }[level] || 'Read/Write';
+
+        return (
+          <span className={`badge ${badgeClass}`} title={
+            level === 'read_only' ? 'SELECT only' :
+            level === 'read_write' ? 'SELECT, INSERT, UPDATE, DELETE' :
+            'All privileges including CREATE, DROP, ALTER'
+          }>
+            {label}
+          </span>
+        );
+      };
+
+      // Components
+      const LoginForm = ({ onSubmit, isLoading, error }) => {
+        const [email, setEmail] = useState('');
+        const [password, setPassword] = useState('');
+
+        const handleSubmit = (e) => {
+          e.preventDefault();
+          onSubmit({ email, password });
+        };
+
+        return (
+          <div className="login-container">
+            <div className="login-card">
+              <h1>Admin Panel</h1>
+              <p>Sign in to manage users and databases</p>
+              <form onSubmit={handleSubmit}>
+                {error && <div className="alert alert-error">{error}</div>}
+                <div className="form-group">
+                  <label>Email</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="admin@example.com"
+                    required
+                    disabled={isLoading}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Password</label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                    disabled={isLoading}
+                  />
+                </div>
+                <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={isLoading}>
+                  {isLoading ? 'Signing in...' : 'Sign in'}
+                </button>
+              </form>
+            </div>
+          </div>
+        );
+      };
+
+      const CreateUserForm = ({ onSubmit, isSubmitting, knownStores = [], onEnsureStore }) => {
+        const [email, setEmail] = useState('');
+        const [password, setPassword] = useState('');
+        const [fullName, setFullName] = useState('');
+        const [role, setRole] = useState('owner');
+        const [storeDb, setStoreDb] = useState('');
+        const [storeUser, setStoreUser] = useState('');
+        const [storePass, setStorePass] = useState('');
+        const [storeName, setStoreName] = useState('');
+        const [storeSearch, setStoreSearch] = useState('');
+        const [privilegeLevel, setPrivilegeLevel] = useState('read_write');
+        const [passwordStrength, setPasswordStrength] = useState(0);
+        const [formError, setFormError] = useState('');
+
+        const suggestions = useMemo(() => {
+          const q = (storeSearch || '').toLowerCase();
+          if (!q) return knownStores;
+          return knownStores.filter((s) =>
+            (s.label || '').toLowerCase().includes(q) || (s.store_db || '').toLowerCase().includes(q)
+          );
+        }, [storeSearch, knownStores]);
+
+        const applySuggestion = (value) => {
+          const choice = knownStores.find(
+            (s) => s.store_db === value || s.label === value
+          );
+          if (choice) {
+            setStoreDb(choice.store_db || '');
+            setStoreName(choice.store_name || choice.label || '');
+          }
+        };
+
+        const calculatePasswordStrength = (pwd) => {
+          let strength = 0;
+          if (pwd.length >= 8) strength++;
+          if (pwd.length >= 12) strength++;
+          if (/[a-z]/.test(pwd) && /[A-Z]/.test(pwd)) strength++;
+          if (/\d/.test(pwd)) strength++;
+          if (/[^a-zA-Z\d]/.test(pwd)) strength++;
+          return Math.min(strength, 5);
+        };
+
+        const generatePassword = () => {
+          const length = 16;
+          const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+          let password = '';
+          for (let i = 0; i < length; i++) {
+            password += charset.charAt(Math.floor(Math.random() * charset.length));
+          }
+          setStorePass(password);
+          setPasswordStrength(calculatePasswordStrength(password));
+        };
+
+        const handleSubmit = async (e) => {
+          e.preventDefault();
+          setFormError('');
+
+          if (!email.trim() || !password.trim()) {
+            setFormError('Email and password are required');
+            return;
+          }
+
+          const stores = [];
+          if (storeDb.trim() || storeUser.trim() || storePass.trim() || storeName.trim()) {
+            if (!storeDb.trim() || !storeUser.trim() || !storePass.trim()) {
+              setFormError('Store database, user, and password are required for the first assignment');
+              return;
+            }
+            stores.push({
+              store_db: storeDb.trim(),
+              db_user: storeUser.trim(),
+              db_pass: storePass,
+              store_name: storeName.trim() || undefined,
+              privilege_level: privilegeLevel,
+            });
+          }
+
+          const success = await onSubmit({
+            email: email.trim(),
+            password: password.trim(),
+            full_name: fullName.trim() || undefined,
+            user_role: role,
+            stores,
+          });
+
+          if (success) {
+            setEmail('');
+            setPassword('');
+            setFullName('');
+            setRole('owner');
+            setStoreDb('');
+            setStoreUser('');
+            setStorePass('');
+            setStoreName('');
+            setPrivilegeLevel('read_write');
+            setPasswordStrength(0);
+          }
+        };
+
+        return (
+          <form className="card" onSubmit={handleSubmit}>
+            <div className="card-header">
+              <div>
+                <div className="card-title">Create User</div>
+                <div className="card-subtitle">Add a new user account with store access</div>
+              </div>
+            </div>
+            {formError && <div className="alert alert-error">{formError}</div>}
+            
+            <div className="form-group">
+              <label>Search stores</label>
+              <input
+                type="text"
+                value={storeSearch}
+                onChange={(e) => setStoreSearch(e.target.value)}
+                list="known-stores-datalist"
+                placeholder="Start typing to search known stores"
+                disabled={isSubmitting}
+                onBlur={(e) => applySuggestion(e.target.value)}
+              />
+              <datalist id="known-stores-datalist">
+                {suggestions.map((s) => (
+                  <option key={s.store_db} value={s.store_db}>{s.label}</option>
+                ))}
+              </datalist>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label>Email *</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="manager@example.com"
+                  required
+                  disabled={isSubmitting}
+                />
+              </div>
+              <div className="form-group">
+                <label>Password *</label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setPasswordStrength(calculatePasswordStrength(e.target.value));
+                    }}
+                    placeholder="Minimum 8 characters"
+                    required
+                    disabled={isSubmitting}
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={generatePassword}
+                    className="btn btn-secondary"
+                    disabled={isSubmitting}
+                    title="Generate secure password"
+                  >
+                    Generate
+                  </button>
+                </div>
+                {password && (
+                  <div className="password-strength">
+                    <div className="password-strength-bars">
+                      {[1, 2, 3, 4, 5].map((level) => (
+                        <div
+                          key={level}
+                          className={`password-strength-bar ${
+                            level <= passwordStrength
+                              ? level <= 2 ? 'weak' : level <= 4 ? 'medium' : 'active'
+                              : ''
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <div className="password-strength-text" style={{
+                      color: passwordStrength <= 2 ? 'var(--danger)' : passwordStrength <= 4 ? 'var(--warning)' : 'var(--success)'
+                    }}>
+                      {passwordStrength <= 2 ? 'Weak' : passwordStrength <= 4 ? 'Medium' : 'Strong'}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label>Full name (optional)</label>
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  disabled={isSubmitting}
+                />
+              </div>
+              <div className="form-group">
+                <label>Role</label>
+                <select value={role} onChange={(e) => setRole(e.target.value)} disabled={isSubmitting}>
+                  <option value="owner">Owner</option>
+                  <option value="user">User</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label>Store database</label>
+                <input
+                  type="text"
+                  value={storeDb}
+                  onChange={(e) => setStoreDb(e.target.value)}
+                  placeholder="spirits_6885"
+                  disabled={isSubmitting}
+                />
+              </div>
+              <div className="form-group">
+                <label>DB user</label>
+                <input
+                  type="text"
+                  value={storeUser}
+                  onChange={(e) => setStoreUser(e.target.value)}
+                  placeholder="store_user"
+                  disabled={isSubmitting}
+                />
+              </div>
+              <div className="form-group">
+                <label>DB password</label>
+                <input
+                  type="password"
+                  value={storePass}
+                  onChange={(e) => setStorePass(e.target.value)}
+                  placeholder="secret"
+                  disabled={isSubmitting}
+                />
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label>Store name</label>
+                <input
+                  type="text"
+                  value={storeName}
+                  onChange={(e) => setStoreName(e.target.value)}
+                  placeholder="Downtown Spirits"
+                  disabled={isSubmitting}
+                />
+              </div>
+              <div className="form-group">
+                <label>Privilege level</label>
+                <select
+                  value={privilegeLevel}
+                  onChange={(e) => setPrivilegeLevel(e.target.value)}
+                  disabled={isSubmitting}
+                >
+                  <option value="read_only">Read Only (SELECT)</option>
+                  <option value="read_write">Read/Write (SELECT, INSERT, UPDATE, DELETE)</option>
+                  <option value="full_access">Full Access (All privileges)</option>
+                </select>
+                <div className="help-text">
+                  {privilegeLevel === 'read_only' && 'User can only read data'}
+                  {privilegeLevel === 'read_write' && 'User can read and modify data'}
+                  {privilegeLevel === 'full_access' && 'User has full database access including schema changes'}
+                </div>
+              </div>
+            </div>
+
+            <div className="btn-group">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={isSubmitting || !storeDb || !storeUser || !storePass}
+                onClick={async () => {
+                  if (!onEnsureStore) return;
+                  await onEnsureStore({
+                    store_db: storeDb.trim(),
+                    db_user: storeUser.trim(),
+                    db_pass: storePass,
+                    privilege_level: privilegeLevel,
+                  });
+                }}
+              >
+                Ensure database exists
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+                {isSubmitting ? 'Creating...' : 'Create user'}
+              </button>
+            </div>
+          </form>
+        );
+      };
+
+      const AddStoreForm = ({ user, onSubmit, isSubmitting, userId }) => {
+        const [storeDb, setStoreDb] = useState('');
+        const [storeUser, setStoreUser] = useState('');
+        const [storePass, setStorePass] = useState('');
+        const [storeName, setStoreName] = useState('');
+        const [privilegeLevel, setPrivilegeLevel] = useState('read_write');
+        const [formError, setFormError] = useState('');
+
+        const handleSubmit = async (e) => {
+          e.preventDefault();
+          setFormError('');
+
+          if (!storeDb.trim() || !storeUser.trim() || !storePass.trim()) {
+            setFormError('Database, user, and password are required');
+            return;
+          }
+
+          const success = await onSubmit({
+            store_db: storeDb.trim(),
+            db_user: storeUser.trim(),
+            db_pass: storePass,
+            store_name: storeName.trim() || undefined,
+            privilege_level: privilegeLevel,
+          });
+
+          if (success) {
+            setStoreDb('');
+            setStoreUser('');
+            setStorePass('');
+            setStoreName('');
+            setPrivilegeLevel('read_write');
+          }
+        };
+
+        return (
+          <form className="card" onSubmit={handleSubmit}>
+            <div className="card-header">
+              <div>
+                <div className="card-title">Add Store to {user?.email || 'User'}</div>
+                <div className="card-subtitle">Assign a new store database to this user</div>
+              </div>
+            </div>
+            {formError && <div className="alert alert-error">{formError}</div>}
+            
+            <div className="form-row">
+              <div className="form-group">
+                <label>Store database *</label>
+                <input
+                  type="text"
+                  value={storeDb}
+                  onChange={(e) => setStoreDb(e.target.value)}
+                  placeholder="spirits_6885"
+                  disabled={isSubmitting}
+                />
+              </div>
+              <div className="form-group">
+                <label>DB user *</label>
+                <input
+                  type="text"
+                  value={storeUser}
+                  onChange={(e) => setStoreUser(e.target.value)}
+                  placeholder="store_user"
+                  disabled={isSubmitting}
+                />
+              </div>
+              <div className="form-group">
+                <label>DB password *</label>
+                <input
+                  type="password"
+                  value={storePass}
+                  onChange={(e) => setStorePass(e.target.value)}
+                  placeholder="secret"
+                  disabled={isSubmitting}
+                />
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label>Store name</label>
+                <input
+                  type="text"
+                  value={storeName}
+                  onChange={(e) => setStoreName(e.target.value)}
+                  placeholder="Downtown Spirits"
+                  disabled={isSubmitting}
+                />
+              </div>
+              <div className="form-group">
+                <label>Privilege level</label>
+                <select
+                  value={privilegeLevel}
+                  onChange={(e) => setPrivilegeLevel(e.target.value)}
+                  disabled={isSubmitting}
+                >
+                  <option value="read_only">Read Only (SELECT)</option>
+                  <option value="read_write">Read/Write (SELECT, INSERT, UPDATE, DELETE)</option>
+                  <option value="full_access">Full Access (All privileges)</option>
+                </select>
+                <div className="help-text">
+                  {privilegeLevel === 'read_only' && 'User can only read data'}
+                  {privilegeLevel === 'read_write' && 'User can read and modify data'}
+                  {privilegeLevel === 'full_access' && 'User has full database access including schema changes'}
+                </div>
+              </div>
+            </div>
+
+            <div className="btn-group">
+              <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+                {isSubmitting ? 'Adding...' : 'Add store'}
+              </button>
+            </div>
+          </form>
+        );
+      };
+
+      const AddStoreFormWrapper = ({ user, onSubmit, isSubmitting, userId }) => {
+        const handleSubmit = async (payload) => {
+          return await onSubmit(userId, payload);
+        };
+        
+        return <AddStoreForm user={user} onSubmit={handleSubmit} isSubmitting={isSubmitting} userId={userId} />;
+      };
+
+      const StoreAssignments = ({ user, onRemoveStore, isProcessing }) => {
+        if (!user?.stores?.length) {
+          return <div className="empty-state">No store assignments yet.</div>;
+        }
+
+        return (
+          <div className="store-list">
+            {user.stores.map((store) => {
+              const identifier = getStoreIdentifier(store) || store.id || store.store_db;
+              return (
+                <div className="store-item" key={`${user.id}-${identifier}`}>
+                  <div className="user-info">
+                    <div className="user-name">
+                      {store.store_name || store.store_db || 'Store'} {getPrivilegeBadge(store.privilege_level)}
+                    </div>
+                    <div className="user-details">
+                      <span>DB: {store.store_db || '—'}</span>
+                      {store.db_user && <span>User: {store.db_user}</span>}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => onRemoveStore(user.id, identifier)}
+                    disabled={isProcessing}
+                  >
+                    Remove
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        );
+      };
+
+      const UserList = ({ users, selectedUserId, onSelectUser }) => {
+        if (!users?.length) {
+          return <div className="empty-state">No users found yet.</div>;
+        }
+
+        return (
+          <div className="user-list">
+            {users.map((user) => (
+              <div
+                key={user.id}
+                className={`user-item ${selectedUserId === user.id ? 'active' : ''}`}
+                onClick={() => onSelectUser(user.id)}
+              >
+                <div className="user-info">
+                  <div className="user-name">{user.email}</div>
+                  <div className="user-details">
+                    <span>{user.full_name || '—'}</span>
+                    <span>Role: {formatRole(user.user_role)}</span>
+                    <span>{(user.stores?.length || 0)} store{(user.stores?.length === 1 ? '' : 's')}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      };
+
+      const AdminPanel = ({
+        users,
+        selectedUserId,
+        onSelectUser,
+        onRefresh,
+        onCreateUser,
+        onAddStore,
+        onRemoveStore,
+        onEnsureStore,
+        isLoading,
+        isProcessing,
+        error,
+        message,
+      }) => {
+        const selectedUser = users.find((user) => user.id === selectedUserId) || users[0] || null;
+
+        const knownStores = useMemo(() => {
+          const map = new Map();
+          (users || []).forEach((u) => {
+            (u.stores || []).forEach((s) => {
+              const id = getStoreIdentifier(s) || s.id || s.store_db;
+              if (!id) return;
+              if (!map.has(id)) {
+                map.set(id, {
+                  id,
+                  label: s.store_name || s.store_db || String(id),
+                  store_db: s.store_db || String(id),
+                  store_name: s.store_name || undefined,
+                });
+              }
+            });
+          });
+          return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
+        }, [users]);
+
+        useEffect(() => {
+          if (!selectedUser && users.length) {
+            onSelectUser(users[0].id);
+          }
+        }, [users, selectedUser, onSelectUser]);
+
+        return (
+          <>
+            <div className="header">
+              <div className="header-content">
+                <div className="header-title">
+                  <h1>Admin Panel</h1>
+                </div>
+                <div className="header-actions">
+                  <button className="btn btn-secondary" onClick={onRefresh} disabled={isLoading || isProcessing}>
+                    Refresh
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => {
+                    storage.remove(STORAGE_KEYS.token);
+                    storage.remove(STORAGE_KEYS.adminKey);
+                    window.location.reload();
+                  }}>
+                    Sign out
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="container">
+              {error && <div className="alert alert-error">{error}</div>}
+              {message && <div className="alert alert-success">{message}</div>}
+
+              <div className="admin-grid">
+                <div className="card">
+                  <div className="card-header">
+                    <div>
+                      <div className="card-title">Users</div>
+                      <div className="card-subtitle">Manage dashboard accounts</div>
+                    </div>
+                  </div>
+                  {isLoading ? (
+                    <div className="loading">Loading users...</div>
+                  ) : (
+                    <UserList users={users} selectedUserId={selectedUser?.id} onSelectUser={onSelectUser} />
+                  )}
+                </div>
+
+                <div className="card">
+                  <div className="card-header">
+                    <div>
+                      <div className="card-title">Store Assignments</div>
+                      <div className="card-subtitle">
+                        {selectedUser ? `${selectedUser.email} - ${selectedUser.stores?.length || 0} store(s)` : 'Select a user'}
+                      </div>
+                    </div>
+                  </div>
+                  {selectedUser ? (
+                    <>
+                      <StoreAssignments
+                        user={selectedUser}
+                        onRemoveStore={onRemoveStore}
+                        isProcessing={isProcessing}
+                      />
+                      <AddStoreFormWrapper user={selectedUser} onSubmit={onAddStore} isSubmitting={isProcessing} userId={selectedUser.id} />
+                    </>
+                  ) : (
+                    <div className="empty-state">Select a user to manage their stores.</div>
+                  )}
+                </div>
+
+                <CreateUserForm
+                  onSubmit={onCreateUser}
+                  isSubmitting={isProcessing}
+                  knownStores={knownStores}
+                  onEnsureStore={onEnsureStore}
+                />
+              </div>
+            </div>
+          </>
+        );
+      };
+
+      const AdminView = ({ hasKey, users, selectedUserId, onSelectUser, onRefresh, onCreateUser, onAddStore, onRemoveStore, onEnsureStore, isLoading, isProcessing, error, message }) => {
+        if (!hasKey) {
+          return (
+            <div className="container">
+              <div className="card">
+                <div className="card-header">
+                  <div className="card-title">Admin access unavailable</div>
+                </div>
+                {error && <div className="alert alert-error">{error}</div>}
+                <p style={{ color: 'var(--text-secondary)' }}>
+                  Configure the <code>ADMIN_API_KEY</code> environment variable on the server to enable admin tools.
+                </p>
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <AdminPanel
+            users={users}
+            selectedUserId={selectedUserId}
+            onSelectUser={onSelectUser}
+            onRefresh={onRefresh}
+            onCreateUser={onCreateUser}
+            onAddStore={onAddStore}
+            onRemoveStore={onRemoveStore}
+            onEnsureStore={onEnsureStore}
+            isLoading={isLoading}
+            isProcessing={isProcessing}
+            error={error}
+            message={message}
+          />
+        );
+      };
+
+      // Main App
+      const App = () => {
+        const [token, setToken] = useState(() => storage.get(STORAGE_KEYS.token, null));
+        const [adminKey, setAdminKey] = useState(() => storage.get(STORAGE_KEYS.adminKey, ''));
+        const [adminUsers, setAdminUsers] = useState([]);
+        const [selectedAdminUserId, setSelectedAdminUserId] = useState(null);
+        const [adminError, setAdminError] = useState('');
+        const [adminMessage, setAdminMessage] = useState('');
+        const [isAdminLoading, setIsAdminLoading] = useState(false);
+        const [isAdminProcessing, setIsAdminProcessing] = useState(false);
+        const [isAuthenticating, setIsAuthenticating] = useState(false);
+        const [authError, setAuthError] = useState('');
+
+        const handleLogin = async ({ email, password }) => {
+          setIsAuthenticating(true);
+          setAuthError('');
+          try {
+            const response = await fetch(`${API_BASE}/auth/login`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, password }),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+              throw new Error(data.detail || 'Login failed');
+            }
+            setToken(data.token);
+            storage.set(STORAGE_KEYS.token, data.token);
+            if (data.admin_key) {
+              setAdminKey(data.admin_key);
+              storage.set(STORAGE_KEYS.adminKey, data.admin_key);
+            }
+          } catch (error) {
+            setAuthError(error.message || 'Login failed');
+          } finally {
+            setIsAuthenticating(false);
+          }
+        };
+
+        const loadAdminUsers = useCallback(async (key) => {
+          if (!key) {
+            setAdminUsers([]);
+            setSelectedAdminUserId(null);
+            return [];
+          }
+          setIsAdminLoading(true);
+          try {
+            const response = await fetch(`${API_BASE}/admin/users`, {
+              headers: { 'X-Admin-Key': key },
+            });
+            const data = await response.json();
+            if (!response.ok) {
+              throw new Error(data.detail || 'Unable to load admin data');
+            }
+            const users = data.users || [];
+            setAdminUsers(users);
+            if (!users.length) {
+              setSelectedAdminUserId(null);
+            } else if (!selectedAdminUserId || !users.some((u) => u.id === selectedAdminUserId)) {
+              setSelectedAdminUserId(users[0].id);
+            }
+            return users;
+          } catch (error) {
+            setAdminUsers([]);
+            setSelectedAdminUserId(null);
+            throw error;
+          } finally {
+            setIsAdminLoading(false);
+          }
+        }, [selectedAdminUserId]);
+
+        useEffect(() => {
+          if (adminKey) {
+            loadAdminUsers(adminKey).catch((error) => {
+              setAdminError(error.message || 'Unable to load admin data');
+            });
+          }
+        }, [adminKey, loadAdminUsers]);
+
+        const handleAdminRefresh = useCallback(() => {
+          if (!adminKey) return;
+          setAdminError('');
+          loadAdminUsers(adminKey).catch((error) => {
+            setAdminError(error.message || 'Unable to refresh admin data');
+          });
+        }, [adminKey, loadAdminUsers]);
+
+        const handleAdminCreateUser = useCallback(async (payload) => {
+          if (!adminKey) {
+            setAdminError('Admin session not active');
+            return false;
+          }
+          setIsAdminProcessing(true);
+          setAdminError('');
+          setAdminMessage('');
+          try {
+            const response = await fetch(`${API_BASE}/admin/users`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Admin-Key': adminKey,
+              },
+              body: JSON.stringify(payload),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+              throw new Error(data.detail || 'Failed to create user');
+            }
+            const users = await loadAdminUsers(adminKey);
+            const newUser = users.find((u) => u.id === data.id);
+            if (newUser) {
+              setSelectedAdminUserId(newUser.id);
+            }
+            setAdminMessage('User created successfully');
+            return true;
+          } catch (error) {
+            setAdminError(error.message || 'Failed to create user');
+            return false;
+          } finally {
+            setIsAdminProcessing(false);
+          }
+        }, [adminKey, loadAdminUsers]);
+
+        const handleAdminEnsureStore = useCallback(async ({ store_db, db_user, db_pass, privilege_level }) => {
+          if (!adminKey) {
+            setAdminError('Admin session not active');
+            return false;
+          }
+          setIsAdminProcessing(true);
+          setAdminError('');
+          setAdminMessage('');
+          try {
+            const response = await fetch(`${API_BASE}/admin/stores/provision`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Admin-Key': adminKey,
+              },
+              body: JSON.stringify({ store_db, db_user, db_pass, privilege_level: privilege_level || 'read_write' }),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+              throw new Error(data.detail || 'Failed to provision database');
+            }
+            setAdminMessage('Database ensured successfully');
+            return true;
+          } catch (error) {
+            setAdminError(error.message || 'Failed to provision database');
+            return false;
+          } finally {
+            setIsAdminProcessing(false);
+          }
+        }, [adminKey]);
+
+        const handleAdminAddStore = useCallback(async (userId, payload) => {
+          if (!adminKey) {
+            setAdminError('Admin session not active');
+            return false;
+          }
+          setIsAdminProcessing(true);
+          setAdminError('');
+          setAdminMessage('');
+          try {
+            const response = await fetch(`${API_BASE}/admin/users/${userId}/stores`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Admin-Key': adminKey,
+              },
+              body: JSON.stringify(payload),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+              throw new Error(data.detail || 'Failed to add store');
+            }
+            await loadAdminUsers(adminKey);
+            setSelectedAdminUserId(userId);
+            setAdminMessage('Store added successfully');
+            return true;
+          } catch (error) {
+            setAdminError(error.message || 'Failed to add store');
+            return false;
+          } finally {
+            setIsAdminProcessing(false);
+          }
+        }, [adminKey, loadAdminUsers]);
+
+        const handleAdminRemoveStore = useCallback(async (userId, identifier) => {
+          if (!adminKey) {
+            setAdminError('Admin session not active');
+            return;
+          }
+          setIsAdminProcessing(true);
+          setAdminError('');
+          setAdminMessage('');
+          try {
+            const response = await fetch(
+              `${API_BASE}/admin/users/${userId}/stores/${encodeURIComponent(identifier)}`,
+              {
+                method: 'DELETE',
+                headers: { 'X-Admin-Key': adminKey },
+              }
+            );
+            const data = await response.json();
+            if (!response.ok) {
+              throw new Error(data.detail || 'Failed to remove store');
+            }
+            await loadAdminUsers(adminKey);
+            setSelectedAdminUserId(userId);
+            setAdminMessage('Store removed successfully');
+          } catch (error) {
+            setAdminError(error.message || 'Failed to remove store');
+          } finally {
+            setIsAdminProcessing(false);
+          }
+        }, [adminKey, loadAdminUsers]);
+
+        if (!token) {
+          return <LoginForm onSubmit={handleLogin} isLoading={isAuthenticating} error={authError} />;
+        }
+
+        return (
+          <AdminView
+            hasKey={Boolean(adminKey)}
+            users={adminUsers}
+            selectedUserId={selectedAdminUserId}
+            onSelectUser={setSelectedAdminUserId}
+            onRefresh={handleAdminRefresh}
+            onCreateUser={handleAdminCreateUser}
+            onAddStore={handleAdminAddStore}
+            onRemoveStore={handleAdminRemoveStore}
+            onEnsureStore={handleAdminEnsureStore}
+            isLoading={isAdminLoading}
+            isProcessing={isAdminProcessing}
+            error={adminError}
+            message={adminMessage}
+          />
+        );
+      };
+
+      ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+  </body>
+</html>
+
