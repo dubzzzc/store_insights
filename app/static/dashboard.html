@@ -4255,7 +4255,13 @@ const ModuleNav = ({ active, onChange }) => {
         }, [stores]);
 
         useEffect(() => {
-          if (!stores?.length) return;
+          if (!stores?.length) {
+            if (selectedStore) {
+              setSelectedStore(null);
+            }
+            return;
+          }
+
           if (!selectedStore) {
             setSelectedStore(stores[0]);
             return;
@@ -4263,13 +4269,9 @@ const ModuleNav = ({ active, onChange }) => {
 
           const identifier = getStoreIdentifier(selectedStore);
           const match = stores.find((store) => getStoreIdentifier(store) === identifier);
-
           if (!match) {
             setSelectedStore(stores[0]);
-            return;
-          }
-
-          if (match !== selectedStore) {
+          } else if (match !== selectedStore) {
             setSelectedStore(match);
           }
         }, [stores, selectedStore]);
@@ -4295,28 +4297,6 @@ const ModuleNav = ({ active, onChange }) => {
             handleAdminLogout();
           }
         }, [userRole, adminKey, handleAdminLogout]);
-
-        useEffect(() => {
-          if (!stores?.length) {
-            if (selectedStore) {
-              setSelectedStore(null);
-            }
-            return;
-          }
-
-          if (!selectedStore) {
-            setSelectedStore(stores[0]);
-            return;
-          }
-
-          const identifier = getStoreIdentifier(selectedStore);
-          const match = stores.find((store) => getStoreIdentifier(store) === identifier);
-          if (!match) {
-            setSelectedStore(stores[0]);
-          } else if (match !== selectedStore) {
-            setSelectedStore(match);
-          }
-        }, [stores, selectedStore]);
 
         const fetchSales = async (authToken, query, signal) => {
           // Check cache first
