@@ -1170,8 +1170,53 @@
     box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
   }
 
+  .mobility-form input:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .mobility-form input.readonly-input {
+    background: rgba(15, 23, 42, 0.5);
+    color: rgba(226, 232, 240, 0.7);
+    border-color: rgba(148, 163, 184, 0.2);
+  }
+
   .mobility-form input::placeholder {
     color: rgba(226, 232, 240, 0.5);
+  }
+
+  .edit-btn {
+    padding: 0.6rem 1rem;
+    border-radius: 0.6rem;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    background: rgba(15, 23, 42, 0.6);
+    color: rgba(255, 255, 255, 0.9);
+    font-weight: 500;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    width: 100%;
+    margin-top: 0.5rem;
+  }
+
+  .edit-btn:hover:not(:disabled) {
+    background: rgba(15, 23, 42, 0.8);
+    border-color: rgba(148, 163, 184, 0.5);
+  }
+
+  .edit-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .countdown-message {
+    text-align: center;
+    color: rgba(226, 232, 240, 0.8);
+    font-size: 0.95rem;
+    padding: 0.75rem;
+    background: rgba(14, 165, 233, 0.1);
+    border-radius: 0.75rem;
+    margin: 0.5rem 0;
   }
 
   .mobility-actions {
@@ -2826,18 +2871,37 @@ const AdminView = ({
       };
 
       const MobilityConnectionForm = ({ onConnect, onBack, isLoading, error }) => {
-        const [serverIp, setServerIp] = useState(() => {
-          const saved = localStorage.getItem('spirits_mobility_ip');
-          return saved || '';
-        });
-        const [serverPort, setServerPort] = useState(() => {
-          const saved = localStorage.getItem('spirits_mobility_port');
-          return saved || '8080';
-        });
+        const savedIp = localStorage.getItem('spirits_mobility_ip') || '';
+        const savedPort = localStorage.getItem('spirits_mobility_port') || '8080';
+        const hasSavedConnection = savedIp && savedPort;
+        
+        const [serverIp, setServerIp] = useState(savedIp);
+        const [serverPort, setServerPort] = useState(savedPort);
+        const [isEditing, setIsEditing] = useState(!hasSavedConnection);
+        const [countdown, setCountdown] = useState(hasSavedConnection ? 12 : null);
+        const [isConnecting, setIsConnecting] = useState(false);
+
+        useEffect(() => {
+          if (hasSavedConnection && !isEditing && countdown !== null && countdown > 0) {
+            const timer = setTimeout(() => {
+              setCountdown(countdown - 1);
+            }, 1000);
+            return () => clearTimeout(timer);
+          } else if (hasSavedConnection && !isEditing && countdown === 0 && !isConnecting) {
+            setIsConnecting(true);
+            onConnect(serverIp, serverPort);
+          }
+        }, [countdown, hasSavedConnection, isEditing, isConnecting, serverIp, serverPort, onConnect]);
+
+        const handleEdit = () => {
+          setIsEditing(true);
+          setCountdown(null);
+        };
 
         const handleConnect = (event) => {
-          event.preventDefault();
+          event?.preventDefault();
           if (serverIp && serverPort) {
+            setIsConnecting(true);
             // Save to localStorage
             localStorage.setItem('spirits_mobility_ip', serverIp);
             localStorage.setItem('spirits_mobility_port', serverPort);
@@ -2846,45 +2910,75 @@ const AdminView = ({
         };
 
         return (
-          <form onSubmit={handleConnect} className="mobility-form">
-            <label htmlFor="server-ip">
-              Server IP Address
-              <input
-                id="server-ip"
-                type="text"
-                placeholder="192.168.1.100"
-                value={serverIp}
-                onChange={(event) => setServerIp(event.target.value)}
-                required
-                pattern="^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$|^[a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?)*$"
-                title="Enter a valid IP address or hostname"
-              />
-            </label>
-            <div className="mobility-form-row">
-              <label htmlFor="server-port">
-                Port
+          <div className="mobility-form">
+            <h2 style={{ margin: '0 0 1rem 0', textAlign: 'center', fontSize: '1.25rem', fontWeight: 600 }}>
+              Logging into Spirits Mobility
+            </h2>
+            <form onSubmit={handleConnect}>
+              <label htmlFor="server-ip">
+                Server IP Address
                 <input
-                  id="server-port"
-                  type="number"
-                  placeholder="8080"
-                  value={serverPort}
-                  onChange={(event) => setServerPort(event.target.value)}
+                  id="server-ip"
+                  type="text"
+                  placeholder="52.201.116.107"
+                  value={serverIp}
+                  onChange={(event) => setServerIp(event.target.value)}
                   required
-                  min="1"
-                  max="65535"
+                  disabled={!isEditing || isConnecting}
+                  className={!isEditing ? 'readonly-input' : ''}
+                  pattern="^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$|^[a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?)*$"
+                  title="Enter a valid IP address or hostname"
                 />
               </label>
-            </div>
-            {error ? <div className="error-message">{error}</div> : null}
-            <div className="mobility-actions">
-              <button type="button" className="secondary" onClick={onBack} disabled={isLoading}>
-                Back
-              </button>
-              <button type="submit" className="primary" disabled={isLoading || !serverIp || !serverPort}>
-                {isLoading ? 'Connecting…' : 'Connect'}
-              </button>
-            </div>
-          </form>
+              <div className="mobility-form-row">
+                <label htmlFor="server-port">
+                  Port
+                  <input
+                    id="server-port"
+                    type="number"
+                    placeholder="8080"
+                    value={serverPort}
+                    onChange={(event) => setServerPort(event.target.value)}
+                    required
+                    min="1"
+                    max="65535"
+                    disabled={!isEditing || isConnecting}
+                    className={!isEditing ? 'readonly-input' : ''}
+                  />
+                </label>
+              </div>
+              {!isEditing && hasSavedConnection && (
+                <button
+                  type="button"
+                  className="edit-btn"
+                  onClick={handleEdit}
+                  disabled={isConnecting}
+                >
+                  Edit
+                </button>
+              )}
+              {error ? <div className="error-message">{error}</div> : null}
+              {!isEditing && hasSavedConnection && countdown !== null && (
+                <div className="countdown-message">
+                  Redirecting in {countdown} second{countdown !== 1 ? 's' : ''}...
+                </div>
+              )}
+              <div className="mobility-actions">
+                <button type="button" className="secondary" onClick={onBack} disabled={isConnecting}>
+                  Back
+                </button>
+                {isEditing ? (
+                  <button type="submit" className="primary" disabled={isConnecting || !serverIp || !serverPort}>
+                    {isConnecting ? 'Connecting…' : 'Connect'}
+                  </button>
+                ) : (
+                  <button type="button" className="primary" onClick={handleConnect} disabled={isConnecting}>
+                    {isConnecting ? 'Connecting…' : 'Continue'}
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
         );
       };
 
