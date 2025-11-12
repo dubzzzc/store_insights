@@ -3394,17 +3394,24 @@ def get_product_history(
                     }
 
                     # Get last 5 purchase orders from pod
+                    pod_sql = None
+                    pod_params = None
                     try:
                         if _table_exists(conn, db_name, "pod"):
                             pod_cols = _get_columns(conn, db_name, "pod")
                             pod_sku_col = _pick_column(pod_cols, ["sku"]) or "sku"
-                            pod_po_col = (
-                                _pick_column(
-                                    pod_cols,
-                                    ["order", "po", "po_id", "poh_id", "invno"],
+                            # Check for _order (with underscore) first, then order
+                            pod_po_col = None
+                            if "_order" in pod_cols:
+                                pod_po_col = "_order"
+                            else:
+                                pod_po_col = (
+                                    _pick_column(
+                                        pod_cols,
+                                        ["order", "po", "po_id", "poh_id", "invno"],
+                                    )
+                                    or None
                                 )
-                                or None
-                            )
                             # Use oqty column for order quantity (as specified by user)
                             pod_oqty_col = (
                                 _pick_column(
@@ -3417,7 +3424,16 @@ def get_product_history(
                                 or None
                             )
                             pod_date_col = (
-                                _pick_column(pod_cols, ["date", "pdate", "created_at"])
+                                _pick_column(
+                                    pod_cols,
+                                    [
+                                        "orddate",
+                                        "rcvdate",
+                                        "date",
+                                        "pdate",
+                                        "created_at",
+                                    ],
+                                )
                                 or None
                             )
                             pod_store_col = (
@@ -3483,12 +3499,14 @@ def get_product_history(
                                 pod_where_parts = [f"pod.`{pod_sku_col}` = :sku"]
                                 pod_params = {"sku": sku}
 
-                                # Add store filter if store_number is available
-                                if store_number is not None and pod_store_col:
-                                    pod_where_parts.append(
-                                        f"pod.`{pod_store_col}` = :pod_store_number"
-                                    )
-                                    pod_params["pod_store_number"] = store_number
+                                # Add store filter if store_number is available (make it optional to not filter out all records)
+                                # Only filter if we have a valid store number and store column exists
+                                # Note: Commenting out store filter for now since it might be too restrictive
+                                # if store_number is not None and pod_store_col:
+                                #     pod_where_parts.append(
+                                #         f"pod.`{pod_store_col}` = :pod_store_number"
+                                #     )
+                                #     pod_params["pod_store_number"] = store_number
 
                                 # Order by date (most recent first) if available, otherwise by po_id
                                 order_by = f"pod.`{pod_po_col}` DESC"
@@ -3540,10 +3558,15 @@ def get_product_history(
                         # Log error but don't fail the entire request
                         # Purchase orders are optional, so we'll just leave the list empty
                         import logging
+                        import traceback
 
                         logging.warning(
-                            f"Error fetching purchase orders for SKU {sku}: {str(pod_error)}"
+                            f"Error fetching purchase orders for SKU {sku}: {str(pod_error)}\n{traceback.format_exc()}"
                         )
+                        # Debug: print the SQL and params for troubleshooting
+                        if "pod_sql" in locals() and "pod_params" in locals():
+                            logging.warning(f"SQL: {pod_sql}")
+                            logging.warning(f"Params: {pod_params}")
                         pass
 
                     # Get last 5 sales from jnl
