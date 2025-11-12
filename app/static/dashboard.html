@@ -1033,32 +1033,183 @@
     display: grid;
     place-items: center;
     padding: clamp(1.5rem, 6vw, 3rem);
-    background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(19, 78, 110, 0.92));
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(19, 78, 110, 0.95));
+    position: relative;
+    overflow: hidden;
+  }
+
+  .login-layout::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+      radial-gradient(circle at 20% 50%, rgba(14, 165, 233, 0.15) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(139, 92, 246, 0.15) 0%, transparent 50%);
+    pointer-events: none;
   }
 
   .login-card {
-    width: min(420px, 100%);
-    background: rgba(15, 23, 42, 0.82);
-    backdrop-filter: blur(12px);
+    width: min(480px, 100%);
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(16px);
     color: #fff;
-    border-radius: 1.5rem;
-    padding: clamp(1.75rem, 4vw, 2.5rem);
+    border-radius: 1.75rem;
+    padding: clamp(2rem, 5vw, 3rem);
     display: grid;
-    gap: 1.5rem;
-    box-shadow: 0 30px 60px rgba(15, 23, 42, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    gap: 2rem;
+    box-shadow: 0 40px 80px rgba(15, 23, 42, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    position: relative;
+    z-index: 1;
   }
 
   .login-card h1 {
     margin: 0;
     text-align: center;
-    font-size: clamp(1.7rem, 4vw, 2.2rem);
+    font-size: clamp(2rem, 5vw, 2.5rem);
+    font-weight: 700;
+    background: linear-gradient(135deg, #fff 0%, rgba(148, 163, 184, 0.9) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.02em;
   }
 
   .login-card p {
     margin: 0;
     text-align: center;
-    color: rgba(226, 232, 240, 0.7);
+    color: rgba(226, 232, 240, 0.75);
+    font-size: 0.95rem;
+  }
+
+  .login-options {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .login-option-btn {
+    padding: 1.25rem 1.5rem;
+    border-radius: 1rem;
+    border: 2px solid rgba(148, 163, 184, 0.2);
+    background: rgba(15, 23, 42, 0.6);
+    color: #fff;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .login-option-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    transition: left 0.5s ease;
+  }
+
+  .login-option-btn:hover::before {
+    left: 100%;
+  }
+
+  .login-option-btn:hover {
+    border-color: rgba(14, 165, 233, 0.5);
+    background: rgba(14, 165, 233, 0.1);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(14, 165, 233, 0.2);
+  }
+
+  .login-option-btn:active {
+    transform: translateY(0);
+  }
+
+  .mobility-form {
+    display: grid;
+    gap: 1.25rem;
+    margin-top: 0.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid rgba(148, 163, 184, 0.2);
+  }
+
+  .mobility-form label {
+    display: grid;
+    gap: 0.5rem;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+
+  .mobility-form-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 1rem;
+  }
+
+  .mobility-form input {
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    color: #fff;
+    padding: 0.85rem 1rem;
+    border-radius: 0.75rem;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+  }
+
+  .mobility-form input:focus {
+    outline: none;
+    border-color: rgba(14, 165, 233, 0.6);
+    background: rgba(15, 23, 42, 0.85);
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+  }
+
+  .mobility-form input::placeholder {
+    color: rgba(226, 232, 240, 0.5);
+  }
+
+  .mobility-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+  }
+
+  .mobility-actions button {
+    padding: 0.85rem 1.25rem;
+    border-radius: 0.75rem;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.95rem;
+  }
+
+  .mobility-actions button.primary {
+    background: var(--primary);
+    color: #fff;
+  }
+
+  .mobility-actions button.primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(14, 165, 233, 0.3);
+  }
+
+  .mobility-actions button.secondary {
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .mobility-actions button.secondary:hover {
+    background: rgba(15, 23, 42, 0.8);
+    border-color: rgba(148, 163, 184, 0.5);
   }
 
   .login-card label {
@@ -1071,6 +1222,14 @@
     color: #fff;
     padding: 0.8rem 1rem;
     border-radius: 0.9rem;
+    transition: all 0.2s ease;
+  }
+
+  .login-card input:focus {
+    outline: none;
+    border-color: rgba(14, 165, 233, 0.6);
+    background: rgba(15, 23, 42, 0.85);
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
   }
 
   .login-card input::placeholder {
@@ -2641,6 +2800,90 @@ const AdminView = ({
             <button type="submit" disabled={isLoading}>
               {isLoading ? 'Signing in…' : 'Sign in'}
             </button>
+          </form>
+        );
+      };
+
+      const LoginSelection = ({ onSelectInsights, onSelectMobility }) => {
+        return (
+          <div className="login-options">
+            <button
+              type="button"
+              className="login-option-btn"
+              onClick={onSelectInsights}
+            >
+              Login to Spirits Insights
+            </button>
+            <button
+              type="button"
+              className="login-option-btn"
+              onClick={onSelectMobility}
+            >
+              Login to Spirits Mobility
+            </button>
+          </div>
+        );
+      };
+
+      const MobilityConnectionForm = ({ onConnect, onBack, isLoading, error }) => {
+        const [serverIp, setServerIp] = useState(() => {
+          const saved = localStorage.getItem('spirits_mobility_ip');
+          return saved || '';
+        });
+        const [serverPort, setServerPort] = useState(() => {
+          const saved = localStorage.getItem('spirits_mobility_port');
+          return saved || '8080';
+        });
+
+        const handleConnect = (event) => {
+          event.preventDefault();
+          if (serverIp && serverPort) {
+            // Save to localStorage
+            localStorage.setItem('spirits_mobility_ip', serverIp);
+            localStorage.setItem('spirits_mobility_port', serverPort);
+            onConnect(serverIp, serverPort);
+          }
+        };
+
+        return (
+          <form onSubmit={handleConnect} className="mobility-form">
+            <label htmlFor="server-ip">
+              Server IP Address
+              <input
+                id="server-ip"
+                type="text"
+                placeholder="192.168.1.100"
+                value={serverIp}
+                onChange={(event) => setServerIp(event.target.value)}
+                required
+                pattern="^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$|^[a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?)*$"
+                title="Enter a valid IP address or hostname"
+              />
+            </label>
+            <div className="mobility-form-row">
+              <label htmlFor="server-port">
+                Port
+                <input
+                  id="server-port"
+                  type="number"
+                  placeholder="8080"
+                  value={serverPort}
+                  onChange={(event) => setServerPort(event.target.value)}
+                  required
+                  min="1"
+                  max="65535"
+                />
+              </label>
+            </div>
+            {error ? <div className="error-message">{error}</div> : null}
+            <div className="mobility-actions">
+              <button type="button" className="secondary" onClick={onBack} disabled={isLoading}>
+                Back
+              </button>
+              <button type="submit" className="primary" disabled={isLoading || !serverIp || !serverPort}>
+                {isLoading ? 'Connecting…' : 'Connect'}
+              </button>
+            </div>
           </form>
         );
       };
@@ -5056,13 +5299,67 @@ const ModuleNav = ({ active, onChange }) => {
           setSelectedStore(nextStore || null);
         }, []);
 
+        const [loginView, setLoginView] = useState('selection'); // 'selection', 'insights', 'mobility'
+        const [isConnectingMobility, setIsConnectingMobility] = useState(false);
+        const [mobilityError, setMobilityError] = useState('');
+
+        const handleMobilityConnect = (ip, port) => {
+          setIsConnectingMobility(true);
+          setMobilityError('');
+          
+          // Construct the URL for Spirits Mobility
+          const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+          const mobilityUrl = `${protocol}//${ip}:${port}`;
+          
+          // Try to connect to the Mobility server
+          // First, verify the server is reachable (optional check)
+          fetch(`${mobilityUrl}/`, { 
+            method: 'HEAD',
+            mode: 'no-cors',
+            cache: 'no-cache'
+          }).catch(() => {
+            // Ignore CORS errors, just try to navigate
+          });
+          
+          // Redirect to the Mobility server
+          setTimeout(() => {
+            window.location.href = mobilityUrl;
+          }, 500);
+        };
+
         if (!token) {
           return (
             <div className="login-layout">
               <div className="login-card">
-                <h1>Store Insights</h1>
-                <p>Sign in to view your performance dashboard.</p>
-                <LoginForm onSubmit={handleLogin} isLoading={isAuthenticating} error={authError} />
+                <h1>Spirits Store Insights</h1>
+                <p>Choose your login option to continue.</p>
+                {loginView === 'selection' && (
+                  <LoginSelection
+                    onSelectInsights={() => setLoginView('insights')}
+                    onSelectMobility={() => setLoginView('mobility')}
+                  />
+                )}
+                {loginView === 'insights' && (
+                  <>
+                    <LoginForm onSubmit={handleLogin} isLoading={isAuthenticating} error={authError} />
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => setLoginView('selection')}
+                      style={{ marginTop: '0.5rem', width: '100%' }}
+                    >
+                      Back
+                    </button>
+                  </>
+                )}
+                {loginView === 'mobility' && (
+                  <MobilityConnectionForm
+                    onConnect={handleMobilityConnect}
+                    onBack={() => setLoginView('selection')}
+                    isLoading={isConnectingMobility}
+                    error={mobilityError}
+                  />
+                )}
               </div>
             </div>
           );
