@@ -879,6 +879,11 @@
     box-shadow: 0 24px 55px rgba(15, 23, 42, 0.06);
     display: grid;
     gap: 1.25rem;
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+  }
+
+  .admin-card:hover {
+    box-shadow: 0 32px 64px rgba(15, 23, 42, 0.08);
   }
 
   .admin-card h2 {
@@ -888,8 +893,20 @@
 
   .admin-grid {
     display: grid;
-    gap: 1.25rem;
+    gap: 1.5rem;
     grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  }
+
+  @media (min-width: 768px) {
+    .admin-grid {
+      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .admin-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
   }
 
   .admin-list {
@@ -905,6 +922,11 @@
     display: grid;
     gap: 0.35rem;
     cursor: pointer;
+    transition: background-color 0.2s ease;
+  }
+
+  .admin-user:hover {
+    background-color: rgba(14, 165, 233, 0.05);
   }
 
   .admin-user:last-child {
@@ -946,6 +968,17 @@
   select {
     background: #fff;
     color: inherit;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    border-radius: 0.5rem;
+    padding: 0.625rem 0.875rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  input:focus,
+  select:focus {
+    outline: none;
+    border-color: var(--primary-strong);
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
   }
 
   input::placeholder {
@@ -2267,6 +2300,8 @@ const CreateUserForm = ({ onSubmit, isSubmitting, knownStores = [], onEnsureStor
   const [storeName, setStoreName] = useState('');
   const [formError, setFormError] = useState('');
   const [storeSearch, setStoreSearch] = useState('');
+  const [privilegeLevel, setPrivilegeLevel] = useState('read_write');
+  const [passwordStrength, setPasswordStrength] = useState(0);
   const suggestions = useMemo(() => {
     const q = (storeSearch || '').toLowerCase();
     if (!q) return knownStores;
@@ -2283,6 +2318,27 @@ const CreateUserForm = ({ onSubmit, isSubmitting, knownStores = [], onEnsureStor
       setStoreDb(choice.store_db || '');
       setStoreName(choice.store_name || choice.label || '');
     }
+  };
+
+  const calculatePasswordStrength = (pwd) => {
+    let strength = 0;
+    if (pwd.length >= 8) strength++;
+    if (pwd.length >= 12) strength++;
+    if (/[a-z]/.test(pwd) && /[A-Z]/.test(pwd)) strength++;
+    if (/\d/.test(pwd)) strength++;
+    if (/[^a-zA-Z\d]/.test(pwd)) strength++;
+    return Math.min(strength, 5);
+  };
+
+  const generatePassword = () => {
+    const length = 16;
+    const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+    let password = '';
+    for (let i = 0; i < length; i++) {
+      password += charset.charAt(Math.floor(Math.random() * charset.length));
+    }
+    setStorePass(password);
+    setPasswordStrength(calculatePasswordStrength(password));
   };
 
   const handleSubmit = async (event) => {
@@ -2305,6 +2361,7 @@ const CreateUserForm = ({ onSubmit, isSubmitting, knownStores = [], onEnsureStor
         db_user: storeUser.trim(),
         db_pass: storePass,
         store_name: storeName.trim() || undefined,
+        privilege_level: privilegeLevel,
       });
     }
 
@@ -2326,6 +2383,8 @@ const CreateUserForm = ({ onSubmit, isSubmitting, knownStores = [], onEnsureStor
       setStoreUser('');
       setStorePass('');
       setStoreName('');
+      setPrivilegeLevel('read_write');
+      setPasswordStrength(0);
     }
   };
 
@@ -2369,14 +2428,53 @@ const CreateUserForm = ({ onSubmit, isSubmitting, knownStores = [], onEnsureStor
         </label>
         <label>
           Password
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder="Minimum 8 characters"
-            disabled={isSubmitting}
-            required
-          />
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => {
+                setPassword(event.target.value);
+                setPasswordStrength(calculatePasswordStrength(event.target.value));
+              }}
+              placeholder="Minimum 8 characters"
+              disabled={isSubmitting}
+              required
+              style={{ flex: 1 }}
+            />
+            <button
+              type="button"
+              onClick={generatePassword}
+              className="secondary"
+              disabled={isSubmitting}
+              style={{ whiteSpace: 'nowrap' }}
+              title="Generate secure password"
+            >
+              Generate
+            </button>
+          </div>
+          {password && (
+            <div style={{ marginTop: '0.25rem', fontSize: '0.75rem' }}>
+              <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '0.25rem' }}>
+                {[1, 2, 3, 4, 5].map((level) => (
+                  <div
+                    key={level}
+                    style={{
+                      flex: 1,
+                      height: '4px',
+                      backgroundColor: level <= passwordStrength
+                        ? level <= 2 ? '#ef4444' : level <= 4 ? '#f59e0b' : '#10b981'
+                        : '#e5e7eb',
+                      borderRadius: '2px',
+                      transition: 'background-color 0.2s',
+                    }}
+                  />
+                ))}
+              </div>
+              <span style={{ color: passwordStrength <= 2 ? '#ef4444' : passwordStrength <= 4 ? '#f59e0b' : '#10b981' }}>
+                {passwordStrength <= 2 ? 'Weak' : passwordStrength <= 4 ? 'Medium' : 'Strong'}
+              </span>
+            </div>
+          )}
         </label>
         <label>
           Full name (optional)
@@ -2437,6 +2535,24 @@ const CreateUserForm = ({ onSubmit, isSubmitting, knownStores = [], onEnsureStor
             disabled={isSubmitting}
           />
         </label>
+        <label>
+          Privilege level
+          <select
+            value={privilegeLevel}
+            onChange={(event) => setPrivilegeLevel(event.target.value)}
+            disabled={isSubmitting}
+            title="read_only: SELECT only | read_write: SELECT, INSERT, UPDATE, DELETE | full_access: All privileges including CREATE, DROP, ALTER"
+          >
+            <option value="read_only">Read Only (SELECT)</option>
+            <option value="read_write">Read/Write (SELECT, INSERT, UPDATE, DELETE)</option>
+            <option value="full_access">Full Access (All privileges)</option>
+          </select>
+          <small style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'block' }}>
+            {privilegeLevel === 'read_only' && 'User can only read data'}
+            {privilegeLevel === 'read_write' && 'User can read and modify data'}
+            {privilegeLevel === 'full_access' && 'User has full database access including schema changes'}
+          </small>
+        </label>
       </div>
       <div className="inline-actions">
         <button
@@ -2445,7 +2561,12 @@ const CreateUserForm = ({ onSubmit, isSubmitting, knownStores = [], onEnsureStor
           disabled={isSubmitting || !storeDb || !storeUser || !storePass}
           onClick={async () => {
             if (!onEnsureStore) return;
-            await onEnsureStore({ store_db: storeDb.trim(), db_user: storeUser.trim(), db_pass: storePass });
+            await onEnsureStore({
+              store_db: storeDb.trim(),
+              db_user: storeUser.trim(),
+              db_pass: storePass,
+              privilege_level: privilegeLevel,
+            });
           }}
         >
           Ensure database exists
@@ -2463,6 +2584,7 @@ const AddStoreForm = ({ user, onSubmit, isSubmitting }) => {
   const [storeUser, setStoreUser] = useState('');
   const [storePass, setStorePass] = useState('');
   const [storeName, setStoreName] = useState('');
+  const [privilegeLevel, setPrivilegeLevel] = useState('read_write');
   const [formError, setFormError] = useState('');
 
   const handleSubmit = async (event) => {
@@ -2479,6 +2601,7 @@ const AddStoreForm = ({ user, onSubmit, isSubmitting }) => {
       db_user: storeUser.trim(),
       db_pass: storePass,
       store_name: storeName.trim() || undefined,
+      privilege_level: privilegeLevel,
     });
 
     if (success) {
@@ -2486,6 +2609,7 @@ const AddStoreForm = ({ user, onSubmit, isSubmitting }) => {
       setStoreUser('');
       setStorePass('');
       setStoreName('');
+      setPrivilegeLevel('read_write');
     }
   };
 
@@ -2534,6 +2658,24 @@ const AddStoreForm = ({ user, onSubmit, isSubmitting }) => {
             disabled={isSubmitting}
           />
         </label>
+        <label>
+          Privilege level
+          <select
+            value={privilegeLevel}
+            onChange={(event) => setPrivilegeLevel(event.target.value)}
+            disabled={isSubmitting}
+            title="read_only: SELECT only | read_write: SELECT, INSERT, UPDATE, DELETE | full_access: All privileges including CREATE, DROP, ALTER"
+          >
+            <option value="read_only">Read Only (SELECT)</option>
+            <option value="read_write">Read/Write (SELECT, INSERT, UPDATE, DELETE)</option>
+            <option value="full_access">Full Access (All privileges)</option>
+          </select>
+          <small style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'block' }}>
+            {privilegeLevel === 'read_only' && 'User can only read data'}
+            {privilegeLevel === 'read_write' && 'User can read and modify data'}
+            {privilegeLevel === 'full_access' && 'User has full database access including schema changes'}
+          </small>
+        </label>
       </div>
       <div className="inline-actions">
         <button type="submit" disabled={isSubmitting}>
@@ -2541,6 +2683,41 @@ const AddStoreForm = ({ user, onSubmit, isSubmitting }) => {
         </button>
       </div>
     </form>
+  );
+};
+
+const getPrivilegeBadge = (privilegeLevel) => {
+  if (!privilegeLevel) return null;
+  const level = privilegeLevel.toLowerCase();
+  const colors = {
+    read_only: { bg: '#fef3c7', color: '#92400e', label: 'Read Only' },
+    read_write: { bg: '#dbeafe', color: '#1e40af', label: 'Read/Write' },
+    full_access: { bg: '#d1fae5', color: '#065f46', label: 'Full Access' },
+  };
+  const style = colors[level] || colors.read_write;
+  return (
+    <span
+      className="badge"
+      style={{
+        backgroundColor: style.bg,
+        color: style.color,
+        fontSize: '0.7rem',
+        padding: '0.25rem 0.5rem',
+        borderRadius: '0.375rem',
+        fontWeight: 600,
+        textTransform: 'uppercase',
+        letterSpacing: '0.05em',
+      }}
+      title={
+        level === 'read_only'
+          ? 'SELECT only'
+          : level === 'read_write'
+          ? 'SELECT, INSERT, UPDATE, DELETE'
+          : 'All privileges including CREATE, DROP, ALTER'
+      }
+    >
+      {style.label}
+    </span>
   );
 };
 
@@ -2555,8 +2732,20 @@ const StoreAssignments = ({ user, onRemoveStore, isProcessing }) => {
         const identifier = getStoreIdentifier(store) || store.id || store.store_db;
         return (
           <div className="store-item" key={`${user.id}-${identifier}`}>
-            <strong>{store.store_name || store.store_db || 'Store'}</strong>
-            <span>{store.store_db || '—'}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <strong>{store.store_name || store.store_db || 'Store'}</strong>
+                {getPrivilegeBadge(store.privilege_level)}
+              </div>
+              <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                {store.store_db || '—'}
+              </span>
+              {store.db_user && (
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  User: {store.db_user}
+                </span>
+              )}
+            </div>
             <div className="inline-actions">
               <button
                 type="button"
@@ -5203,7 +5392,7 @@ const ModuleNav = ({ active, onChange }) => {
         );
 
         const handleAdminEnsureStore = useCallback(
-          async ({ store_db, db_user, db_pass }) => {
+          async ({ store_db, db_user, db_pass, privilege_level }) => {
             if (!adminKey) {
               setAdminError('Admin session not active');
               return false;
@@ -5218,7 +5407,7 @@ const ModuleNav = ({ active, onChange }) => {
                   'Content-Type': 'application/json',
                   'X-Admin-Key': adminKey,
                 },
-                body: JSON.stringify({ store_db, db_user, db_pass }),
+                body: JSON.stringify({ store_db, db_user, db_pass, privilege_level: privilege_level || 'read_write' }),
               });
               let data = {};
               try {

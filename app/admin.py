@@ -37,11 +37,21 @@ class UserRole(str, Enum):
     user = "user"
 
 
+class PrivilegeLevel(str, Enum):
+    read_only = "read_only"
+    read_write = "read_write"
+    full_access = "full_access"
+
+
 class StoreAssignment(BaseModel):
     store_db: str = Field(..., description="Database name for the tenant store")
-    db_user: str = Field(..., description="Database user with read access")
+    db_user: str = Field(..., description="Database user with read/write access")
     db_pass: str = Field(..., description="Database password for the store user")
     store_name: Optional[str] = Field(None, description="Friendly name for the store")
+    privilege_level: Optional[PrivilegeLevel] = Field(
+        PrivilegeLevel.read_write,
+        description="Privilege level: read_only, read_write, or full_access"
+    )
 
 
 class StoreAssignmentRecord(StoreAssignment):
@@ -92,6 +102,18 @@ class UpdateStoreCredsRequest(BaseModel):
     store_name: Optional[str] = None
 
 
+class UpdatePrivilegesRequest(BaseModel):
+    db_user: str = Field(..., description="Database user to update privileges for")
+    privilege_level: PrivilegeLevel = Field(..., description="New privilege level")
+
+
+class UpdatePrivilegesResponse(BaseModel):
+    success: bool
+    db_user: str
+    privilege_level: PrivilegeLevel
+    message: str
+
+
 class RotateApiKeyResponse(BaseModel):
     store_db: str
     api_key: str
@@ -102,6 +124,10 @@ class ProvisionStoreRequest(BaseModel):
     db_user: str = Field(..., description="Database user to (create and) grant access")
     db_pass: str = Field(..., description="Password for the database user")
     store_name: Optional[str] = Field(None, description="Optional label; not persisted here")
+    privilege_level: Optional[PrivilegeLevel] = Field(
+        PrivilegeLevel.read_write,
+        description="Privilege level: read_only, read_write, or full_access"
+    )
 
 
 class ProvisionStoreResponse(BaseModel):
@@ -116,13 +142,36 @@ def _validate_identifier(value: str, kind: str) -> None:
     import re
     if not value or not re.fullmatch(r"[A-Za-z0-9_]+", value):
         raise HTTPException(status_code=400, detail=f"Invalid {kind}. Use letters, numbers, underscore only.")
+    # Additional security: prevent SQL injection patterns
+    if any(char in value for char in [';', '--', '/*', '*/', "'", '"', '`']):
+        raise HTTPException(status_code=400, detail=f"Invalid {kind}. Contains forbidden characters.")
+
+
+def _validate_password(password: str) -> None:
+    """Validate password meets complexity requirements."""
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
+    # Optional: add more complexity requirements if needed
+
+
+def _get_privileges_for_level(privilege_level: PrivilegeLevel) -> str:
+    """Return SQL privilege string for the given privilege level."""
+    if privilege_level == PrivilegeLevel.read_only:
+        return "SELECT"
+    elif privilege_level == PrivilegeLevel.read_write:
+        return "SELECT, INSERT, UPDATE, DELETE"
+    elif privilege_level == PrivilegeLevel.full_access:
+        return "SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX"
+    else:
+        return "SELECT, INSERT, UPDATE, DELETE"  # Default to read_write
 
 
 @router.post("/stores/provision", response_model=ProvisionStoreResponse)
 def provision_store(payload: ProvisionStoreRequest, _: None = Depends(_require_admin)):
-    """Create the tenant database if missing, ensure user exists, and grant SELECT privileges.
+    """Create the tenant database if missing, ensure user exists, and grant privileges.
 
     Requires env: STORE_RDS_HOST, STORE_RDS_ADMIN_USER, STORE_RDS_ADMIN_PASS, optional STORE_RDS_PORT.
+    MySQL 8.4.6 compatible.
     """
     host = os.getenv("STORE_RDS_HOST")
     admin_user = os.getenv("STORE_RDS_ADMIN_USER")
@@ -134,6 +183,11 @@ def provision_store(payload: ProvisionStoreRequest, _: None = Depends(_require_a
     # Basic validation to avoid SQL injection on identifiers
     _validate_identifier(payload.store_db, "store_db")
     _validate_identifier(payload.db_user, "db_user")
+    _validate_password(payload.db_pass)
+
+    # Determine privilege level
+    privilege_level = payload.privilege_level or PrivilegeLevel.read_write
+    privileges = _get_privileges_for_level(privilege_level)
 
     created_db = False
     ensured_user = False
@@ -156,12 +210,12 @@ def provision_store(payload: ProvisionStoreRequest, _: None = Depends(_require_a
             if admin_cur.fetchone():
                 created_db = True  # indicates now exists; not strictly new vs existing
 
-            # Ensure user exists
+            # Ensure user exists (MySQL 8.4.6 supports CREATE USER IF NOT EXISTS)
             try:
                 admin_cur.execute("CREATE USER IF NOT EXISTS %s@'%%' IDENTIFIED BY %s", (payload.db_user, payload.db_pass))
                 ensured_user = True
             except mysql.connector.Error as err:
-                # Older MySQL may not support IF NOT EXISTS; try create and ignore duplicate
+                # Fallback for older MySQL versions
                 if err.errno == errorcode.ER_PARSE_ERROR:
                     try:
                         admin_cur.execute("CREATE USER %s@'%%' IDENTIFIED BY %s", (payload.db_user, payload.db_pass))
@@ -176,9 +230,16 @@ def provision_store(payload: ProvisionStoreRequest, _: None = Depends(_require_a
                 else:
                     raise
 
-            # Grant privileges
-            # Use two-step to avoid IDENTIFIED BY in GRANT (deprecated)
-            admin_cur.execute(f"GRANT SELECT ON `{payload.store_db}`.* TO %s@'%'", (payload.db_user,))
+            # Revoke any existing privileges first (for updates)
+            try:
+                admin_cur.execute(f"REVOKE ALL PRIVILEGES ON `{payload.store_db}`.* FROM %s@'%%'", (payload.db_user,))
+            except mysql.connector.Error:
+                # User might not have privileges yet, ignore
+                pass
+
+            # Grant privileges based on privilege level
+            # MySQL 8.4.6 compatible GRANT syntax
+            admin_cur.execute(f"GRANT {privileges} ON `{payload.store_db}`.* TO %s@'%%'", (payload.db_user,))
             admin_cur.execute("FLUSH PRIVILEGES")
             admin_conn.commit()
             granted = True
@@ -195,7 +256,7 @@ def provision_store(payload: ProvisionStoreRequest, _: None = Depends(_require_a
         created_database=created_db,
         ensured_user=ensured_user,
         granted_privileges=granted,
-        message="Provisioned successfully",
+        message=f"Provisioned successfully with {privilege_level.value} privileges",
     )
 
 @router.post("/users", response_model=CreateUserResponse, status_code=status.HTTP_201_CREATED)
@@ -239,21 +300,40 @@ def create_user(payload: CreateUserRequest, _: None = Depends(_require_admin)):
         user_id = cursor.lastrowid
 
         legacy_store_written = False
+        has_privilege_level = _has_column(cursor, "user_stores", "privilege_level")
+        
         for store in payload.stores:
+            privilege_level = store.privilege_level or PrivilegeLevel.read_write
             try:
-                cursor.execute(
-                    """
-                    INSERT INTO user_stores (user_id, store_db, db_user, db_pass, store_name)
-                    VALUES (%s, %s, %s, %s, %s)
-                    """,
-                    (
-                        user_id,
-                        store.store_db,
-                        store.db_user,
-                        store.db_pass,
-                        store.store_name,
-                    ),
-                )
+                if has_privilege_level:
+                    cursor.execute(
+                        """
+                        INSERT INTO user_stores (user_id, store_db, db_user, db_pass, store_name, privilege_level)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            user_id,
+                            store.store_db,
+                            store.db_user,
+                            store.db_pass,
+                            store.store_name,
+                            privilege_level.value,
+                        ),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        INSERT INTO user_stores (user_id, store_db, db_user, db_pass, store_name)
+                        VALUES (%s, %s, %s, %s, %s)
+                        """,
+                        (
+                            user_id,
+                            store.store_db,
+                            store.db_user,
+                            store.db_pass,
+                            store.store_name,
+                        ),
+                    )
             except mysql.connector.Error:
                 if legacy_store_written or len(payload.stores) != 1:
                     raise
@@ -333,6 +413,55 @@ def rotate_store_api_key(store_db: str, _: None = Depends(_require_admin)):
         cursor.close(); conn.close()
 
 
+@router.put("/stores/{store_db}/privileges", response_model=UpdatePrivilegesResponse)
+def update_store_privileges(store_db: str, payload: UpdatePrivilegesRequest, _: None = Depends(_require_admin)):
+    """Update privileges for a database user on a specific database.
+    
+    MySQL 8.4.6 compatible. Revokes all privileges and re-grants based on privilege level.
+    """
+    host = os.getenv("STORE_RDS_HOST")
+    admin_user = os.getenv("STORE_RDS_ADMIN_USER")
+    admin_pass = os.getenv("STORE_RDS_ADMIN_PASS")
+    port = int(os.getenv("STORE_RDS_PORT", "3306"))
+    if not host or not admin_user or not admin_pass:
+        raise HTTPException(status_code=500, detail="Server missing STORE_RDS_* admin configuration")
+
+    _validate_identifier(store_db, "store_db")
+    _validate_identifier(payload.db_user, "db_user")
+
+    privileges = _get_privileges_for_level(payload.privilege_level)
+
+    try:
+        admin_conn = mysql.connector.connect(host=host, port=port, user=admin_user, password=admin_pass)
+        admin_cur = admin_conn.cursor()
+        try:
+            # Revoke all existing privileges
+            try:
+                admin_cur.execute(f"REVOKE ALL PRIVILEGES ON `{store_db}`.* FROM %s@'%%'", (payload.db_user,))
+            except mysql.connector.Error:
+                # User might not have privileges, continue
+                pass
+
+            # Grant new privileges
+            admin_cur.execute(f"GRANT {privileges} ON `{store_db}`.* TO %s@'%%'", (payload.db_user,))
+            admin_cur.execute("FLUSH PRIVILEGES")
+            admin_conn.commit()
+        finally:
+            try:
+                admin_cur.close(); admin_conn.close()
+            except Exception:
+                pass
+    except mysql.connector.Error as err:
+        raise HTTPException(status_code=500, detail=f"Failed to update privileges: {err}")
+
+    return UpdatePrivilegesResponse(
+        success=True,
+        db_user=payload.db_user,
+        privilege_level=payload.privilege_level,
+        message=f"Privileges updated to {payload.privilege_level.value}",
+    )
+
+
 @router.put("/stores/{store_db}/creds", response_model=StoreAssignmentResponse)
 def update_store_creds(store_db: str, payload: UpdateStoreCredsRequest, _: None = Depends(_require_admin)):
     conn = get_core_connection()
@@ -394,11 +523,17 @@ def _ensure_user_exists(cursor, user_id: int) -> None:
 
 def _list_store_assignments(cursor, user_id: int) -> List[StoreAssignmentRecord]:
     stores: List[StoreAssignmentRecord] = []
+    has_privilege_level = _has_column(cursor, "user_stores", "privilege_level")
 
     try:
+        columns = ["id", "store_db", "db_user", "db_pass", "store_name"]
+        if has_privilege_level:
+            columns.append("privilege_level")
+        column_clause = ", ".join(columns)
+        
         cursor.execute(
-            """
-            SELECT id, store_db, db_user, db_pass, store_name
+            f"""
+            SELECT {column_clause}
             FROM user_stores
             WHERE user_id = %s
             ORDER BY id
@@ -406,6 +541,13 @@ def _list_store_assignments(cursor, user_id: int) -> List[StoreAssignmentRecord]
             (user_id,),
         )
         for row in cursor.fetchall():
+            privilege_level = None
+            if has_privilege_level and row.get("privilege_level"):
+                try:
+                    privilege_level = PrivilegeLevel(row.get("privilege_level"))
+                except ValueError:
+                    privilege_level = PrivilegeLevel.read_write  # Default
+            
             stores.append(
                 StoreAssignmentRecord(
                     id=row.get("id"),
@@ -413,6 +555,7 @@ def _list_store_assignments(cursor, user_id: int) -> List[StoreAssignmentRecord]
                     db_user=row.get("db_user"),
                     db_pass=row.get("db_pass"),
                     store_name=row.get("store_name"),
+                    privilege_level=privilege_level or PrivilegeLevel.read_write,
                 )
             )
     except mysql.connector.Error as err:
@@ -432,6 +575,7 @@ def _list_store_assignments(cursor, user_id: int) -> List[StoreAssignmentRecord]
                     db_user=row.get("db_user"),
                     db_pass=row.get("db_pass"),
                     store_name=row.get("store_name"),
+                    privilege_level=PrivilegeLevel.read_write,  # Default for legacy
                 )
             )
 
@@ -556,21 +700,39 @@ def add_store_to_user(user_id: int, payload: StoreAssignment, _: None = Depends(
                 )
 
         record_id: Optional[int] = None
+        has_privilege_level = _has_column(cursor, "user_stores", "privilege_level")
+        privilege_level = payload.privilege_level or PrivilegeLevel.read_write
 
         try:
-            cursor.execute(
-                """
-                INSERT INTO user_stores (user_id, store_db, db_user, db_pass, store_name)
-                VALUES (%s, %s, %s, %s, %s)
-                """,
-                (
-                    user_id,
-                    payload.store_db,
-                    payload.db_user,
-                    payload.db_pass,
-                    payload.store_name,
-                ),
-            )
+            if has_privilege_level:
+                cursor.execute(
+                    """
+                    INSERT INTO user_stores (user_id, store_db, db_user, db_pass, store_name, privilege_level)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        user_id,
+                        payload.store_db,
+                        payload.db_user,
+                        payload.db_pass,
+                        payload.store_name,
+                        privilege_level.value,
+                    ),
+                )
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO user_stores (user_id, store_db, db_user, db_pass, store_name)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (
+                        user_id,
+                        payload.store_db,
+                        payload.db_user,
+                        payload.db_pass,
+                        payload.store_name,
+                    ),
+                )
             record_id = cursor.lastrowid
         except mysql.connector.Error as err:
             if err.errno != errorcode.ER_NO_SUCH_TABLE:
