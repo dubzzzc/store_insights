@@ -3419,19 +3419,23 @@ const HistoryModule = ({ token, storeQueryValue }) => {
                           <table style={{ fontSize: '0.9rem', width: '100%' }}>
                             <thead>
                               <tr>
-                                <th>PO ID</th>
-                                <th>Date</th>
+                                <th>Order #</th>
+                                <th>SKU</th>
+                                <th>Name</th>
+                                <th>Size</th>
                                 <th>Qty</th>
-                                <th>Amount</th>
+                                <th>Date</th>
                               </tr>
                             </thead>
                             <tbody>
                               {selectedProduct.purchase_orders.map((po, idx) => (
                                 <tr key={`po-${po.po_id || idx}-${idx}`}>
                                   <td>{po.po_id || '—'}</td>
+                                  <td>{po.sku || '—'}</td>
+                                  <td>{po.name || '—'}</td>
+                                  <td>{po.sname || '—'}</td>
+                                  <td>{formatQuantity(po.oqty || 0)}</td>
                                   <td>{po.date || '—'}</td>
-                                  <td>{formatQuantity(po.qty || 0)}</td>
-                                  <td>{formatCurrency(po.amount || 0)}</td>
                                 </tr>
                               ))}
                             </tbody>
