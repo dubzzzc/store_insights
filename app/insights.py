@@ -514,6 +514,7 @@ def get_sales_insights(
                     params: Dict[str, Any] = {}
 
                     # Date filter using jnh.tstamp
+                    end_next = None
                     if start:
                         where_parts.append(f"jnh.`{jnh_time}` >= :start_dt")
                         params["start_dt"] = f"{start} 00:00:00"
@@ -563,6 +564,20 @@ def get_sales_insights(
                         )
 
                         # Cash change subquery: get LINE 999 amounts for sales with cash tenders
+                        # Add date filtering to subquery to reduce processing
+                        cash_subquery_where = [
+                            f"jnl_cc.`{jnl_line_col}` = 999",
+                            f"jnl_cc.`{jnl_rflag}` <= 0",
+                        ]
+                        if start:
+                            cash_subquery_where.append(
+                                f"jnh_cc.`{jnh_time}` >= :cash_start_dt"
+                            )
+                        if end:
+                            cash_subquery_where.append(
+                                f"jnh_cc.`{jnh_time}` < :cash_end_dt"
+                            )
+
                         cash_change_subquery = f"""
                             LEFT JOIN (
                                 SELECT 
@@ -570,8 +585,7 @@ def get_sales_insights(
                                     SUM(jnl_cc.`{jnl_amt_col}`) AS cash_change
                                 FROM jnl jnl_cc
                                 INNER JOIN jnh jnh_cc ON jnh_cc.`{jnh_sale}` = jnl_cc.`{jnl_sale_col}`
-                                WHERE jnl_cc.`{jnl_line_col}` = 999
-                                  AND jnl_cc.`{jnl_rflag}` <= 0
+                                WHERE {' AND '.join(cash_subquery_where)}
                                   AND EXISTS (
                                     SELECT 1 FROM jnl jnl_cash_tender
                                     INNER JOIN jnh jnh_cash_tender ON jnh_cash_tender.`{jnh_sale}` = jnl_cash_tender.`{jnl_sale_col}`
@@ -587,6 +601,16 @@ def get_sales_insights(
                                 GROUP BY jnl_cc.`{jnl_sale_col}`
                             ) cash_change_per_sale ON cash_change_per_sale.sale_id = jnh.`{jnh_sale}`
                         """
+
+                        # Add date params for cash subquery if needed
+                        if start:
+                            params["cash_start_dt"] = params.get(
+                                "start_dt", f"{start} 00:00:00"
+                            )
+                        if end:
+                            params["cash_end_dt"] = params.get(
+                                "end_dt", end_next if end_next else f"{end} 23:59:59"
+                            )
 
                         # Amount expression with cash adjustment
                         cat_lookup_expr = (
@@ -611,6 +635,24 @@ def get_sales_insights(
                         amount_expr = f"SUM(jnl.`{jnl_amt_col}`)"
 
                     # Daily sales SQL: sum tenders grouped by date (matches total_net calculation)
+                    # Use date range in WHERE, but DATE() in GROUP BY/ORDER BY is necessary for grouping
+                    # Add LIMIT to prevent excessive data processing
+                    limit_clause = ""
+                    if not (start or end):
+                        limit_clause = "LIMIT 7"
+                    elif start and end:
+                        # If date range is provided, still limit to reasonable number of days
+                        try:
+                            from datetime import datetime, timedelta
+
+                            start_dt = datetime.fromisoformat(start)
+                            end_dt = datetime.fromisoformat(end)
+                            days_diff = (end_dt - start_dt).days
+                            if days_diff > 90:
+                                limit_clause = "LIMIT 90"
+                        except:
+                            pass
+
                     daily_sql = f"""
                         SELECT 
                             DATE(jnh.`{jnh_time}`) AS date,
@@ -619,11 +661,11 @@ def get_sales_insights(
                         FROM jnh
                         INNER JOIN jnl ON jnl.`{jnl_sale_col}` = jnh.`{jnh_sale}`
                         {cash_change_subquery}
-                        WHERE {' AND '.join(where_parts)}
+                        WHERE {' AND '.join(where_parts) if where_parts else '1=1'}
                         {void_check}
                         GROUP BY DATE(jnh.`{jnh_time}`)
                         ORDER BY DATE(jnh.`{jnh_time}`) DESC
-                        {"LIMIT 7" if not (start or end) else ""}
+                        {limit_clause}
                     """
 
                     result = conn.execute(text(daily_sql), params).mappings()
