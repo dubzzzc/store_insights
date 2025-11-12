@@ -3228,7 +3228,17 @@ const HistoryModule = ({ token, storeQueryValue }) => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const debounceRef = useRef(null);
+
+  // Track window size for mobile detection
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     if (!token || !storeQueryValue) return;
@@ -3297,132 +3307,282 @@ const HistoryModule = ({ token, storeQueryValue }) => {
       ) : error ? (
         <div className="empty-state" style={{ color: 'var(--danger)' }}>{error}</div>
       ) : products.length ? (
-        <div style={{ display: 'flex', gap: '1rem' }}>
-          {/* Product List */}
-          <div style={{ flex: '0 0 300px', borderRight: '1px solid var(--panel-border)', paddingRight: '1rem' }}>
-            <h3 style={{ margin: '0 0 1rem 0', fontSize: '1rem' }}>Products ({products.length})</h3>
-            <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
-              {products.map((product) => (
-                <div
-                  key={product.sku}
-                  onClick={() => setSelectedProduct(product)}
+        <div>
+          {/* Mobile: Show list or details, not both */}
+          {isMobile ? (
+            selectedProduct ? (
+              <div>
+                {/* Back button for mobile */}
+                <button
+                  onClick={() => setSelectedProduct(null)}
                   style={{
-                    padding: '0.75rem',
-                    marginBottom: '0.5rem',
-                    border: selectedProduct?.sku === product.sku ? '2px solid var(--primary)' : '1px solid var(--panel-border)',
+                    marginBottom: '1rem',
+                    padding: '0.5rem 1rem',
+                    backgroundColor: 'var(--neutral)',
+                    border: '1px solid var(--panel-border)',
                     borderRadius: '4px',
                     cursor: 'pointer',
-                    backgroundColor: selectedProduct?.sku === product.sku ? 'var(--panel-bg-hover)' : 'transparent',
-                    transition: 'all 0.2s'
+                    fontSize: '0.9rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
                   }}
                 >
-                  <div style={{ fontWeight: '500', marginBottom: '0.25rem' }}>{product.name || '—'}</div>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                    <div>SKU: {product.sku || '—'}</div>
-                    {product.upc && <div>UPC: {product.upc}</div>}
-                    <div>Price: {formatCurrency(product.price || 0)}</div>
-                    {product.stock_qty !== null && product.stock_qty !== undefined && (
-                      <div>Stock: {formatQuantity(product.stock_qty)}</div>
+                  ← Back to List
+                </button>
+                {/* Product Details */}
+                <div>
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem' }}>{selectedProduct.name || '—'}</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                      <div><strong>SKU:</strong> {selectedProduct.sku || '—'}</div>
+                      {selectedProduct.upc && <div><strong>UPC:</strong> {selectedProduct.upc}</div>}
+                      <div><strong>Price:</strong> {formatCurrency(selectedProduct.price || 0)}</div>
+                      <div><strong>Cost:</strong> {formatCurrency(selectedProduct.cost || 0)}</div>
+                      {selectedProduct.stock_qty !== null && selectedProduct.stock_qty !== undefined && (
+                        <div><strong>Stock Qty:</strong> {formatQuantity(selectedProduct.stock_qty)}</div>
+                      )}
+                      {selectedProduct.stock_floor !== null && selectedProduct.stock_floor !== undefined && (
+                        <div><strong>Floor:</strong> {formatQuantity(selectedProduct.stock_floor)}</div>
+                      )}
+                      {selectedProduct.stock_kit !== null && selectedProduct.stock_kit !== undefined && (
+                        <div><strong>Kit:</strong> {formatQuantity(selectedProduct.stock_kit)}</div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    {selectedProduct.purchase_orders?.length > 0 ? (
+                      <div>
+                        <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.95rem' }}>Last 5 Purchase Orders</h4>
+                        <div className="table-wrapper" style={{ overflowX: 'auto' }}>
+                          <table style={{ fontSize: '0.85rem', minWidth: '100%' }}>
+                            <thead>
+                              <tr>
+                                <th>PO ID</th>
+                                <th>Date</th>
+                                <th>Qty</th>
+                                <th>Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {selectedProduct.purchase_orders.map((po, idx) => (
+                                <tr key={idx}>
+                                  <td>{po.po_id || '—'}</td>
+                                  <td>{po.date || '—'}</td>
+                                  <td>{formatQuantity(po.qty || 0)}</td>
+                                  <td>{formatCurrency(po.amount || 0)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.95rem' }}>Last 5 Purchase Orders</h4>
+                        <div className="empty-state" style={{ padding: '1rem', fontSize: '0.85rem' }}>No purchase orders found</div>
+                      </div>
+                    )}
+
+                    {selectedProduct.recent_sales?.length > 0 ? (
+                      <div>
+                        <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.95rem' }}>Last 5 Sales</h4>
+                        <div className="table-wrapper" style={{ overflowX: 'auto' }}>
+                          <table style={{ fontSize: '0.85rem', minWidth: '100%' }}>
+                            <thead>
+                              <tr>
+                                <th>Sale ID</th>
+                                <th>Date</th>
+                                <th>Qty</th>
+                                <th>Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {selectedProduct.recent_sales.map((sale, idx) => (
+                                <tr key={idx}>
+                                  <td>{sale.sale_id || '—'}</td>
+                                  <td>{sale.date || '—'}</td>
+                                  <td>{formatQuantity(sale.qty || 0)}</td>
+                                  <td>{formatCurrency(sale.amount || 0)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.95rem' }}>Last 5 Sales</h4>
+                        <div className="empty-state" style={{ padding: '1rem', fontSize: '0.85rem' }}>No sales found</div>
+                      </div>
                     )}
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-          
-          {/* Product Details */}
-          {selectedProduct ? (
-            <div style={{ flex: '1', paddingLeft: '1rem' }}>
-              <div style={{ marginBottom: '1.5rem' }}>
-                <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.2rem' }}>{selectedProduct.name || '—'}</h3>
-                <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.9rem', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
-                  <span><strong>SKU:</strong> {selectedProduct.sku || '—'}</span>
-                  {selectedProduct.upc && <span><strong>UPC:</strong> {selectedProduct.upc}</span>}
-                  <span><strong>Price:</strong> {formatCurrency(selectedProduct.price || 0)}</span>
-                  <span><strong>Cost:</strong> {formatCurrency(selectedProduct.cost || 0)}</span>
-                  {selectedProduct.stock_qty !== null && selectedProduct.stock_qty !== undefined && (
-                    <span><strong>Stock Qty:</strong> {formatQuantity(selectedProduct.stock_qty)}</span>
-                  )}
-                  {selectedProduct.stock_floor !== null && selectedProduct.stock_floor !== undefined && (
-                    <span><strong>Floor:</strong> {formatQuantity(selectedProduct.stock_floor)}</span>
-                  )}
-                  {selectedProduct.stock_kit !== null && selectedProduct.stock_kit !== undefined && (
-                    <span><strong>Kit:</strong> {formatQuantity(selectedProduct.stock_kit)}</span>
-                  )}
+              </div>
+            ) : (
+              /* Product List for Mobile */
+              <div>
+                <h3 style={{ margin: '0 0 1rem 0', fontSize: '0.95rem' }}>Products ({products.length})</h3>
+                <div style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+                  {products.map((product) => (
+                    <div
+                      key={product.sku}
+                      onClick={() => setSelectedProduct(product)}
+                      style={{
+                        padding: '0.75rem',
+                        marginBottom: '0.5rem',
+                        border: '1px solid var(--panel-border)',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        backgroundColor: 'transparent',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      <div style={{ fontWeight: '500', marginBottom: '0.25rem', fontSize: '0.9rem' }}>{product.name || '—'}</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                        <div>SKU: {product.sku || '—'}</div>
+                        {product.upc && <div>UPC: {product.upc}</div>}
+                        <div>Price: {formatCurrency(product.price || 0)}</div>
+                        {product.stock_qty !== null && product.stock_qty !== undefined && (
+                          <div>Stock: {formatQuantity(product.stock_qty)}</div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                {selectedProduct.purchase_orders?.length > 0 ? (
-                  <div>
-                    <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Last 5 Purchase Orders</h4>
-                    <div className="table-wrapper">
-                      <table style={{ fontSize: '0.9rem' }}>
-                        <thead>
-                          <tr>
-                            <th>PO ID</th>
-                            <th>Date</th>
-                            <th>Qty</th>
-                            <th>Amount</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedProduct.purchase_orders.map((po, idx) => (
-                            <tr key={idx}>
-                              <td>{po.po_id || '—'}</td>
-                              <td>{po.date || '—'}</td>
-                              <td>{formatQuantity(po.qty || 0)}</td>
-                              <td>{formatCurrency(po.amount || 0)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ) : (
-                  <div>
-                    <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Last 5 Purchase Orders</h4>
-                    <div className="empty-state" style={{ padding: '1rem' }}>No purchase orders found</div>
-                  </div>
-                )}
-
-                {selectedProduct.recent_sales?.length > 0 ? (
-                  <div>
-                    <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Last 5 Sales</h4>
-                    <div className="table-wrapper">
-                      <table style={{ fontSize: '0.9rem' }}>
-                        <thead>
-                          <tr>
-                            <th>Sale ID</th>
-                            <th>Date</th>
-                            <th>Qty</th>
-                            <th>Amount</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedProduct.recent_sales.map((sale, idx) => (
-                            <tr key={idx}>
-                              <td>{sale.sale_id || '—'}</td>
-                              <td>{sale.date || '—'}</td>
-                              <td>{formatQuantity(sale.qty || 0)}</td>
-                              <td>{formatCurrency(sale.amount || 0)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ) : (
-                  <div>
-                    <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Last 5 Sales</h4>
-                    <div className="empty-state" style={{ padding: '1rem' }}>No sales found</div>
-                  </div>
-                )}
-              </div>
-            </div>
+            )
           ) : (
-            <div style={{ flex: '1', paddingLeft: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-              <p>Select a product from the list to view details</p>
+            /* Desktop: Show list and details side by side */
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              {/* Product List */}
+              <div style={{ flex: '0 0 300px', borderRight: '1px solid var(--panel-border)', paddingRight: '1rem' }}>
+                <h3 style={{ margin: '0 0 1rem 0', fontSize: '1rem' }}>Products ({products.length})</h3>
+                <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
+                  {products.map((product) => (
+                    <div
+                      key={product.sku}
+                      onClick={() => setSelectedProduct(product)}
+                      style={{
+                        padding: '0.75rem',
+                        marginBottom: '0.5rem',
+                        border: selectedProduct?.sku === product.sku ? '2px solid var(--primary)' : '1px solid var(--panel-border)',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        backgroundColor: selectedProduct?.sku === product.sku ? 'var(--panel-bg-hover)' : 'transparent',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      <div style={{ fontWeight: '500', marginBottom: '0.25rem' }}>{product.name || '—'}</div>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                        <div>SKU: {product.sku || '—'}</div>
+                        {product.upc && <div>UPC: {product.upc}</div>}
+                        <div>Price: {formatCurrency(product.price || 0)}</div>
+                        {product.stock_qty !== null && product.stock_qty !== undefined && (
+                          <div>Stock: {formatQuantity(product.stock_qty)}</div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              {/* Product Details */}
+              {selectedProduct ? (
+                <div style={{ flex: '1', paddingLeft: '1rem' }}>
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.2rem' }}>{selectedProduct.name || '—'}</h3>
+                    <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.9rem', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+                      <span><strong>SKU:</strong> {selectedProduct.sku || '—'}</span>
+                      {selectedProduct.upc && <span><strong>UPC:</strong> {selectedProduct.upc}</span>}
+                      <span><strong>Price:</strong> {formatCurrency(selectedProduct.price || 0)}</span>
+                      <span><strong>Cost:</strong> {formatCurrency(selectedProduct.cost || 0)}</span>
+                      {selectedProduct.stock_qty !== null && selectedProduct.stock_qty !== undefined && (
+                        <span><strong>Stock Qty:</strong> {formatQuantity(selectedProduct.stock_qty)}</span>
+                      )}
+                      {selectedProduct.stock_floor !== null && selectedProduct.stock_floor !== undefined && (
+                        <span><strong>Floor:</strong> {formatQuantity(selectedProduct.stock_floor)}</span>
+                      )}
+                      {selectedProduct.stock_kit !== null && selectedProduct.stock_kit !== undefined && (
+                        <span><strong>Kit:</strong> {formatQuantity(selectedProduct.stock_kit)}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                    {selectedProduct.purchase_orders?.length > 0 ? (
+                      <div>
+                        <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Last 5 Purchase Orders</h4>
+                        <div className="table-wrapper">
+                          <table style={{ fontSize: '0.9rem' }}>
+                            <thead>
+                              <tr>
+                                <th>PO ID</th>
+                                <th>Date</th>
+                                <th>Qty</th>
+                                <th>Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {selectedProduct.purchase_orders.map((po, idx) => (
+                                <tr key={idx}>
+                                  <td>{po.po_id || '—'}</td>
+                                  <td>{po.date || '—'}</td>
+                                  <td>{formatQuantity(po.qty || 0)}</td>
+                                  <td>{formatCurrency(po.amount || 0)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Last 5 Purchase Orders</h4>
+                        <div className="empty-state" style={{ padding: '1rem' }}>No purchase orders found</div>
+                      </div>
+                    )}
+
+                    {selectedProduct.recent_sales?.length > 0 ? (
+                      <div>
+                        <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Last 5 Sales</h4>
+                        <div className="table-wrapper">
+                          <table style={{ fontSize: '0.9rem' }}>
+                            <thead>
+                              <tr>
+                                <th>Sale ID</th>
+                                <th>Date</th>
+                                <th>Qty</th>
+                                <th>Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {selectedProduct.recent_sales.map((sale, idx) => (
+                                <tr key={idx}>
+                                  <td>{sale.sale_id || '—'}</td>
+                                  <td>{sale.date || '—'}</td>
+                                  <td>{formatQuantity(sale.qty || 0)}</td>
+                                  <td>{formatCurrency(sale.amount || 0)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Last 5 Sales</h4>
+                        <div className="empty-state" style={{ padding: '1rem' }}>No sales found</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ flex: '1', paddingLeft: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+                  <p>Select a product from the list to view details</p>
+                </div>
+              )}
             </div>
           )}
         </div>
