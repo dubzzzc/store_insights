@@ -5010,18 +5010,6 @@ const ModuleNav = ({ active, onChange }) => {
           }, 400);
         };
 
-        if (!token) {
-          return (
-            <div className="login-layout">
-              <div className="login-card">
-                <h1>Store Insights</h1>
-                <p>Sign in to view your performance dashboard.</p>
-                <LoginForm onSubmit={handleLogin} isLoading={isAuthenticating} error={authError} />
-              </div>
-            </div>
-          );
-        }
-
         const handleStoreChange = useCallback((nextStore) => {
           // Clear all caches when store changes to ensure fresh data
           clearAllCaches();
@@ -5044,6 +5032,18 @@ const ModuleNav = ({ active, onChange }) => {
           // Update store - this will trigger storeQueryValue to update, which triggers useEffect to load data
           setSelectedStore(nextStore || null);
         }, []);
+
+        if (!token) {
+          return (
+            <div className="login-layout">
+              <div className="login-card">
+                <h1>Store Insights</h1>
+                <p>Sign in to view your performance dashboard.</p>
+                <LoginForm onSubmit={handleLogin} isLoading={isAuthenticating} error={authError} />
+              </div>
+            </div>
+          );
+        }
 
         const mainContent = userRole === 'admin'
           ? (
