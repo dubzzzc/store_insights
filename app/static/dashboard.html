@@ -4761,6 +4761,10 @@ const ModuleNav = ({ active, onChange }) => {
 
         const storeQueryValue = useMemo(() => {
           const params = [];
+          // If we have stores but no selectedStore, don't build query yet (wait for selectedStore to be set)
+          if (stores.length > 0 && !selectedStore) {
+            return '';
+          }
           const identifier = getStoreIdentifier(selectedStore);
           if (identifier) params.push(`store=${encodeURIComponent(identifier)}`);
           if (dateRange?.start) params.push(`start=${encodeURIComponent(dateRange.start)}`);
@@ -4770,7 +4774,7 @@ const ModuleNav = ({ active, onChange }) => {
           if (invRange?.start) params.push(`inv_start=${encodeURIComponent(invRange.start)}`);
           if (invRange?.end) params.push(`inv_end=${encodeURIComponent(invRange.end)}`);
           return params.length ? `?${params.join('&')}` : '';
-        }, [selectedStore, dateRange, poRange, invRange]);
+        }, [selectedStore, dateRange, poRange, invRange, stores.length]);
 
         const storeQueryValueRef = useRef(storeQueryValue);
 
@@ -4925,7 +4929,11 @@ const ModuleNav = ({ active, onChange }) => {
             // Try to restore from localStorage first, otherwise use first store
             const savedStore = storage.get(STORAGE_KEYS.selectedStore, null);
             if (savedStore) {
-              const match = stores.find((s) => getStoreIdentifier(s) === getStoreIdentifier(savedStore));
+              const savedIdentifier = getStoreIdentifier(savedStore);
+              const match = stores.find((s) => {
+                const sIdentifier = getStoreIdentifier(s);
+                return sIdentifier && savedIdentifier && sIdentifier === savedIdentifier;
+              });
               if (match) {
                 setSelectedStore(match);
                 return;
@@ -5242,6 +5250,8 @@ const ModuleNav = ({ active, onChange }) => {
           if (stores.length > 1 && !selectedStore) return;
           // Don't load if we have stores but selectedStore is still null (race condition)
           if (stores.length > 0 && !selectedStore) return;
+          // Don't load if storeQueryValue is empty (means selectedStore isn't set yet)
+          if (!storeQueryValue || !storeQueryValue.includes('store=')) return;
           // Update ref with latest storeQueryValue
           storeQueryValueRef.current = storeQueryValue;
           // Always load insights when storeQueryValue changes (includes date changes and store changes)
@@ -5635,8 +5645,21 @@ const ModuleNav = ({ active, onChange }) => {
               }
               setActiveModule('sales');
             } else {
+              // Set stores and selectedStore together to avoid race condition
               setStores(nextStores);
-              setSelectedStore(nextStores[0] || null);
+              // Always set selectedStore when stores are set - prefer saved store or use first
+              const savedStore = storage.get(STORAGE_KEYS.selectedStore, null);
+              let initialStore = null;
+              if (savedStore && nextStores.length > 0) {
+                const match = nextStores.find((s) => getStoreIdentifier(s) === getStoreIdentifier(savedStore));
+                if (match) {
+                  initialStore = match;
+                }
+              }
+              if (!initialStore && nextStores.length > 0) {
+                initialStore = nextStores[0];
+              }
+              setSelectedStore(initialStore);
               setAdminKey('');
               setAdminUsers([]);
               setSelectedAdminUserId(null);
