@@ -743,9 +743,14 @@
               storage.remove(STORAGE_KEYS.adminKey);
             }
 
-            // Redirect based on role - but always go to dashboard first
-            // Admin users can navigate to admin panel from dashboard
-            window.location.href = '/dashboard.html';
+            // Redirect based on role
+            // Admin users go directly to admin panel, others go to dashboard
+            const role = data.role || 'owner';
+            if (role === 'admin') {
+              window.location.href = '/admin.html';
+            } else {
+              window.location.href = '/dashboard.html';
+            }
           } catch (err) {
             setError(err.message || 'Login failed. Please check your credentials.');
           } finally {

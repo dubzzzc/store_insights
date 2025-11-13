@@ -499,6 +499,17 @@
       const STORAGE_KEYS = {
         token: 'store-insights/token',
         adminKey: 'store-insights/admin-key',
+        role: 'store-insights/role',
+        profile: 'store-insights/profile',
+        stores: 'store-insights/stores',
+        selectedStore: 'store-insights/selected-store',
+      };
+
+      // Clear all session data
+      const clearSession = () => {
+        Object.values(STORAGE_KEYS).forEach(key => {
+          storage.remove(key);
+        });
       };
 
       // Helper functions
@@ -1085,9 +1096,10 @@
                     Refresh
                   </button>
                   <button className="btn btn-secondary" onClick={() => {
-                    storage.remove(STORAGE_KEYS.token);
-                    storage.remove(STORAGE_KEYS.adminKey);
-                    window.location.reload();
+                    // Clear all session data
+                    clearSession();
+                    // Redirect to login page
+                    window.location.href = '/login.html';
                   }}>
                     Sign out
                   </button>

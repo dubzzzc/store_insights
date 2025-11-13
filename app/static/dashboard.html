@@ -4530,9 +4530,12 @@ const ModuleNav = ({ active, onChange }) => {
                     {userRole === 'admin' && (
                       <div 
                         className="profile-menu-item"
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
                           setProfileMenuOpen(false);
-                          window.location.href = '/admin.html';
+                          // Use replace to avoid back button issues
+                          window.location.replace('/admin.html');
                         }}
                         style={{ cursor: 'pointer', fontWeight: 600, color: 'var(--primary-strong)' }}
                       >
@@ -5791,14 +5794,21 @@ const ModuleNav = ({ active, onChange }) => {
           }, 500);
         };
 
-        // Redirect to login if no token
+        // Redirect to login if no token, or to admin if admin user
         React.useEffect(() => {
           if (!token) {
             window.location.href = '/login.html';
+            return;
           }
-        }, [token]);
+          
+          // If admin user, redirect to admin page
+          if (userRole === 'admin') {
+            window.location.href = '/admin.html';
+            return;
+          }
+        }, [token, userRole]);
 
-        if (!token) {
+        if (!token || userRole === 'admin') {
           return null; // Will redirect
         }
 
