@@ -5937,6 +5937,8 @@ const ModuleNav = ({ active, onChange }) => {
           // Always use unsecured HTTP (not HTTPS)
           const mobilityUrl = `http://${ip}:${port}/index.html`;
           
+          console.log('Attempting to connect to Spirits Mobility:', mobilityUrl);
+          
           // Note: Browsers will block fetch() to HTTP from HTTPS pages (mixed content)
           // But window.location navigation to HTTP URLs is allowed
           // So we skip the fetch check and go directly to navigation
@@ -5944,7 +5946,14 @@ const ModuleNav = ({ active, onChange }) => {
           // Use replace() instead of href to remove the connection form from browser history
           // This way, when user clicks back from Spirits Mobility, they'll go to the login selector
           setTimeout(() => {
-            window.location.replace(mobilityUrl);
+            try {
+              console.log('Redirecting to:', mobilityUrl);
+              window.location.replace(mobilityUrl);
+            } catch (error) {
+              console.error('Redirect failed:', error);
+              setMobilityError('Failed to redirect. Please check the server address and try again.');
+              setIsConnectingMobility(false);
+            }
           }, 300);
         };
 
