@@ -7,6 +7,7 @@ from app.sync import router as sync_router
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
+import time
 
 from app.bootstrap import bootstrap_admin_user
 
@@ -25,9 +26,13 @@ class NoCacheHTMLMiddleware(BaseHTTPMiddleware):
             or path == "/"
             or (path == "" and "text/html" in response.headers.get("content-type", ""))
         ):
-            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
             response.headers["Pragma"] = "no-cache"
             response.headers["Expires"] = "0"
+            # Add ETag with timestamp to prevent caching
+            response.headers["ETag"] = f'"{int(time.time())}"'
+            # Prevent if-modified-since caching
+            response.headers["Last-Modified"] = response.headers.get("Date", "")
 
         return response
 

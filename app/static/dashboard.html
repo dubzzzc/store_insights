@@ -5894,5 +5894,30 @@ const ModuleNav = ({ active, onChange }) => {
         console.log('PWA install prompt available');
       });
     </script>
+    <script>
+      // Version check to force reload of cached pages
+      (function() {
+        const CURRENT_VERSION = '2.0.0';
+        const VERSION_KEY = 'store-insights-html-version';
+        const storedVersion = localStorage.getItem(VERSION_KEY);
+        
+        if (storedVersion !== CURRENT_VERSION) {
+          // Clear all cached data and force reload
+          localStorage.setItem(VERSION_KEY, CURRENT_VERSION);
+          // Force a hard reload to bypass cache
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(registrations) {
+              for(let registration of registrations) {
+                registration.unregister();
+              }
+            });
+          }
+          // Use location.reload(true) for older browsers, or location.replace for newer
+          if (window.location.search.indexOf('nocache') === -1) {
+            window.location.replace(window.location.href + (window.location.search ? '&' : '?') + 'nocache=' + Date.now());
+          }
+        }
+      })();
+    </script>
   </body>
 </html>
