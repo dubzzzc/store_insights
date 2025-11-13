@@ -5706,73 +5706,25 @@ const ModuleNav = ({ active, onChange }) => {
           }, 500);
         };
 
-        if (!token) {
-          return (
-            <div className="login-layout">
-              <div className="login-card">
-                <h1>Spirits Store Insights</h1>
-                <p>Choose your login option to continue.</p>
-                {loginView === 'selection' && (
-                  <LoginSelection
-                    onSelectInsights={() => setLoginView('insights')}
-                    onSelectMobility={() => setLoginView('mobility')}
-                  />
-                )}
-                {loginView === 'insights' && (
-                  <>
-                    <LoginForm onSubmit={handleLogin} isLoading={isAuthenticating} error={authError} />
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() => setLoginView('selection')}
-                      style={{ marginTop: '0.5rem', width: '100%' }}
-                    >
-                      Back
-                    </button>
-                  </>
-                )}
-                {loginView === 'mobility' && (
-                  <MobilityConnectionForm
-                    onConnect={handleMobilityConnect}
-                    onBack={() => setLoginView('selection')}
-                    isLoading={isConnectingMobility}
-                    error={mobilityError}
-                  />
-                )}
-              </div>
-            </div>
-          );
+        // Redirect to login if no token, or to admin if admin user
+        React.useEffect(() => {
+          if (!token) {
+            window.location.href = '/login.html';
+            return;
+          }
+          
+          // If admin user, redirect to admin page
+          if (userRole === 'admin') {
+            window.location.href = '/admin.html';
+            return;
+          }
+        }, [token, userRole]);
+
+        if (!token || userRole === 'admin') {
+          return null; // Will redirect
         }
 
-        const mainContent = userRole === 'admin'
-          ? (
-              <div style={{ padding: '2rem', textAlign: 'center' }}>
-                <div style={{ background: 'white', padding: '3rem', borderRadius: '1rem', maxWidth: '600px', margin: '0 auto', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
-                  <h2 style={{ marginBottom: '1rem', fontSize: '1.5rem' }}>Admin Panel</h2>
-                  <p style={{ marginBottom: '2rem', color: '#64748b' }}>
-                    The admin panel has been moved to a dedicated page optimized for desktop use.
-                  </p>
-                  <a
-                    href="/admin.html"
-                    style={{
-                      display: 'inline-block',
-                      padding: '0.75rem 1.5rem',
-                      background: '#2563eb',
-                      color: 'white',
-                      textDecoration: 'none',
-                      borderRadius: '0.5rem',
-                      fontWeight: 500,
-                      transition: 'background 0.2s'
-                    }}
-                    onMouseOver={(e) => e.target.style.background = '#1d4ed8'}
-                    onMouseOut={(e) => e.target.style.background = '#2563eb'}
-                  >
-                    Open Admin Panel
-                  </a>
-                </div>
-              </div>
-            )
-          : (
+        const mainContent = (
               <Dashboard
                 stores={stores}
                 selectedStore={selectedStore}
@@ -5804,7 +5756,7 @@ const ModuleNav = ({ active, onChange }) => {
                 invRange={invRange}
                 onInvRangeChange={handleInvRangeChange}
               />
-            );
+        );
 
         return (
           <div className="app-shell">

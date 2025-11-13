@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Login to Store Insights" />
+    <title>Store Insights - Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        --bg-primary: #f8fafc;
+        --bg-secondary: #ffffff;
+        --border: #e2e8f0;
+        --text-primary: #0f172a;
+        --text-secondary: #64748b;
+        --primary: #2563eb;
+        --primary-hover: #1d4ed8;
+        --primary-light: #dbeafe;
+        --danger: #ef4444;
+        --danger-light: #fee2e2;
+        --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+        --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+        --radius: 0.5rem;
+        --radius-lg: 0.75rem;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        background: linear-gradient(135deg, #0b3d5c 0%, #0fa8b8 100%);
+        color: var(--text-primary);
+        font-size: 14px;
+        line-height: 1.5;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+      }
+
+      .login-container {
+        width: 100%;
+        max-width: 400px;
+      }
+
+      .login-card {
+        background: var(--bg-secondary);
+        border-radius: var(--radius-lg);
+        padding: 3rem;
+        box-shadow: var(--shadow-lg);
+      }
+
+      .login-card h1 {
+        font-size: 1.75rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        text-align: center;
+        color: var(--text-primary);
+      }
+
+      .login-card p {
+        text-align: center;
+        color: var(--text-secondary);
+        margin-bottom: 2rem;
+      }
+
+      .form-group {
+        margin-bottom: 1.5rem;
+      }
+
+      label {
+        display: block;
+        font-weight: 500;
+        color: var(--text-primary);
+        margin-bottom: 0.5rem;
+        font-size: 0.875rem;
+      }
+
+      input[type="email"],
+      input[type="password"] {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        font-size: 0.875rem;
+        transition: border-color 0.2s, box-shadow 0.2s;
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+      }
+
+      input:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px var(--primary-light);
+      }
+
+      input::placeholder {
+        color: #94a3b8;
+      }
+
+      .btn {
+        width: 100%;
+        padding: 0.75rem 1.5rem;
+        border: none;
+        border-radius: var(--radius);
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        background: var(--primary);
+        color: white;
+      }
+
+      .btn:hover:not(:disabled) {
+        background: var(--primary-hover);
+      }
+
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .alert {
+        padding: 1rem 1.25rem;
+        border-radius: var(--radius);
+        margin-bottom: 1.5rem;
+        font-size: 0.875rem;
+        background: var(--danger-light);
+        color: #991b1b;
+        border: 1px solid #fecaca;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script type="text/babel">
+      const { useState } = React;
+
+      const API_BASE = window.location.origin;
+
+      // Storage helper
+      const storage = {
+        get: (key, defaultValue) => {
+          try {
+            const item = localStorage.getItem(key);
+            return item ? JSON.parse(item) : defaultValue;
+          } catch {
+            return defaultValue;
+          }
+        },
+        set: (key, value) => {
+          try {
+            localStorage.setItem(key, JSON.stringify(value));
+          } catch {}
+        },
+        remove: (key) => {
+          try {
+            localStorage.removeItem(key);
+          } catch {}
+        },
+      };
+
+      const STORAGE_KEYS = {
+        token: 'store-insights/token',
+        adminKey: 'store-insights/admin-key',
+      };
+
+      const LoginForm = () => {
+        const [email, setEmail] = useState('');
+        const [password, setPassword] = useState('');
+        const [isLoading, setIsLoading] = useState(false);
+        const [error, setError] = useState('');
+
+        // Check if already logged in
+        React.useEffect(() => {
+          const token = storage.get(STORAGE_KEYS.token, null);
+          if (token) {
+            // Try to decode token to check role
+            try {
+              const payload = JSON.parse(atob(token.split('.')[1]));
+              const role = payload.role;
+              if (role === 'admin') {
+                window.location.href = '/admin.html';
+              } else {
+                window.location.href = '/dashboard.html';
+              }
+            } catch {
+              // Invalid token, continue with login
+            }
+          }
+        }, []);
+
+        const handleSubmit = async (e) => {
+          e.preventDefault();
+          setIsLoading(true);
+          setError('');
+
+          try {
+            const response = await fetch(`${API_BASE}/auth/login`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, password }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+              throw new Error(data.detail || 'Login failed');
+            }
+
+            // Store token and admin key
+            storage.set(STORAGE_KEYS.token, data.token);
+            if (data.admin_key) {
+              storage.set(STORAGE_KEYS.adminKey, data.admin_key);
+            }
+
+            // Redirect based on role
+            const role = data.role || 'user';
+            if (role === 'admin') {
+              window.location.href = '/admin.html';
+            } else {
+              window.location.href = '/dashboard.html';
+            }
+          } catch (err) {
+            setError(err.message || 'Login failed. Please check your credentials.');
+          } finally {
+            setIsLoading(false);
+          }
+        };
+
+        return (
+          <div className="login-container">
+            <div className="login-card">
+              <h1>Store Insights</h1>
+              <p>Sign in to continue</p>
+              <form onSubmit={handleSubmit}>
+                {error && <div className="alert">{error}</div>}
+                <div className="form-group">
+                  <label htmlFor="email">Email</label>
+                  <input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    required
+                    disabled={isLoading}
+                    autoFocus
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="password">Password</label>
+                  <input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                    disabled={isLoading}
+                  />
+                </div>
+                <button type="submit" className="btn" disabled={isLoading}>
+                  {isLoading ? 'Signing in...' : 'Sign in'}
+                </button>
+              </form>
+            </div>
+          </div>
+        );
+      };
+
+      ReactDOM.render(<LoginForm />, document.getElementById('root'));
+    </script>
+  </body>
+</html>
+
