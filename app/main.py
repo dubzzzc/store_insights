@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from app.auth import router as auth_router
 from app.insights import router as insights_router
 from app.admin import router as admin_router
@@ -6,14 +6,33 @@ from app.uploader import router as uploader_router
 from app.sync import router as sync_router
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-import os
-from pathlib import Path
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.bootstrap import bootstrap_admin_user
 
 app = FastAPI(title="Store Insights API")
 
 
+# Middleware to add no-cache headers for HTML files
+class NoCacheHTMLMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        path = request.url.path
+
+        # Add no-cache headers for HTML files
+        if (
+            path.endswith(".html")
+            or path == "/"
+            or (path == "" and "text/html" in response.headers.get("content-type", ""))
+        ):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+
+        return response
+
+
+app.add_middleware(NoCacheHTMLMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:8000/dashboard"],  # or specify your frontend URL like ["https://yoursite.com"]
