@@ -4887,7 +4887,12 @@ const ModuleNav = ({ active, onChange }) => {
           }
         }, [stores]);
 
+        // Sync stores and selectedStore - ensure selectedStore is always set when stores are available
         useEffect(() => {
+          if (userRole === 'admin') {
+            return; // Admins don't have stores
+          }
+
           if (!stores?.length) {
             if (selectedStore) {
               setSelectedStore(null);
@@ -4895,19 +4900,39 @@ const ModuleNav = ({ active, onChange }) => {
             return;
           }
 
+          // If we have stores but no selectedStore, set it immediately
           if (!selectedStore) {
+            // Try to restore from localStorage first
+            const savedStore = storage.get(STORAGE_KEYS.selectedStore, null);
+            if (savedStore) {
+              const savedIdentifier = getStoreIdentifier(savedStore);
+              if (savedIdentifier) {
+                const match = stores.find((s) => {
+                  const sIdentifier = getStoreIdentifier(s);
+                  return sIdentifier && savedIdentifier && sIdentifier === savedIdentifier;
+                });
+                if (match) {
+                  setSelectedStore(match);
+                  return;
+                }
+              }
+            }
+            // No match found, use first store
             setSelectedStore(stores[0]);
             return;
           }
 
+          // Validate that selectedStore still exists in stores array
           const identifier = getStoreIdentifier(selectedStore);
           const match = stores.find((store) => getStoreIdentifier(store) === identifier);
           if (!match) {
+            // Selected store no longer exists, use first store
             setSelectedStore(stores[0]);
           } else if (match !== selectedStore) {
+            // Update to the matching store object (in case it changed)
             setSelectedStore(match);
           }
-        }, [stores, selectedStore]);
+        }, [stores, selectedStore, userRole]);
 
         useEffect(() => {
           if (selectedStore) {
@@ -4917,32 +4942,21 @@ const ModuleNav = ({ active, onChange }) => {
           }
         }, [selectedStore]);
 
-        // Ensure selectedStore is set when stores are available
-        // This fixes the race condition where data loading happens before selectedStore is set
+        // Ensure stores are loaded from localStorage on initial mount if they exist
         useEffect(() => {
-          if (userRole === 'admin' || !stores.length) {
+          if (userRole === 'admin') {
             return;
           }
           
-          // If we have stores but no selectedStore, set it immediately
-          if (!selectedStore && stores.length > 0) {
-            // Try to restore from localStorage first, otherwise use first store
-            const savedStore = storage.get(STORAGE_KEYS.selectedStore, null);
-            if (savedStore) {
-              const savedIdentifier = getStoreIdentifier(savedStore);
-              const match = stores.find((s) => {
-                const sIdentifier = getStoreIdentifier(s);
-                return sIdentifier && savedIdentifier && sIdentifier === savedIdentifier;
-              });
-              if (match) {
-                setSelectedStore(match);
-                return;
-              }
+          // If we have a token but no stores in state, try to load from localStorage
+          if (token && !stores.length) {
+            const savedStores = storage.get(STORAGE_KEYS.stores, []);
+            if (savedStores && Array.isArray(savedStores) && savedStores.length > 0) {
+              setStores(savedStores);
+              // selectedStore will be set by the useEffect above
             }
-            // No match found, use first store
-            setSelectedStore(stores[0]);
           }
-        }, [stores, selectedStore, userRole]);
+        }, [token, stores.length, userRole]);
 
         useEffect(() => {
           if (adminKey && userRole === 'admin') {

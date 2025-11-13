@@ -406,6 +406,10 @@
       const STORAGE_KEYS = {
         token: 'store-insights/token',
         adminKey: 'store-insights/admin-key',
+        role: 'store-insights/role',
+        profile: 'store-insights/profile',
+        stores: 'store-insights/stores',
+        selectedStore: 'store-insights/selected-store',
       };
 
       const LoginForm = ({ onSubmit, isLoading, error }) => {
@@ -644,10 +648,74 @@
               throw new Error(data.detail || 'Login failed');
             }
 
-            // Store token and admin key
+            // Store all login data in localStorage before redirecting
             storage.set(STORAGE_KEYS.token, data.token);
+            
+            // Store role
+            if (data.role) {
+              storage.set(STORAGE_KEYS.role, data.role);
+            }
+            
+            // Store profile
+            if (data.email || data.full_name) {
+              storage.set(STORAGE_KEYS.profile, {
+                email: data.email || '',
+                full_name: data.full_name || '',
+              });
+            }
+            
+            // Store stores and set initial selectedStore
+            if (data.stores && Array.isArray(data.stores) && data.stores.length > 0) {
+              storage.set(STORAGE_KEYS.stores, data.stores);
+              // Helper to get store identifier (same logic as dashboard)
+              const getStoreIdentifier = (store) => {
+                if (!store) return '';
+                if (store.store_id !== undefined && store.store_id !== null) {
+                  return String(store.store_id);
+                }
+                if (store.store_db) {
+                  return String(store.store_db);
+                }
+                if (store.store_name) {
+                  return String(store.store_name);
+                }
+                if (store.id) {
+                  return String(store.id);
+                }
+                return '';
+              };
+              
+              // Set first store as selected (or restore from localStorage if available)
+              const savedStore = storage.get(STORAGE_KEYS.selectedStore, null);
+              let initialStore = null;
+              if (savedStore) {
+                // Try to find matching store using identifier
+                const savedIdentifier = getStoreIdentifier(savedStore);
+                if (savedIdentifier) {
+                  const match = data.stores.find((s) => {
+                    const sIdentifier = getStoreIdentifier(s);
+                    return sIdentifier && savedIdentifier && sIdentifier === savedIdentifier;
+                  });
+                  if (match) {
+                    initialStore = match;
+                  }
+                }
+              }
+              if (!initialStore) {
+                initialStore = data.stores[0];
+              }
+              storage.set(STORAGE_KEYS.selectedStore, initialStore);
+            } else {
+              // No stores, clear any old store data
+              storage.remove(STORAGE_KEYS.stores);
+              storage.remove(STORAGE_KEYS.selectedStore);
+            }
+            
+            // Store admin key if present
             if (data.admin_key) {
               storage.set(STORAGE_KEYS.adminKey, data.admin_key);
+            } else {
+              storage.remove(STORAGE_KEYS.adminKey);
             }
 
             // Redirect based on role - but always go to dashboard first
