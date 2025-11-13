@@ -5937,34 +5937,23 @@ const ModuleNav = ({ active, onChange }) => {
           // Always use unsecured HTTP (not HTTPS)
           const mobilityUrl = `http://${ip}:${port}/index.html`;
           
-          console.log('Attempting to connect to Spirits Mobility:', mobilityUrl);
-          
-          // Some browsers block window.location navigation from HTTPS to HTTP
-          // Use form submission as a workaround, which browsers typically allow
-          setTimeout(() => {
-            try {
-              console.log('Redirecting to:', mobilityUrl);
-              
-              // Create a temporary form and submit it to navigate to HTTP URL
-              // This bypasses browser restrictions on HTTPS->HTTP navigation
-              const form = document.createElement('form');
-              form.method = 'GET';
-              form.action = mobilityUrl;
-              form.style.display = 'none';
-              document.body.appendChild(form);
-              form.submit();
-            } catch (error) {
-              console.error('Redirect failed:', error);
-              // Fallback to window.location if form submission fails
-              try {
-                window.location.replace(mobilityUrl);
-              } catch (fallbackError) {
-                console.error('Fallback redirect also failed:', fallbackError);
-                setMobilityError('Failed to redirect. Please check the server address and try again.');
-                setIsConnectingMobility(false);
-              }
-            }
-          }, 300);
+          // Modern browsers block HTTPS->HTTP navigation, but we can try opening in new tab
+          // which is often allowed. The user can then close the tab to return.
+          // Do this immediately while we still have the user gesture context
+          try {
+            // Try to open in same window first
+            const link = document.createElement('a');
+            link.href = mobilityUrl;
+            link.target = '_self';
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          } catch (error) {
+            // If that fails, open in new tab (browsers usually allow this)
+            console.log('Opening Spirits Mobility in new tab due to browser security restrictions');
+            window.open(mobilityUrl, '_blank');
+          }
         };
 
         // Redirect to login if no token, or to admin if admin user
