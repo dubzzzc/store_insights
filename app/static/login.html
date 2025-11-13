@@ -764,17 +764,16 @@
           
           const mobilityUrl = `http://${ip}:${port}/index.html`;
           
-          fetch(`${mobilityUrl}`, { 
-            method: 'HEAD',
-            mode: 'no-cors',
-            cache: 'no-cache'
-          }).catch(() => {
-            // Ignore CORS errors
-          });
+          // Note: Browsers will block fetch() to HTTP from HTTPS pages (mixed content)
+          // But window.location navigation to HTTP URLs is allowed
+          // So we skip the fetch check and go directly to navigation
           
+          // Small delay to show loading state, then redirect
           setTimeout(() => {
-            window.location.replace(mobilityUrl);
-          }, 500);
+            // Use window.location.href instead of replace to allow back navigation
+            // if user wants to return to login page
+            window.location.href = mobilityUrl;
+          }, 300);
         };
 
         return (

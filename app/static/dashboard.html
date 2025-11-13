@@ -5937,21 +5937,15 @@ const ModuleNav = ({ active, onChange }) => {
           // Always use unsecured HTTP (not HTTPS)
           const mobilityUrl = `http://${ip}:${port}/index.html`;
           
-          // Try to connect to the Mobility server (optional check)
-          // This helps verify the server is reachable before redirecting
-          fetch(`${mobilityUrl}`, { 
-            method: 'HEAD',
-            mode: 'no-cors',
-            cache: 'no-cache'
-          }).catch(() => {
-            // Ignore CORS errors - the server might not allow CORS, but we'll still try to navigate
-          });
+          // Note: Browsers will block fetch() to HTTP from HTTPS pages (mixed content)
+          // But window.location navigation to HTTP URLs is allowed
+          // So we skip the fetch check and go directly to navigation
           
           // Use replace() instead of href to remove the connection form from browser history
           // This way, when user clicks back from Spirits Mobility, they'll go to the login selector
           setTimeout(() => {
             window.location.replace(mobilityUrl);
-          }, 500);
+          }, 300);
         };
 
         // Redirect to login if no token, or to admin if admin user
