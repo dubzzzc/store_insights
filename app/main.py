@@ -40,9 +40,14 @@ class NoCacheHTMLMiddleware(BaseHTTPMiddleware):
 app.add_middleware(NoCacheHTMLMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8000/dashboard"],  # or specify your frontend URL like ["https://yoursite.com"]
+    allow_origins=[
+        "capacitor://localhost",  # iOS/Android native app
+        "http://localhost",  # Local testing
+        "http://localhost:8000",  # Local FastAPI server
+        "https://your-api-domain.com",  # Production API domain (update with your actual domain)
+    ],
     allow_credentials=True,
-    allow_methods=["*"],   # Includes OPTIONS
+    allow_methods=["*"],  # Includes OPTIONS
     allow_headers=["*"],
 )
 

@@ -24,21 +24,29 @@ This app has been configured as a Progressive Web App (PWA) that can:
 
 ## Camera Access
 
-The app now has camera permissions declared in the manifest. To actually use the camera, you'll need to add camera functionality using the browser's MediaDevices API:
+The app includes a camera utility (`camera-utils.js`) that works on both native apps and web browsers. It automatically uses the native camera API on iOS/Android devices and falls back to the browser API on web.
 
-```javascript
-// Example camera access code
-async function requestCamera() {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ 
-      video: { facingMode: 'environment' } // Use back camera on mobile
+**Usage:**
+```html
+<script src="/camera-utils.js"></script>
+<script>
+  // Take a picture
+  CameraUtils.takePicture({ quality: 90 })
+    .then(image => {
+      console.log('Image:', image.base64);
+      // Use the image data
+    })
+    .catch(error => {
+      console.error('Camera error:', error);
     });
-    // Use the stream for camera functionality
-  } catch (error) {
-    console.error('Camera access denied:', error);
-  }
-}
+</script>
 ```
+
+The camera utility handles:
+- Native camera on iOS/Android (via Capacitor)
+- Browser camera on web (via MediaDevices API)
+- Permission requests
+- Error handling
 
 ## Icon Requirements
 
@@ -70,19 +78,31 @@ These icons will appear:
 2. A banner will appear: "Add Spirits Store Insights to Home screen"
 3. Tap "Add" or use the menu → "Add to Home screen"
 
-## App Store Submission (Optional)
+## App Store Submission
 
-You **don't need** app store approval to use the PWA, but you can optionally submit it:
+### Option 1: PWA (No App Store Required)
 
-### iOS App Store:
-- Use tools like [PWA Builder](https://www.pwabuilder.com/) or [Capacitor](https://capacitorjs.com/)
-- Convert PWA to native iOS app
+You **don't need** app store approval to use the PWA. Users can install it directly from the browser.
+
+### Option 2: Native Apps (App Store Submission)
+
+The app is now configured with **Capacitor** for native iOS and Android deployment. See [MOBILE_APP_DEPLOYMENT.md](MOBILE_APP_DEPLOYMENT.md) for complete instructions.
+
+**Quick Start:**
+```bash
+npm install
+npm run cap:sync
+npm run cap:ios      # Opens Xcode (macOS only)
+npm run cap:android  # Opens Android Studio
+```
+
+**iOS App Store:**
+- Native app via Capacitor
 - Submit through Apple App Store Connect
 - **Cost:** $99/year developer account
 
-### Google Play Store:
-- Use [Trusted Web Activity (TWA)](https://developer.chrome.com/docs/android/trusted-web-activity/)
-- Or use [Bubblewrap](https://github.com/GoogleChromeLabs/bubblewrap)
+**Google Play Store:**
+- Native app via Capacitor
 - Submit through Google Play Console
 - **Cost:** $25 one-time fee
 

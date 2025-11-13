@@ -4,7 +4,11 @@
   "description": "The `python -m compileall` helper expects paths relative to your current\r working directory. Run the command from the repository root so the script is\r found correctly:",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "cap:sync": "npx cap sync",
+    "cap:ios": "npx cap open ios",
+    "cap:android": "npx cap open android",
+    "cap:copy": "npx cap copy"
   },
   "repository": {
     "type": "git",
@@ -28,6 +32,11 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@capacitor/android": "^7.4.4",
+    "@capacitor/camera": "^7.0.2",
+    "@capacitor/cli": "^7.4.4",
+    "@capacitor/core": "^7.4.4",
+    "@capacitor/ios": "^7.4.4",
     "aws-amplify": "^6.15.8"
   }
 }
