@@ -766,21 +766,30 @@
           
           console.log('Attempting to connect to Spirits Mobility:', mobilityUrl);
           
-          // Note: Browsers will block fetch() to HTTP from HTTPS pages (mixed content)
-          // But window.location navigation to HTTP URLs is allowed
-          // So we skip the fetch check and go directly to navigation
-          
-          // Small delay to show loading state, then redirect
+          // Some browsers block window.location navigation from HTTPS to HTTP
+          // Use form submission as a workaround, which browsers typically allow
           setTimeout(() => {
             try {
               console.log('Redirecting to:', mobilityUrl);
-              // Use window.location.href instead of replace to allow back navigation
-              // if user wants to return to login page
-              window.location.href = mobilityUrl;
+              
+              // Create a temporary form and submit it to navigate to HTTP URL
+              // This bypasses browser restrictions on HTTPS->HTTP navigation
+              const form = document.createElement('form');
+              form.method = 'GET';
+              form.action = mobilityUrl;
+              form.style.display = 'none';
+              document.body.appendChild(form);
+              form.submit();
             } catch (error) {
               console.error('Redirect failed:', error);
-              setMobilityError('Failed to redirect. Please check the server address and try again.');
-              setIsConnectingMobility(false);
+              // Fallback to window.location if form submission fails
+              try {
+                window.location.href = mobilityUrl;
+              } catch (fallbackError) {
+                console.error('Fallback redirect also failed:', fallbackError);
+                setMobilityError('Failed to redirect. Please check the server address and try again.');
+                setIsConnectingMobility(false);
+              }
             }
           }, 300);
         };
