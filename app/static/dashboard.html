@@ -4913,6 +4913,29 @@ const ModuleNav = ({ active, onChange }) => {
           }
         }, [selectedStore]);
 
+        // Ensure selectedStore is set when stores are available
+        // This fixes the race condition where data loading happens before selectedStore is set
+        useEffect(() => {
+          if (userRole === 'admin' || !stores.length) {
+            return;
+          }
+          
+          // If we have stores but no selectedStore, set it immediately
+          if (!selectedStore && stores.length > 0) {
+            // Try to restore from localStorage first, otherwise use first store
+            const savedStore = storage.get(STORAGE_KEYS.selectedStore, null);
+            if (savedStore) {
+              const match = stores.find((s) => getStoreIdentifier(s) === getStoreIdentifier(savedStore));
+              if (match) {
+                setSelectedStore(match);
+                return;
+              }
+            }
+            // No match found, use first store
+            setSelectedStore(stores[0]);
+          }
+        }, [stores, selectedStore, userRole]);
+
         useEffect(() => {
           if (adminKey && userRole === 'admin') {
             storage.set(STORAGE_KEYS.adminKey, adminKey);
@@ -5214,7 +5237,11 @@ const ModuleNav = ({ active, onChange }) => {
 
         useEffect(() => {
           if (!token || userRole === 'admin') return;
+          // Don't load if we have multiple stores but no selectedStore yet
+          // Wait for selectedStore to be set by the other useEffect
           if (stores.length > 1 && !selectedStore) return;
+          // Don't load if we have stores but selectedStore is still null (race condition)
+          if (stores.length > 0 && !selectedStore) return;
           // Update ref with latest storeQueryValue
           storeQueryValueRef.current = storeQueryValue;
           // Always load insights when storeQueryValue changes (includes date changes and store changes)
@@ -5227,7 +5254,10 @@ const ModuleNav = ({ active, onChange }) => {
         // should handle it via storeQueryValue, but this adds a safeguard)
         useEffect(() => {
           if (!token || userRole === 'admin') return;
+          // Don't load if we have multiple stores but no selectedStore yet
           if (stores.length > 1 && !selectedStore) return;
+          // Don't load if we have stores but selectedStore is still null
+          if (stores.length > 0 && !selectedStore) return;
           
           // Initialize refs on first run (skip refresh on initial mount)
           if (prevDateRangeRef.current === null) {
@@ -5278,7 +5308,10 @@ const ModuleNav = ({ active, onChange }) => {
 
         useEffect(() => {
           if (!token || userRole === 'admin') return;
+          // Don't load if we have multiple stores but no selectedStore yet
           if (stores.length > 1 && !selectedStore) return;
+          // Don't load if we have stores but selectedStore is still null
+          if (stores.length > 0 && !selectedStore) return;
           if (['tenders', 'operations'].includes(activeModule)) {
             loadModuleData(token, storeQueryValue, activeModule);
           }

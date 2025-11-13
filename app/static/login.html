@@ -615,23 +615,8 @@
         const [isConnectingMobility, setIsConnectingMobility] = useState(false);
         const [mobilityError, setMobilityError] = useState('');
 
-        // Check if already logged in
-        useEffect(() => {
-          const token = storage.get(STORAGE_KEYS.token, null);
-          if (token) {
-            try {
-              const payload = JSON.parse(atob(token.split('.')[1]));
-              const role = payload.role;
-              if (role === 'admin') {
-                window.location.href = '/admin.html';
-              } else {
-                window.location.href = '/dashboard.html';
-              }
-            } catch {
-              // Invalid token, continue with login
-            }
-          }
-        }, []);
+        // Don't auto-redirect - let user choose login option
+        // If they're already logged in, they should go directly to dashboard/admin
 
         const handleLogin = async ({ email, password }) => {
           setIsLoading(true);
