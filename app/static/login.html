@@ -37,7 +37,7 @@
       }
 
       body {
-        background: linear-gradient(135deg, #0b3d5c 0%, #0fa8b8 100%);
+        background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(19, 78, 110, 0.95));
         color: var(--text-primary);
         font-size: 14px;
         line-height: 1.5;
@@ -46,32 +46,249 @@
         align-items: center;
         justify-content: center;
         padding: 2rem;
+        position: relative;
+        overflow: hidden;
+      }
+
+      body::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: 
+          radial-gradient(circle at 20% 50%, rgba(14, 165, 233, 0.15) 0%, transparent 50%),
+          radial-gradient(circle at 80% 80%, rgba(139, 92, 246, 0.15) 0%, transparent 50%);
+        pointer-events: none;
       }
 
       .login-container {
         width: 100%;
-        max-width: 400px;
+        max-width: 480px;
+        position: relative;
+        z-index: 1;
       }
 
       .login-card {
-        background: var(--bg-secondary);
-        border-radius: var(--radius-lg);
-        padding: 3rem;
-        box-shadow: var(--shadow-lg);
+        width: 100%;
+        background: rgba(15, 23, 42, 0.85);
+        backdrop-filter: blur(16px);
+        color: #fff;
+        border-radius: 1.75rem;
+        padding: clamp(2rem, 5vw, 3rem);
+        display: grid;
+        gap: 2rem;
+        box-shadow: 0 40px 80px rgba(15, 23, 42, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.12);
       }
 
       .login-card h1 {
-        font-size: 1.75rem;
-        font-weight: 600;
-        margin-bottom: 0.5rem;
+        margin: 0;
         text-align: center;
-        color: var(--text-primary);
+        font-size: clamp(2rem, 5vw, 2.5rem);
+        font-weight: 700;
+        background: linear-gradient(135deg, #fff 0%, rgba(148, 163, 184, 0.9) 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        letter-spacing: -0.02em;
       }
 
       .login-card p {
+        margin: 0;
         text-align: center;
-        color: var(--text-secondary);
-        margin-bottom: 2rem;
+        color: rgba(226, 232, 240, 0.75);
+        font-size: 0.95rem;
+      }
+
+      .login-options {
+        display: grid;
+        gap: 1rem;
+      }
+
+      .login-option-btn {
+        padding: 1.25rem 1.5rem;
+        border-radius: 1rem;
+        border: 2px solid rgba(148, 163, 184, 0.2);
+        background: rgba(15, 23, 42, 0.6);
+        color: #fff;
+        font-weight: 600;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+        user-select: none;
+        -webkit-user-select: none;
+        min-height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .login-option-btn::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+        transition: left 0.5s ease;
+      }
+
+      .login-option-btn:hover::before {
+        left: 100%;
+      }
+
+      .login-option-btn:hover {
+        border-color: rgba(14, 165, 233, 0.5);
+        background: rgba(14, 165, 233, 0.1);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(14, 165, 233, 0.2);
+      }
+
+      .login-option-btn:active {
+        transform: translateY(0);
+        background: rgba(14, 165, 233, 0.2);
+      }
+
+      .mobility-form {
+        display: grid;
+        gap: 1.25rem;
+        margin-top: 0.5rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid rgba(148, 163, 184, 0.2);
+      }
+
+      .mobility-form label {
+        display: grid;
+        gap: 0.5rem;
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 0.9rem;
+        font-weight: 500;
+      }
+
+      .mobility-form-row {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 1rem;
+      }
+
+      .mobility-form input {
+        background: rgba(15, 23, 42, 0.7);
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        color: #fff;
+        padding: 0.85rem 1rem;
+        border-radius: 0.75rem;
+        font-size: 0.95rem;
+        transition: all 0.2s ease;
+      }
+
+      .mobility-form input:focus {
+        outline: none;
+        border-color: rgba(14, 165, 233, 0.6);
+        background: rgba(15, 23, 42, 0.85);
+        box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+      }
+
+      .mobility-form input:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .mobility-form input.readonly-input {
+        background: rgba(15, 23, 42, 0.5);
+        color: rgba(226, 232, 240, 0.7);
+        border-color: rgba(148, 163, 184, 0.2);
+        cursor: default;
+      }
+
+      .mobility-form input[readonly] {
+        background: rgba(15, 23, 42, 0.5);
+        color: rgba(226, 232, 240, 0.7);
+        border-color: rgba(148, 163, 184, 0.2);
+        cursor: default;
+      }
+
+      .mobility-form input::placeholder {
+        color: rgba(226, 232, 240, 0.5);
+      }
+
+      .edit-btn {
+        padding: 0.6rem 1rem;
+        border-radius: 0.6rem;
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        background: rgba(15, 23, 42, 0.6);
+        color: rgba(255, 255, 255, 0.9);
+        font-weight: 500;
+        font-size: 0.9rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        width: 100%;
+        margin-top: 0.5rem;
+      }
+
+      .edit-btn:hover:not(:disabled) {
+        background: rgba(15, 23, 42, 0.8);
+        border-color: rgba(148, 163, 184, 0.5);
+      }
+
+      .edit-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .countdown-message {
+        text-align: center;
+        color: rgba(226, 232, 240, 0.8);
+        font-size: 0.95rem;
+        padding: 0.75rem;
+        background: rgba(14, 165, 233, 0.1);
+        border-radius: 0.75rem;
+        margin: 0.5rem 0;
+      }
+
+      .mobility-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+        margin-top: 0.5rem;
+      }
+
+      .mobility-actions button {
+        padding: 0.85rem 1.25rem;
+        border-radius: 0.75rem;
+        border: none;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-size: 0.95rem;
+      }
+
+      .mobility-actions button.primary {
+        background: var(--primary);
+        color: #fff;
+      }
+
+      .mobility-actions button.primary:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 8px 20px rgba(14, 165, 233, 0.3);
+      }
+
+      .mobility-actions button.secondary {
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        color: rgba(255, 255, 255, 0.9);
+      }
+
+      .mobility-actions button.secondary:hover {
+        background: rgba(15, 23, 42, 0.8);
+        border-color: rgba(148, 163, 184, 0.5);
       }
 
       .form-group {
@@ -86,58 +303,68 @@
         font-size: 0.875rem;
       }
 
-      input[type="email"],
-      input[type="password"] {
-        width: 100%;
-        padding: 0.75rem 1rem;
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        font-size: 0.875rem;
-        transition: border-color 0.2s, box-shadow 0.2s;
-        background: var(--bg-secondary);
-        color: var(--text-primary);
+      .login-card label {
+        color: rgba(255, 255, 255, 0.9);
       }
 
-      input:focus {
+      .login-card input {
+        background: rgba(15, 23, 42, 0.65);
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        color: #fff;
+        padding: 0.8rem 1rem;
+        border-radius: 0.9rem;
+        transition: all 0.2s ease;
+        width: 100%;
+        font-size: 0.95rem;
+      }
+
+      .login-card input:focus {
         outline: none;
-        border-color: var(--primary);
-        box-shadow: 0 0 0 3px var(--primary-light);
+        border-color: rgba(14, 165, 233, 0.6);
+        background: rgba(15, 23, 42, 0.85);
+        box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
       }
 
-      input::placeholder {
-        color: #94a3b8;
+      .login-card input::placeholder {
+        color: rgba(226, 232, 240, 0.6);
       }
 
-      .btn {
-        width: 100%;
-        padding: 0.75rem 1.5rem;
+      .login-card button {
+        padding: 0.85rem 1.25rem;
+        border-radius: 0.95rem;
         border: none;
-        border-radius: var(--radius);
-        font-size: 0.875rem;
-        font-weight: 500;
+        font-weight: 600;
         cursor: pointer;
-        transition: all 0.2s;
         background: var(--primary);
-        color: white;
+        color: #fff;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        width: 100%;
       }
 
-      .btn:hover:not(:disabled) {
-        background: var(--primary-hover);
+      .login-card button:hover,
+      .login-card button:focus {
+        outline: none;
+        transform: translateY(-1px);
+        box-shadow: 0 12px 28px rgba(14, 165, 233, 0.35);
       }
 
-      .btn:disabled {
+      .login-card button:disabled {
         opacity: 0.5;
         cursor: not-allowed;
       }
 
-      .alert {
-        padding: 1rem 1.25rem;
-        border-radius: var(--radius);
-        margin-bottom: 1.5rem;
-        font-size: 0.875rem;
-        background: var(--danger-light);
-        color: #991b1b;
-        border: 1px solid #fecaca;
+      .login-card button.secondary {
+        background: rgba(15, 23, 42, 0.55);
+        border: 1px solid rgba(148, 163, 184, 0.35);
+      }
+
+      .error-message {
+        padding: 0.9rem 1.1rem;
+        border-radius: 0.95rem;
+        background: rgba(220, 38, 38, 0.18);
+        color: #fecaca;
+        font-weight: 600;
+        margin-bottom: 1rem;
       }
     </style>
   </head>
@@ -147,7 +374,7 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script type="text/babel">
-      const { useState } = React;
+      const { useState, useEffect, useRef } = React;
 
       const API_BASE = window.location.origin;
 
@@ -178,17 +405,220 @@
         adminKey: 'store-insights/admin-key',
       };
 
-      const LoginForm = () => {
+      const LoginForm = ({ onSubmit, isLoading, error }) => {
         const [email, setEmail] = useState('');
         const [password, setPassword] = useState('');
+
+        const submit = (event) => {
+          event.preventDefault();
+          onSubmit({ email, password });
+        };
+
+        return (
+          <form onSubmit={submit}>
+            <label htmlFor="email">
+              Email
+              <input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+                disabled={isLoading}
+              />
+            </label>
+            <label htmlFor="password">
+              Password
+              <input
+                id="password"
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+                disabled={isLoading}
+              />
+            </label>
+            {error ? <div className="error-message">{error}</div> : null}
+            <button type="submit" disabled={isLoading}>
+              {isLoading ? 'Signing in…' : 'Sign in'}
+            </button>
+          </form>
+        );
+      };
+
+      const LoginSelection = ({ onSelectInsights, onSelectMobility }) => {
+        const handleInsightsClick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onSelectInsights();
+        };
+
+        const handleMobilityClick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onSelectMobility();
+        };
+
+        return (
+          <div className="login-options">
+            <button
+              type="button"
+              className="login-option-btn"
+              onClick={handleInsightsClick}
+              onTouchStart={(e) => {
+                e.currentTarget.style.transform = 'scale(0.98)';
+              }}
+              onTouchEnd={(e) => {
+                e.currentTarget.style.transform = '';
+                handleInsightsClick(e);
+              }}
+            >
+              Login to Spirits Insights
+            </button>
+            <button
+              type="button"
+              className="login-option-btn"
+              onClick={handleMobilityClick}
+              onTouchStart={(e) => {
+                e.currentTarget.style.transform = 'scale(0.98)';
+              }}
+              onTouchEnd={(e) => {
+                e.currentTarget.style.transform = '';
+                handleMobilityClick(e);
+              }}
+            >
+              Login to Spirits Mobility
+            </button>
+          </div>
+        );
+      };
+
+      const MobilityConnectionForm = ({ onConnect, onBack, isLoading, error }) => {
+        const savedIp = localStorage.getItem('spirits_mobility_ip');
+        const savedPort = localStorage.getItem('spirits_mobility_port');
+        const hasSavedConnection = Boolean(savedIp && savedPort);
+        
+        const [serverIp, setServerIp] = useState(savedIp || '');
+        const [serverPort, setServerPort] = useState(savedPort || '8080');
+        const [isEditing, setIsEditing] = useState(!hasSavedConnection);
+        const [countdown, setCountdown] = useState(hasSavedConnection ? 12 : null);
+        const [isConnecting, setIsConnecting] = useState(false);
+
+        useEffect(() => {
+          if (hasSavedConnection && !isEditing && countdown !== null && countdown > 0) {
+            const timer = setTimeout(() => {
+              setCountdown(countdown - 1);
+            }, 1000);
+            return () => clearTimeout(timer);
+          } else if (hasSavedConnection && !isEditing && countdown === 0 && !isConnecting) {
+            setIsConnecting(true);
+            onConnect(serverIp, serverPort);
+          }
+        }, [countdown, hasSavedConnection, isEditing, isConnecting, serverIp, serverPort, onConnect]);
+
+        const handleEdit = () => {
+          setIsEditing(true);
+          setCountdown(null);
+        };
+
+        const handleConnect = (event) => {
+          event?.preventDefault();
+          if (serverIp && serverPort) {
+            setIsConnecting(true);
+            localStorage.setItem('spirits_mobility_ip', serverIp);
+            localStorage.setItem('spirits_mobility_port', serverPort);
+            onConnect(serverIp, serverPort);
+          }
+        };
+
+        return (
+          <div className="mobility-form">
+            <h2 style={{ margin: '0 0 1rem 0', textAlign: 'center', fontSize: '1.25rem', fontWeight: 600 }}>
+              Logging into Spirits Mobility
+            </h2>
+            <form onSubmit={handleConnect}>
+              <label htmlFor="server-ip">
+                Server IP Address
+                <input
+                  id="server-ip"
+                  type="text"
+                  placeholder="192.168.1.100"
+                  value={serverIp}
+                  onChange={(event) => setServerIp(event.target.value)}
+                  required
+                  disabled={!isEditing || isConnecting}
+                  readOnly={!isEditing}
+                  className={!isEditing ? 'readonly-input' : ''}
+                  pattern={isEditing ? "^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$|^[a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?)*$" : undefined}
+                  title={isEditing ? "Enter a valid IP address or hostname" : undefined}
+                />
+              </label>
+              <div className="mobility-form-row">
+                <label htmlFor="server-port">
+                  Port
+                  <input
+                    id="server-port"
+                    type="number"
+                    placeholder="8080"
+                    value={serverPort}
+                    onChange={(event) => setServerPort(event.target.value)}
+                    required
+                    min="1"
+                    max="65535"
+                    disabled={!isEditing || isConnecting}
+                    readOnly={!isEditing}
+                    className={!isEditing ? 'readonly-input' : ''}
+                  />
+                </label>
+              </div>
+              {!isEditing && hasSavedConnection && (
+                <button
+                  type="button"
+                  className="edit-btn"
+                  onClick={handleEdit}
+                  disabled={isConnecting}
+                >
+                  Edit
+                </button>
+              )}
+              {error ? <div className="error-message">{error}</div> : null}
+              {!isEditing && hasSavedConnection && countdown !== null && (
+                <div className="countdown-message">
+                  Redirecting in {countdown} second{countdown !== 1 ? 's' : ''}...
+                </div>
+              )}
+              <div className="mobility-actions">
+                <button type="button" className="secondary" onClick={onBack} disabled={isConnecting}>
+                  Back
+                </button>
+                {isEditing ? (
+                  <button type="submit" className="primary" disabled={isConnecting || !serverIp || !serverPort}>
+                    {isConnecting ? 'Connecting…' : 'Connect'}
+                  </button>
+                ) : (
+                  <button type="button" className="primary" onClick={handleConnect} disabled={isConnecting}>
+                    {isConnecting ? 'Connecting…' : 'Continue'}
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+        );
+      };
+
+      const LoginApp = () => {
+        const [loginView, setLoginView] = useState('selection'); // 'selection', 'insights', 'mobility'
         const [isLoading, setIsLoading] = useState(false);
         const [error, setError] = useState('');
+        const [isConnectingMobility, setIsConnectingMobility] = useState(false);
+        const [mobilityError, setMobilityError] = useState('');
 
         // Check if already logged in
-        React.useEffect(() => {
+        useEffect(() => {
           const token = storage.get(STORAGE_KEYS.token, null);
           if (token) {
-            // Try to decode token to check role
             try {
               const payload = JSON.parse(atob(token.split('.')[1]));
               const role = payload.role;
@@ -203,8 +633,7 @@
           }
         }, []);
 
-        const handleSubmit = async (e) => {
-          e.preventDefault();
+        const handleLogin = async ({ email, password }) => {
           setIsLoading(true);
           setError('');
 
@@ -227,13 +656,9 @@
               storage.set(STORAGE_KEYS.adminKey, data.admin_key);
             }
 
-            // Redirect based on role
-            const role = data.role || 'user';
-            if (role === 'admin') {
-              window.location.href = '/admin.html';
-            } else {
-              window.location.href = '/dashboard.html';
-            }
+            // Redirect based on role - but always go to dashboard first
+            // Admin users can navigate to admin panel from dashboard
+            window.location.href = '/dashboard.html';
           } catch (err) {
             setError(err.message || 'Login failed. Please check your credentials.');
           } finally {
@@ -241,48 +666,63 @@
           }
         };
 
+        const handleMobilityConnect = (ip, port) => {
+          setIsConnectingMobility(true);
+          setMobilityError('');
+          
+          const mobilityUrl = `http://${ip}:${port}/index.html`;
+          
+          fetch(`${mobilityUrl}`, { 
+            method: 'HEAD',
+            mode: 'no-cors',
+            cache: 'no-cache'
+          }).catch(() => {
+            // Ignore CORS errors
+          });
+          
+          setTimeout(() => {
+            window.location.replace(mobilityUrl);
+          }, 500);
+        };
+
         return (
           <div className="login-container">
             <div className="login-card">
-              <h1>Store Insights</h1>
-              <p>Sign in to continue</p>
-              <form onSubmit={handleSubmit}>
-                {error && <div className="alert">{error}</div>}
-                <div className="form-group">
-                  <label htmlFor="email">Email</label>
-                  <input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    required
-                    disabled={isLoading}
-                    autoFocus
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="password">Password</label>
-                  <input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    required
-                    disabled={isLoading}
-                  />
-                </div>
-                <button type="submit" className="btn" disabled={isLoading}>
-                  {isLoading ? 'Signing in...' : 'Sign in'}
-                </button>
-              </form>
+              <h1>Spirits Store Insights</h1>
+              <p>Choose your login option to continue.</p>
+              {loginView === 'selection' && (
+                <LoginSelection
+                  onSelectInsights={() => setLoginView('insights')}
+                  onSelectMobility={() => setLoginView('mobility')}
+                />
+              )}
+              {loginView === 'insights' && (
+                <>
+                  <LoginForm onSubmit={handleLogin} isLoading={isLoading} error={error} />
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => setLoginView('selection')}
+                    style={{ marginTop: '0.5rem', width: '100%' }}
+                  >
+                    Back
+                  </button>
+                </>
+              )}
+              {loginView === 'mobility' && (
+                <MobilityConnectionForm
+                  onConnect={handleMobilityConnect}
+                  onBack={() => setLoginView('selection')}
+                  isLoading={isConnectingMobility}
+                  error={mobilityError}
+                />
+              )}
             </div>
           </div>
         );
       };
 
-      ReactDOM.render(<LoginForm />, document.getElementById('root'));
+      ReactDOM.render(<LoginApp />, document.getElementById('root'));
     </script>
   </body>
 </html>

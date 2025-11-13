@@ -4453,7 +4453,7 @@ const ModuleNav = ({ active, onChange }) => {
   );
 };
 
-      const HeaderBar = ({ profile, stores, selectedStore, onStoreChange, onLogout }) => {
+      const HeaderBar = ({ profile, stores, selectedStore, onStoreChange, onLogout, userRole }) => {
         const [profileMenuOpen, setProfileMenuOpen] = useState(false);
         const storeOptions = stores || [];
         const activeStore = selectedStore || storeOptions[0] || null;
@@ -4522,6 +4522,18 @@ const ModuleNav = ({ active, onChange }) => {
                       <div className="profile-menu-item">
                         <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Current Store</div>
                         <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>{storeLabel}</div>
+                      </div>
+                    )}
+                    {userRole === 'admin' && (
+                      <div 
+                        className="profile-menu-item"
+                        onClick={() => {
+                          setProfileMenuOpen(false);
+                          window.location.href = '/admin.html';
+                        }}
+                        style={{ cursor: 'pointer', fontWeight: 600, color: 'var(--primary-strong)' }}
+                      >
+                        Admin Panel
                       </div>
                     )}
                     <div 
@@ -5706,21 +5718,14 @@ const ModuleNav = ({ active, onChange }) => {
           }, 500);
         };
 
-        // Redirect to login if no token, or to admin if admin user
+        // Redirect to login if no token
         React.useEffect(() => {
           if (!token) {
             window.location.href = '/login.html';
-            return;
           }
-          
-          // If admin user, redirect to admin page
-          if (userRole === 'admin') {
-            window.location.href = '/admin.html';
-            return;
-          }
-        }, [token, userRole]);
+        }, [token]);
 
-        if (!token || userRole === 'admin') {
+        if (!token) {
           return null; // Will redirect
         }
 
@@ -5766,6 +5771,7 @@ const ModuleNav = ({ active, onChange }) => {
               selectedStore={userRole === 'admin' ? null : selectedStore}
               onStoreChange={handleStoreChange}
               onLogout={() => handleLogout('')}
+              userRole={userRole}
             />
             {mainContent}
           </div>
