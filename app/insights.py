@@ -3939,3 +3939,383 @@ def get_diagnostics(
         raise HTTPException(
             status_code=500, detail=f"Failed to get diagnostics: {str(e)}"
         )
+
+
+@router.get("/employees")
+def get_employees_insights(
+    store: Optional[str] = Query(
+        default=None, description="Store identifier (store_id or store_db)"
+    ),
+    start: Optional[str] = Query(default=None, description="Start date (YYYY-MM-DD)"),
+    end: Optional[str] = Query(default=None, description="End date (YYYY-MM-DD)"),
+    user: dict = Depends(get_auth_user),
+):
+    """
+    Get employee performance data including sales, voids, returns, paid outs, and no sales.
+    """
+    try:
+        selected_store = _select_store(user, store)
+        db_name = selected_store["store_db"]
+        db_user = selected_store["db_user"]
+        db_pass = selected_store["db_pass"]
+
+        engine = _get_engine(db_user, db_pass, db_name)
+        with engine.connect() as conn:
+            # Check if required tables exist
+            if not _table_exists(conn, db_name, "jnl") or not _table_exists(
+                conn, db_name, "jnh"
+            ):
+                raise HTTPException(
+                    status_code=404, detail="Required tables (jnl, jnh) not found"
+                )
+
+            # Get column names
+            jnl_cols = _get_columns(conn, db_name, "jnl")
+            jnh_cols = _get_columns(conn, db_name, "jnh")
+
+            # Detect columns
+            jnl_line_col = _pick_column(jnl_cols, ["line", "line_code"]) or "line"
+            jnl_amt_col = _pick_column(jnl_cols, ["amount", "price", "total"]) or None
+            jnl_rflag = "rflag" if "rflag" in jnl_cols else None
+            jnl_sale_col = (
+                _pick_column(jnl_cols, ["sale", "sale_id", "invno"]) or "sale"
+            )
+            jnl_descript_col = (
+                _pick_column(jnl_cols, ["descript", "description", "desc"]) or None
+            )
+            jnl_cat_col = "cat" if "cat" in jnl_cols else None
+            jnl_sku_col = _pick_column(jnl_cols, ["sku", "item", "item_id"]) or "sku"
+
+            jnh_sale = (
+                _pick_column(jnh_cols, ["sale", "sale_id", "invno"]) or jnl_sale_col
+            )
+            jnh_time = (
+                _pick_column(jnh_cols, ["tstamp", "timestamp", "time", "t_time"])
+                or "tstamp"
+            )
+            jnh_total_col = (
+                _pick_column(jnh_cols, ["total", "amount", "net_amount"]) or "total"
+            )
+            jnh_cashier_col = (
+                _pick_column(jnh_cols, ["cashier", "cashier_id", "emp", "emp_id"])
+                or None
+            )
+
+            jnh_store_col = (
+                _pick_column(jnh_cols, ["store", "store_id", "store_num"]) or None
+            )
+            jnl_store_col = (
+                _pick_column(jnl_cols, ["store", "store_id", "store_num"]) or None
+            )
+
+            if not jnl_amt_col or not jnl_line_col:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Required columns (line, amount) not found in jnl table",
+                )
+
+            # Get store number for filtering
+            store_number = _get_store_number(conn, db_name, selected_store)
+
+            # Date filter
+            where_parts = []
+            params: Dict[str, Any] = {}
+
+            if start:
+                where_parts.append(f"jnh.`{jnh_time}` >= :start_dt")
+                params["start_dt"] = f"{start} 00:00:00"
+            if end:
+                try:
+                    from datetime import timedelta
+
+                    end_next = (
+                        datetime.fromisoformat(end) + timedelta(days=1)
+                    ).strftime("%Y-%m-%d 00:00:00")
+                except:
+                    end_next = f"{end} 23:59:59"
+                where_parts.append(f"jnh.`{jnh_time}` < :end_dt")
+                params["end_dt"] = end_next
+
+            # Store filter
+            if store_number is not None:
+                if jnh_store_col:
+                    where_parts.append(f"jnh.`{jnh_store_col}` = :jnh_store_number")
+                    params["jnh_store_number"] = store_number
+                elif jnl_store_col:
+                    where_parts.append(f"jnl.`{jnl_store_col}` = :jnl_store_number")
+                    params["jnl_store_number"] = store_number
+
+            where_clause = " AND ".join(where_parts) if where_parts else "1=1"
+
+            # Check if emp table exists
+            emp_table_exists = _table_exists(conn, db_name, "emp")
+            emp_id_col = None
+            emp_name_col = None
+            emp_index_hint = ""
+            if emp_table_exists:
+                emp_cols = _get_columns(conn, db_name, "emp")
+                emp_id_col = (
+                    _pick_column(emp_cols, ["id", "emp_id", "emp", "employee_id"])
+                    or "id"
+                )
+                emp_name_col = (
+                    _pick_column(
+                        emp_cols,
+                        [
+                            "name",
+                            "emp_name",
+                            "employee_name",
+                            "full_name",
+                            "first_name",
+                            "last_name",
+                        ],
+                    )
+                    or None
+                )
+                # Check if idx_emp_id_uid index exists and use it if available
+                try:
+                    index_check_sql = """
+                        SELECT COUNT(*) as idx_count
+                        FROM information_schema.statistics
+                        WHERE table_schema = :db_name
+                          AND table_name = 'emp'
+                          AND index_name = 'idx_emp_id_uid'
+                    """
+                    idx_result = (
+                        conn.execute(text(index_check_sql), {"db_name": db_name})
+                        .mappings()
+                        .first()
+                    )
+                    if idx_result and idx_result.get("idx_count", 0) > 0:
+                        emp_index_hint = "USE INDEX (idx_emp_id_uid)"
+                except:
+                    pass
+
+            # Get employee IDs from line 950 (TOTAL line)
+            # Line 950 contains the employee ID in the amount/price column
+            emp_id_from_950_sql = f"""
+                SELECT DISTINCT jnl.`{jnl_amt_col}` AS emp_id
+                FROM jnl
+                INNER JOIN jnh ON jnh.`{jnh_sale}` = jnl.`{jnl_sale_col}`
+                WHERE jnl.`{jnl_line_col}` = 950
+                  AND {where_clause}
+                  AND jnl.`{jnl_amt_col}` > 0
+            """
+
+            emp_ids_result = (
+                conn.execute(text(emp_id_from_950_sql), params).mappings().all()
+            )
+            emp_ids = [
+                int(row["emp_id"]) for row in emp_ids_result if row.get("emp_id")
+            ]
+
+            if not emp_ids:
+                return {
+                    "employees": [],
+                    "store": {
+                        "store_db": db_name,
+                        "store_id": selected_store.get("store_id"),
+                        "store_name": selected_store.get("store_name"),
+                    },
+                }
+
+            employees_data = []
+
+            for emp_id in emp_ids:
+                emp_data = {
+                    "emp_id": emp_id,
+                    "emp_name": f"Employee {emp_id}",  # Default if emp table doesn't exist
+                    "total_sales": 0.0,
+                    "void_sales": 0.0,
+                    "void_items": 0.0,
+                    "returns": 0.0,
+                    "over_short": 0.0,
+                    "paid_out": 0.0,
+                    "no_sale": 0,
+                }
+
+                # Get employee name from emp table if available
+                # Uses idx_emp_id_uid index if it exists (checked once before loop)
+                if emp_table_exists and emp_id_col and emp_name_col:
+                    emp_name_sql = f"""
+                        SELECT `{emp_name_col}` AS emp_name
+                        FROM emp {emp_index_hint}
+                        WHERE `{emp_id_col}` = :emp_id
+                        LIMIT 1
+                    """
+                    emp_name_result = (
+                        conn.execute(text(emp_name_sql), {"emp_id": emp_id})
+                        .mappings()
+                        .first()
+                    )
+                    if emp_name_result and emp_name_result.get("emp_name"):
+                        emp_data["emp_name"] = str(emp_name_result["emp_name"])
+
+                # Get cashier number - use jnh.cashier if available, otherwise use emp_id
+                cashier_filter = ""
+                cashier_params = params.copy()
+                if jnh_cashier_col:
+                    cashier_filter = f"jnh.`{jnh_cashier_col}` = :cashier_id"
+                    cashier_params["cashier_id"] = emp_id
+                else:
+                    # Fallback: use emp_id from line 950 to match sales
+                    # We'll filter by sales that have line 950 with this emp_id
+                    cashier_filter = f"""
+                        EXISTS (
+                            SELECT 1 FROM jnl jnl_emp
+                            WHERE jnl_emp.`{jnl_sale_col}` = jnh.`{jnh_sale}`
+                              AND jnl_emp.`{jnl_line_col}` = 950
+                              AND jnl_emp.`{jnl_amt_col}` = :emp_id
+                        )
+                    """
+                    cashier_params["emp_id"] = emp_id
+
+                # Total Sales: sum of jnh.total for this cashier
+                if jnh_total_col:
+                    total_sales_sql = f"""
+                        SELECT COALESCE(SUM(jnh.`{jnh_total_col}`), 0) AS total_sales
+                        FROM jnh
+                        WHERE {cashier_filter}
+                          AND {where_clause}
+                    """
+                    total_sales_result = (
+                        conn.execute(text(total_sales_sql), cashier_params)
+                        .mappings()
+                        .first()
+                    )
+                    if total_sales_result:
+                        emp_data["total_sales"] = float(
+                            total_sales_result.get("total_sales", 0) or 0
+                        )
+
+                # Void Sales: rflag 4
+                if jnl_rflag:
+                    void_sales_sql = f"""
+                        SELECT COALESCE(SUM(ABS(jnl.`{jnl_amt_col}`)), 0) AS void_sales
+                        FROM jnl
+                        INNER JOIN jnh ON jnh.`{jnh_sale}` = jnl.`{jnl_sale_col}`
+                        WHERE jnl.`{jnl_rflag}` = 4
+                          AND jnl.`{jnl_sku_col}` > 0
+                          AND {cashier_filter}
+                          AND {where_clause}
+                    """
+                    void_sales_result = (
+                        conn.execute(text(void_sales_sql), cashier_params)
+                        .mappings()
+                        .first()
+                    )
+                    if void_sales_result:
+                        emp_data["void_sales"] = float(
+                            void_sales_result.get("void_sales", 0) or 0
+                        )
+
+                # Void Items: rflag 2,3
+                if jnl_rflag:
+                    void_items_sql = f"""
+                        SELECT COALESCE(SUM(ABS(jnl.`{jnl_amt_col}`)), 0) AS void_items
+                        FROM jnl
+                        INNER JOIN jnh ON jnh.`{jnh_sale}` = jnl.`{jnl_sale_col}`
+                        WHERE jnl.`{jnl_rflag}` IN (2, 3)
+                          AND {cashier_filter}
+                          AND {where_clause}
+                    """
+                    void_items_result = (
+                        conn.execute(text(void_items_sql), cashier_params)
+                        .mappings()
+                        .first()
+                    )
+                    if void_items_result:
+                        emp_data["void_items"] = float(
+                            void_items_result.get("void_items", 0) or 0
+                        )
+
+                # Returns: rflag 2
+                if jnl_rflag:
+                    returns_sql = f"""
+                        SELECT COALESCE(SUM(ABS(jnl.`{jnl_amt_col}`)), 0) AS returns
+                        FROM jnl
+                        INNER JOIN jnh ON jnh.`{jnh_sale}` = jnl.`{jnl_sale_col}`
+                        WHERE jnl.`{jnl_rflag}` = 2
+                          AND {cashier_filter}
+                          AND {where_clause}
+                    """
+                    returns_result = (
+                        conn.execute(text(returns_sql), cashier_params)
+                        .mappings()
+                        .first()
+                    )
+                    if returns_result:
+                        emp_data["returns"] = float(
+                            returns_result.get("returns", 0) or 0
+                        )
+
+                # Paid Out: cat 75, get price/amount value
+                if jnl_cat_col:
+                    paid_out_sql = f"""
+                        SELECT COALESCE(SUM(jnl.`{jnl_amt_col}`), 0) AS paid_out
+                        FROM jnl
+                        INNER JOIN jnh ON jnh.`{jnh_sale}` = jnl.`{jnl_sale_col}`
+                        WHERE jnl.`{jnl_cat_col}` = 75
+                          AND {cashier_filter}
+                          AND {where_clause}
+                    """
+                    paid_out_result = (
+                        conn.execute(text(paid_out_sql), cashier_params)
+                        .mappings()
+                        .first()
+                    )
+                    if paid_out_result:
+                        emp_data["paid_out"] = float(
+                            paid_out_result.get("paid_out", 0) or 0
+                        )
+
+                # No Sales: sales with only 1 line that is line 900 and says "0 ITEMS TOTAL" in descript
+                # Map jnl sale to jnh sale to get cashier
+                if jnl_descript_col:
+                    no_sale_sql = f"""
+                        SELECT COUNT(DISTINCT jnh.`{jnh_sale}`) AS no_sale_count
+                        FROM jnh
+                        WHERE {cashier_filter}
+                          AND {where_clause}
+                          AND EXISTS (
+                            SELECT 1 FROM jnl jnl_ns
+                            WHERE jnl_ns.`{jnl_sale_col}` = jnh.`{jnh_sale}`
+                              AND jnl_ns.`{jnl_line_col}` = 900
+                              AND UPPER(COALESCE(jnl_ns.`{jnl_descript_col}`, '')) LIKE '%0 ITEMS TOTAL%'
+                          )
+                          AND (
+                            SELECT COUNT(*) FROM jnl jnl_count
+                            WHERE jnl_count.`{jnl_sale_col}` = jnh.`{jnh_sale}`
+                          ) = 1
+                    """
+                    no_sale_result = (
+                        conn.execute(text(no_sale_sql), cashier_params)
+                        .mappings()
+                        .first()
+                    )
+                    if no_sale_result:
+                        emp_data["no_sale"] = int(
+                            no_sale_result.get("no_sale_count", 0) or 0
+                        )
+
+                employees_data.append(emp_data)
+
+            # Sort by total sales descending
+            employees_data.sort(key=lambda x: x["total_sales"], reverse=True)
+
+            return {
+                "employees": employees_data,
+                "store": {
+                    "store_db": db_name,
+                    "store_id": selected_store.get("store_id"),
+                    "store_name": selected_store.get("store_name"),
+                },
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error getting employees insights: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get employees insights: {str(e)}"
+        )

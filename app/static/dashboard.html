@@ -613,6 +613,75 @@
     letter-spacing: 0.01em;
   }
 
+  .employees-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+  }
+
+  .employee-card {
+    background: #fff;
+    border: 1px solid var(--panel-border);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    transition: box-shadow 0.2s ease;
+  }
+
+  .employee-card:hover {
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+
+  .employee-header {
+    border-bottom: 2px solid var(--panel-border);
+    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .employee-id {
+    font-weight: 600;
+    color: var(--text);
+    font-size: 0.95rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .employee-name {
+    font-weight: 600;
+    color: var(--text);
+    font-size: 1rem;
+  }
+
+  .employee-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .employee-detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  }
+
+  .employee-detail-row:last-child {
+    border-bottom: none;
+  }
+
+  .detail-label {
+    font-weight: 500;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+  }
+
+  .detail-value {
+    font-weight: 600;
+    color: var(--text);
+    font-size: 0.95rem;
+  }
+
   .summary-grid {
     display: grid;
     gap: 1rem;
@@ -4419,6 +4488,82 @@ const QuickViewWidget = ({ data }) => {
   );
 };
 
+const EmployeesModule = ({ data, dateRange, onDateRangeChange }) => {
+  if (!data || !data.employees || data.employees.length === 0) {
+    return <div className="empty-state">No employee data available.</div>;
+  }
+
+  const formatCurrency = (value) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value || 0);
+  };
+
+  return (
+    <div className="panel">
+      <div className="panel-header">
+        <h2 className="panel-title">Employees</h2>
+        <div className="inline-actions">
+          <input
+            type="date"
+            value={dateRange?.start || ''}
+            onChange={(e) => onDateRangeChange({ start: e.target.value, end: dateRange?.end || e.target.value })}
+          />
+          <span>to</span>
+          <input
+            type="date"
+            value={dateRange?.end || ''}
+            onChange={(e) => onDateRangeChange({ start: dateRange?.start || '', end: e.target.value })}
+          />
+        </div>
+      </div>
+      <div className="employees-grid">
+        {data.employees.map((emp, idx) => (
+          <div key={emp.emp_id || idx} className="employee-card">
+            <div className="employee-header">
+              <div className="employee-id">EMP ID: {emp.emp_id}</div>
+              <div className="employee-name">EMP NAME: {emp.emp_name}</div>
+            </div>
+            <div className="employee-details">
+              <div className="employee-detail-row">
+                <span className="detail-label">TOTAL SALE:</span>
+                <span className="detail-value">{formatCurrency(emp.total_sales)}</span>
+              </div>
+              <div className="employee-detail-row">
+                <span className="detail-label">VOID SALES:</span>
+                <span className="detail-value">{formatCurrency(emp.void_sales)}</span>
+              </div>
+              <div className="employee-detail-row">
+                <span className="detail-label">VOID ITEMS:</span>
+                <span className="detail-value">{formatCurrency(emp.void_items)}</span>
+              </div>
+              <div className="employee-detail-row">
+                <span className="detail-label">RETURNS:</span>
+                <span className="detail-value">{formatCurrency(emp.returns)}</span>
+              </div>
+              <div className="employee-detail-row">
+                <span className="detail-label">OVER / SHORT:</span>
+                <span className="detail-value">{formatCurrency(emp.over_short)}</span>
+              </div>
+              <div className="employee-detail-row">
+                <span className="detail-label">PAID OUT:</span>
+                <span className="detail-value">{formatCurrency(emp.paid_out)}</span>
+              </div>
+              <div className="employee-detail-row">
+                <span className="detail-label">NO SALE:</span>
+                <span className="detail-value">{emp.no_sale || 0}</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const ModuleNav = ({ active, onChange }) => {
   const modules = [
     { id: 'sales', label: 'Sales' },
@@ -4427,6 +4572,7 @@ const ModuleNav = ({ active, onChange }) => {
     { id: 'history', label: 'Sales History' },
     { id: 'tenders', label: 'Payment Methods' },
     { id: 'operations', label: 'Operations' },
+    { id: 'employees', label: 'Employees' },
   ];
 
   return (
@@ -4574,6 +4720,7 @@ const ModuleNav = ({ active, onChange }) => {
   tendersData,
   gatewayData,
   operationsData,
+  employeesData,
   quickData,
   onStoreChange,
   onRefresh,
@@ -4643,6 +4790,7 @@ const ModuleNav = ({ active, onChange }) => {
         {activeModule === 'tenders' ? <TendersModule data={tendersData} gatewayData={gatewayData} dateRange={dateRange} onDateRangeChange={onDateRangeChange} /> : null}
 
         {activeModule === 'operations' ? <OperationsModule data={operationsData} /> : null}
+        {activeModule === 'employees' ? <EmployeesModule data={employeesData} dateRange={dateRange} onDateRangeChange={onDateRangeChange} /> : null}
       </div>
     </div>
   );
@@ -4818,6 +4966,7 @@ const ModuleNav = ({ active, onChange }) => {
             setTendersData(null);
             setGatewayData(null);
             setOperationsData(null);
+            setEmployeesData(null);
             setQuickData(null);
             tokenRef.current = null;
             setAuthError(message);
@@ -5249,6 +5398,16 @@ const ModuleNav = ({ active, onChange }) => {
               const opsQuery = storeParam ? `?store=${encodeURIComponent(storeParam)}` : '';
               payload = await fetchOperations(authToken, opsQuery);
               setOperationsData(payload);
+            } else if (module === 'employees') {
+              // Employees tab uses date range from query
+              const response = await fetch(`${API_BASE}/insights/employees${query}`, {
+                headers: { Authorization: `Bearer ${authToken}` },
+              });
+              payload = await response.json();
+              if (!response.ok) {
+                throw new Error(payload.detail || 'Unable to load employees data');
+              }
+              setEmployeesData(payload);
             }
             setAuthError('');
           } catch (error) {
@@ -5342,7 +5501,7 @@ const ModuleNav = ({ active, onChange }) => {
           if (stores.length > 1 && !selectedStore) return;
           // Don't load if we have stores but selectedStore is still null
           if (stores.length > 0 && !selectedStore) return;
-          if (['tenders', 'operations'].includes(activeModule)) {
+          if (['tenders', 'operations', 'employees'].includes(activeModule)) {
             loadModuleData(token, storeQueryValue, activeModule);
           }
         }, [token, storeQueryValue, stores, selectedStore, userRole, activeModule]);
@@ -5828,6 +5987,7 @@ const ModuleNav = ({ active, onChange }) => {
                 tendersData={tendersData}
                 gatewayData={gatewayData}
                 operationsData={operationsData}
+                employeesData={employeesData}
                 quickData={quickData}
                 onStoreChange={handleStoreChange}
                 onRefresh={refresh}
@@ -5907,7 +6067,7 @@ const ModuleNav = ({ active, onChange }) => {
     <script>
       // Version check to force reload of cached pages
       (function() {
-        const CURRENT_VERSION = '2.0.0';
+        const CURRENT_VERSION = '2.0.2';
         const VERSION_KEY = 'store-insights-html-version';
         const storedVersion = localStorage.getItem(VERSION_KEY);
         
