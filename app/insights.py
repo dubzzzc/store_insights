@@ -4050,6 +4050,8 @@ def get_employees_insights(
             # Check if emp table exists
             emp_table_exists = _table_exists(conn, db_name, "emp")
             emp_id_col = None
+            emp_first_name_col = None
+            emp_last_name_col = None
             emp_name_col = None
             emp_index_hint = ""
             if emp_table_exists:
@@ -4058,6 +4060,14 @@ def get_employees_insights(
                     _pick_column(emp_cols, ["id", "emp_id", "emp", "employee_id"])
                     or "id"
                 )
+                # Look for first_name and last_name separately, or fallback to other name columns
+                emp_first_name_col = (
+                    _pick_column(emp_cols, ["first_name", "fname", "first"]) or None
+                )
+                emp_last_name_col = (
+                    _pick_column(emp_cols, ["last_name", "lname", "last"]) or None
+                )
+                # Fallback to single name column if first/last not available
                 emp_name_col = (
                     _pick_column(
                         emp_cols,
@@ -4066,11 +4076,10 @@ def get_employees_insights(
                             "emp_name",
                             "employee_name",
                             "full_name",
-                            "first_name",
-                            "last_name",
                         ],
                     )
-                    or None
+                    if not (emp_first_name_col and emp_last_name_col)
+                    else None
                 )
                 # Check if idx_emp_id_uid index exists and use it if available
                 try:
@@ -4091,23 +4100,43 @@ def get_employees_insights(
                 except:
                     pass
 
-            # Get employee IDs from line 950 (TOTAL line)
-            # Line 950 contains the employee ID in the amount/price column
-            emp_id_from_950_sql = f"""
-                SELECT DISTINCT jnl.`{jnl_amt_col}` AS emp_id
-                FROM jnl
-                INNER JOIN jnh ON jnh.`{jnh_sale}` = jnl.`{jnl_sale_col}`
-                WHERE jnl.`{jnl_line_col}` = 950
-                  AND {where_clause}
-                  AND jnl.`{jnl_amt_col}` > 0
+            # Get employee IDs from jnh.cashier column
+            # Map jnl.sale to jnh.sale, then use jnh.cashier to get employee IDs
+            if not jnh_cashier_col:
+                # If cashier column doesn't exist, return empty
+                return {
+                    "employees": [],
+                    "store": {
+                        "store_db": db_name,
+                        "store_id": selected_store.get("store_id"),
+                        "store_name": selected_store.get("store_name"),
+                    },
+                }
+
+            emp_id_from_cashier_sql = f"""
+                SELECT DISTINCT jnh.`{jnh_cashier_col}` AS emp_id
+                FROM jnh
+                INNER JOIN jnl ON jnl.`{jnl_sale_col}` = jnh.`{jnh_sale}`
+                WHERE {where_clause}
+                  AND jnh.`{jnh_cashier_col}` IS NOT NULL
+                  AND jnh.`{jnh_cashier_col}` > 0
             """
 
             emp_ids_result = (
-                conn.execute(text(emp_id_from_950_sql), params).mappings().all()
+                conn.execute(text(emp_id_from_cashier_sql), params).mappings().all()
             )
-            emp_ids = [
-                int(row["emp_id"]) for row in emp_ids_result if row.get("emp_id")
-            ]
+            emp_ids = []
+            for row in emp_ids_result:
+                emp_id_value = row.get("emp_id")
+                if emp_id_value is not None:
+                    try:
+                        # Convert to int (cashier should be integer employee ID)
+                        emp_id = int(float(emp_id_value))
+                        if emp_id > 0:
+                            emp_ids.append(emp_id)
+                    except (ValueError, TypeError):
+                        # Skip invalid values
+                        continue
 
             if not emp_ids:
                 return {
@@ -4136,39 +4165,54 @@ def get_employees_insights(
 
                 # Get employee name from emp table if available
                 # Uses idx_emp_id_uid index if it exists (checked once before loop)
-                if emp_table_exists and emp_id_col and emp_name_col:
-                    emp_name_sql = f"""
-                        SELECT `{emp_name_col}` AS emp_name
-                        FROM emp {emp_index_hint}
-                        WHERE `{emp_id_col}` = :emp_id
-                        LIMIT 1
-                    """
-                    emp_name_result = (
-                        conn.execute(text(emp_name_sql), {"emp_id": emp_id})
-                        .mappings()
-                        .first()
-                    )
-                    if emp_name_result and emp_name_result.get("emp_name"):
-                        emp_data["emp_name"] = str(emp_name_result["emp_name"])
+                # Prefer first_name + last_name, fallback to single name column
+                if emp_table_exists and emp_id_col:
+                    if emp_first_name_col and emp_last_name_col:
+                        # Use first_name and last_name
+                        emp_name_sql = f"""
+                            SELECT 
+                                `{emp_first_name_col}` AS first_name,
+                                `{emp_last_name_col}` AS last_name
+                            FROM emp {emp_index_hint}
+                            WHERE `{emp_id_col}` = :emp_id
+                            LIMIT 1
+                        """
+                        emp_name_result = (
+                            conn.execute(text(emp_name_sql), {"emp_id": emp_id})
+                            .mappings()
+                            .first()
+                        )
+                        if emp_name_result:
+                            first = str(emp_name_result.get("first_name", "")).strip()
+                            last = str(emp_name_result.get("last_name", "")).strip()
+                            if first or last:
+                                emp_data["emp_name"] = f"{first} {last}".strip()
+                    elif emp_name_col:
+                        # Fallback to single name column
+                        emp_name_sql = f"""
+                            SELECT `{emp_name_col}` AS emp_name
+                            FROM emp {emp_index_hint}
+                            WHERE `{emp_id_col}` = :emp_id
+                            LIMIT 1
+                        """
+                        emp_name_result = (
+                            conn.execute(text(emp_name_sql), {"emp_id": emp_id})
+                            .mappings()
+                            .first()
+                        )
+                        if emp_name_result and emp_name_result.get("emp_name"):
+                            emp_data["emp_name"] = str(emp_name_result["emp_name"])
 
-                # Get cashier number - use jnh.cashier if available, otherwise use emp_id
+                # Get cashier number - use jnh.cashier (which should match emp_id)
+                # Since we got emp_ids from jnh.cashier, we can directly filter by it
                 cashier_filter = ""
                 cashier_params = params.copy()
                 if jnh_cashier_col:
                     cashier_filter = f"jnh.`{jnh_cashier_col}` = :cashier_id"
                     cashier_params["cashier_id"] = emp_id
                 else:
-                    # Fallback: use emp_id from line 950 to match sales
-                    # We'll filter by sales that have line 950 with this emp_id
-                    cashier_filter = f"""
-                        EXISTS (
-                            SELECT 1 FROM jnl jnl_emp
-                            WHERE jnl_emp.`{jnl_sale_col}` = jnh.`{jnh_sale}`
-                              AND jnl_emp.`{jnl_line_col}` = 950
-                              AND jnl_emp.`{jnl_amt_col}` = :emp_id
-                        )
-                    """
-                    cashier_params["emp_id"] = emp_id
+                    # If cashier column doesn't exist, we can't proceed
+                    continue
 
                 # Total Sales: sum of jnh.total for this cashier
                 if jnh_total_col:
