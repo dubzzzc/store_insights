@@ -14,453 +14,115 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+    <!-- Tailwind CSS Play CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // Configure Tailwind with shadcn/ui design tokens
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              border: "hsl(var(--border))",
+              input: "hsl(var(--input))",
+              ring: "hsl(var(--ring))",
+              background: "hsl(var(--background))",
+              foreground: "hsl(var(--foreground))",
+              primary: {
+                DEFAULT: "hsl(var(--primary))",
+                foreground: "hsl(var(--primary-foreground))",
+              },
+              secondary: {
+                DEFAULT: "hsl(var(--secondary))",
+                foreground: "hsl(var(--secondary-foreground))",
+              },
+              destructive: {
+                DEFAULT: "hsl(var(--destructive))",
+                foreground: "hsl(var(--destructive-foreground))",
+              },
+              muted: {
+                DEFAULT: "hsl(var(--muted))",
+                foreground: "hsl(var(--muted-foreground))",
+              },
+              accent: {
+                DEFAULT: "hsl(var(--accent))",
+                foreground: "hsl(var(--accent-foreground))",
+              },
+              popover: {
+                DEFAULT: "hsl(var(--popover))",
+                foreground: "hsl(var(--popover-foreground))",
+              },
+              card: {
+                DEFAULT: "hsl(var(--card))",
+                foreground: "hsl(var(--card-foreground))",
+              },
+            },
+            borderRadius: {
+              lg: "var(--radius)",
+              md: "calc(var(--radius) - 2px)",
+              sm: "calc(var(--radius) - 4px)",
+            },
+            fontFamily: {
+              sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+            },
+          },
+        },
+      }
+    </script>
     <style>
+      /* shadcn/ui CSS Variables */
       :root {
-        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        --bg-primary: #f8fafc;
-        --bg-secondary: #ffffff;
-        --border: #e2e8f0;
-        --border-hover: #cbd5e1;
-        --text-primary: #0f172a;
-        --text-secondary: #64748b;
-        --text-muted: #94a3b8;
-        --primary: #2563eb;
-        --primary-hover: #1d4ed8;
-        --primary-light: #dbeafe;
-        --success: #10b981;
-        --success-light: #d1fae5;
-        --warning: #f59e0b;
-        --warning-light: #fef3c7;
-        --danger: #ef4444;
-        --danger-light: #fee2e2;
-        --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-        --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
-        --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
-        --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+        --background: 0 0% 100%;
+        --foreground: 222.2 84% 4.9%;
+        --card: 0 0% 100%;
+        --card-foreground: 222.2 84% 4.9%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 222.2 84% 4.9%;
+        --primary: 221.2 83.2% 53.3%;
+        --primary-foreground: 210 40% 98%;
+        --secondary: 210 40% 96.1%;
+        --secondary-foreground: 222.2 47.4% 11.2%;
+        --muted: 210 40% 96.1%;
+        --muted-foreground: 215.4 16.3% 46.9%;
+        --accent: 210 40% 96.1%;
+        --accent-foreground: 222.2 47.4% 11.2%;
+        --destructive: 0 84.2% 60.2%;
+        --destructive-foreground: 210 40% 98%;
+        --border: 214.3 31.8% 91.4%;
+        --input: 214.3 31.8% 91.4%;
+        --ring: 221.2 83.2% 53.3%;
         --radius: 0.5rem;
-        --radius-lg: 0.75rem;
+      }
+
+      .dark {
+        --background: 222.2 84% 4.9%;
+        --foreground: 210 40% 98%;
+        --card: 222.2 84% 4.9%;
+        --card-foreground: 210 40% 98%;
+        --popover: 222.2 84% 4.9%;
+        --popover-foreground: 210 40% 98%;
+        --primary: 217.2 91.2% 59.8%;
+        --primary-foreground: 222.2 47.4% 11.2%;
+        --secondary: 217.2 32.6% 17.5%;
+        --secondary-foreground: 210 40% 98%;
+        --muted: 217.2 32.6% 17.5%;
+        --muted-foreground: 215 20.2% 65.1%;
+        --accent: 217.2 32.6% 17.5%;
+        --accent-foreground: 210 40% 98%;
+        --destructive: 0 62.8% 30.6%;
+        --destructive-foreground: 210 40% 98%;
+        --border: 217.2 32.6% 17.5%;
+        --input: 217.2 32.6% 17.5%;
+        --ring: 224.3 76.3% 94.9%;
       }
 
       * {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
+        border-color: hsl(var(--border));
       }
 
       body {
-        background: var(--bg-primary);
-        color: var(--text-primary);
-        font-size: 14px;
-        line-height: 1.5;
-        min-height: 100vh;
-      }
-
-      /* Header */
-      .header {
-        background: var(--bg-secondary);
-        border-bottom: 1px solid var(--border);
-        padding: 1.5rem 2rem;
-        box-shadow: var(--shadow-sm);
-      }
-
-      .header-content {
-        max-width: 1600px;
-        margin: 0 auto;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 2rem;
-      }
-
-      .header-title {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-      }
-
-      .header-title h1 {
-        font-size: 1.5rem;
-        font-weight: 600;
-        color: var(--text-primary);
-      }
-
-      .header-actions {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-      }
-
-      /* Main Container */
-      .container {
-        max-width: 1600px;
-        margin: 0 auto;
-        padding: 2rem;
-      }
-
-      /* Grid Layout */
-      .admin-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 2rem;
-        margin-bottom: 2rem;
-      }
-
-      @media (min-width: 1400px) {
-        .admin-grid {
-          grid-template-columns: 1fr 1fr 1fr;
-        }
-      }
-
-      /* Cards */
-      .card {
-        background: var(--bg-secondary);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-lg);
-        padding: 2rem;
-        box-shadow: var(--shadow);
-        transition: box-shadow 0.2s, border-color 0.2s;
-      }
-
-      .card:hover {
-        box-shadow: var(--shadow-md);
-        border-color: var(--border-hover);
-      }
-
-      .card-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 1.5rem;
-        padding-bottom: 1rem;
-        border-bottom: 1px solid var(--border);
-      }
-
-      .card-title {
-        font-size: 1.25rem;
-        font-weight: 600;
-        color: var(--text-primary);
-      }
-
-      .card-subtitle {
-        font-size: 0.875rem;
-        color: var(--text-secondary);
-        margin-top: 0.25rem;
-      }
-
-      /* Forms */
-      .form-group {
-        margin-bottom: 1.5rem;
-      }
-
-      .form-row {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 1.5rem;
-        margin-bottom: 1.5rem;
-      }
-
-      label {
-        display: block;
-        font-weight: 500;
-        color: var(--text-primary);
-        margin-bottom: 0.5rem;
-        font-size: 0.875rem;
-      }
-
-      input[type="text"],
-      input[type="email"],
-      input[type="password"],
-      select {
-        width: 100%;
-        padding: 0.75rem 1rem;
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        font-size: 0.875rem;
-        transition: border-color 0.2s, box-shadow 0.2s;
-        background: var(--bg-secondary);
-        color: var(--text-primary);
-      }
-
-      input:focus,
-      select:focus {
-        outline: none;
-        border-color: var(--primary);
-        box-shadow: 0 0 0 3px var(--primary-light);
-      }
-
-      input::placeholder {
-        color: var(--text-muted);
-      }
-
-      /* Buttons */
-      .btn {
-        padding: 0.75rem 1.5rem;
-        border: none;
-        border-radius: var(--radius);
-        font-size: 0.875rem;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.2s;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-      }
-
-      .btn-primary {
-        background: var(--primary);
-        color: white;
-      }
-
-      .btn-primary:hover:not(:disabled) {
-        background: var(--primary-hover);
-      }
-
-      .btn-secondary {
-        background: var(--bg-secondary);
-        color: var(--text-primary);
-        border: 1px solid var(--border);
-      }
-
-      .btn-secondary:hover:not(:disabled) {
-        background: var(--bg-primary);
-        border-color: var(--border-hover);
-      }
-
-      .btn-danger {
-        background: var(--danger);
-        color: white;
-      }
-
-      .btn-danger:hover:not(:disabled) {
-        background: #dc2626;
-      }
-
-      .btn:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-
-      .btn-group {
-        display: flex;
-        gap: 0.75rem;
-        flex-wrap: wrap;
-      }
-
-      /* Lists */
-      .user-list,
-      .store-list {
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        overflow: hidden;
-        max-height: 500px;
-        overflow-y: auto;
-      }
-
-      .user-item,
-      .store-item {
-        padding: 1.25rem;
-        border-bottom: 1px solid var(--border);
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 1rem;
-        transition: background-color 0.2s;
-        cursor: pointer;
-      }
-
-      .user-item:last-child,
-      .store-item:last-child {
-        border-bottom: none;
-      }
-
-      .user-item:hover,
-      .store-item:hover {
-        background: var(--bg-primary);
-      }
-
-      .user-item.active {
-        background: var(--primary-light);
-      }
-
-      .user-info {
-        flex: 1;
-        min-width: 0;
-      }
-
-      .user-name {
-        font-weight: 600;
-        color: var(--text-primary);
-        margin-bottom: 0.25rem;
-      }
-
-      .user-details {
-        font-size: 0.8125rem;
-        color: var(--text-secondary);
-        display: flex;
-        gap: 1rem;
-        flex-wrap: wrap;
-      }
-
-      /* Badges */
-      .badge {
-        display: inline-flex;
-        align-items: center;
-        padding: 0.375rem 0.75rem;
-        border-radius: 999px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-      }
-
-      .badge-read-only {
-        background: var(--warning-light);
-        color: #92400e;
-      }
-
-      .badge-read-write {
-        background: var(--primary-light);
-        color: #1e40af;
-      }
-
-      .badge-full-access {
-        background: var(--success-light);
-        color: #065f46;
-      }
-
-      /* Alerts */
-      .alert {
-        padding: 1rem 1.25rem;
-        border-radius: var(--radius);
-        margin-bottom: 1.5rem;
-        font-size: 0.875rem;
-      }
-
-      .alert-error {
-        background: var(--danger-light);
-        color: #991b1b;
-        border: 1px solid #fecaca;
-      }
-
-      .alert-success {
-        background: var(--success-light);
-        color: #065f46;
-        border: 1px solid #a7f3d0;
-      }
-
-      .alert-info {
-        background: var(--primary-light);
-        color: #1e40af;
-        border: 1px solid #93c5fd;
-      }
-
-      /* Empty State */
-      .empty-state {
-        text-align: center;
-        padding: 3rem 2rem;
-        color: var(--text-secondary);
-        font-size: 0.875rem;
-      }
-
-      /* Login */
-      .login-container {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 100vh;
-        padding: 2rem;
-      }
-
-      .login-card {
-        background: var(--bg-secondary);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-lg);
-        padding: 3rem;
-        box-shadow: var(--shadow-lg);
-        width: 100%;
-        max-width: 400px;
-      }
-
-      .login-card h1 {
-        font-size: 1.75rem;
-        font-weight: 600;
-        margin-bottom: 0.5rem;
-        text-align: center;
-      }
-
-      .login-card p {
-        text-align: center;
-        color: var(--text-secondary);
-        margin-bottom: 2rem;
-      }
-
-      /* Password Strength */
-      .password-strength {
-        margin-top: 0.5rem;
-      }
-
-      .password-strength-bars {
-        display: flex;
-        gap: 0.25rem;
-        margin-bottom: 0.5rem;
-      }
-
-      .password-strength-bar {
-        flex: 1;
-        height: 4px;
-        border-radius: 2px;
-        background: #e5e7eb;
-        transition: background-color 0.2s;
-      }
-
-      .password-strength-bar.active {
-        background: var(--success);
-      }
-
-      .password-strength-bar.medium {
-        background: var(--warning);
-      }
-
-      .password-strength-bar.weak {
-        background: var(--danger);
-      }
-
-      .password-strength-text {
-        font-size: 0.75rem;
-        font-weight: 500;
-      }
-
-      /* Help Text */
-      .help-text {
-        font-size: 0.75rem;
-        color: var(--text-secondary);
-        margin-top: 0.25rem;
-      }
-
-      /* Loading */
-      .loading {
-        text-align: center;
-        padding: 2rem;
-        color: var(--text-secondary);
-      }
-
-      /* Scrollbar */
-      ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-      }
-
-      ::-webkit-scrollbar-track {
-        background: var(--bg-primary);
-      }
-
-      ::-webkit-scrollbar-thumb {
-        background: var(--border);
-        border-radius: 4px;
-      }
-
-      ::-webkit-scrollbar-thumb:hover {
-        background: var(--border-hover);
+        background-color: hsl(var(--background));
+        color: hsl(var(--foreground));
+        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       }
     </style>
   </head>
@@ -527,11 +189,12 @@
       const getPrivilegeBadge = (privilegeLevel) => {
         if (!privilegeLevel) return null;
         const level = privilegeLevel.toLowerCase();
-        const badgeClass = {
-          read_only: 'badge-read-only',
-          read_write: 'badge-read-write',
-          full_access: 'badge-full-access',
-        }[level] || 'badge-read-write';
+        
+        const badgeStyles = {
+          read_only: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+          read_write: 'bg-blue-100 text-blue-800 border-blue-200',
+          full_access: 'bg-green-100 text-green-800 border-green-200',
+        };
         
         const label = {
           read_only: 'Read Only',
@@ -540,11 +203,14 @@
         }[level] || 'Read/Write';
 
         return (
-          <span className={`badge ${badgeClass}`} title={
-            level === 'read_only' ? 'SELECT only' :
-            level === 'read_write' ? 'SELECT, INSERT, UPDATE, DELETE' :
-            'All privileges including CREATE, DROP, ALTER'
-          }>
+          <span 
+            className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${badgeStyles[level] || badgeStyles.read_write}`}
+            title={
+              level === 'read_only' ? 'SELECT only' :
+              level === 'read_write' ? 'SELECT, INSERT, UPDATE, DELETE' :
+              'All privileges including CREATE, DROP, ALTER'
+            }
+          >
             {label}
           </span>
         );
@@ -559,6 +225,45 @@
           return null;
         }
       };
+
+      // Reusable Components
+      const Button = ({ children, variant = "default", className = "", ...props }) => {
+        const baseClasses = "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2";
+        const variants = {
+          default: "bg-primary text-primary-foreground hover:bg-primary/90",
+          secondary: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
+          destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+          outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
+          ghost: "hover:bg-accent hover:text-accent-foreground",
+        };
+        return (
+          <button className={`${baseClasses} ${variants[variant]} ${className}`} {...props}>
+            {children}
+          </button>
+        );
+      };
+
+      const Input = ({ className = "", ...props }) => (
+        <input
+          className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+          {...props}
+        />
+      );
+
+      const Label = ({ children, className = "", ...props }) => (
+        <label className={`text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 mb-2 block ${className}`} {...props}>
+          {children}
+        </label>
+      );
+
+      const Select = ({ children, className = "", ...props }) => (
+        <select
+          className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+          {...props}
+        >
+          {children}
+        </select>
+      );
 
       // Components
       const CreateUserForm = ({ onSubmit, isSubmitting, knownStores = [], onEnsureStore }) => {
@@ -661,18 +366,22 @@
         };
 
         return (
-          <form className="card" onSubmit={handleSubmit}>
-            <div className="card-header">
+          <form className="bg-card text-card-foreground border border-border rounded-lg p-8 shadow-sm hover:shadow-md transition-shadow" onSubmit={handleSubmit}>
+            <div className="flex items-center justify-between mb-6 pb-4 border-b border-border">
               <div>
-                <div className="card-title">Create User</div>
-                <div className="card-subtitle">Add a new user account with store access</div>
+                <div className="text-xl font-semibold text-foreground">Create User</div>
+                <div className="text-sm text-muted-foreground mt-1">Add a new user account with store access</div>
               </div>
             </div>
-            {formError && <div className="alert alert-error">{formError}</div>}
+            {formError && (
+              <div className="relative w-full rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive mb-6">
+                {formError}
+              </div>
+            )}
             
-            <div className="form-group">
-              <label>Search stores</label>
-              <input
+            <div className="mb-6">
+              <Label>Search stores</Label>
+              <Input
                 type="text"
                 value={storeSearch}
                 onChange={(e) => setStoreSearch(e.target.value)}
@@ -688,10 +397,10 @@
               </datalist>
             </div>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label>Email *</label>
-                <input
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div>
+                <Label>Email *</Label>
+                <Input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -700,10 +409,10 @@
                   disabled={isSubmitting}
                 />
               </div>
-              <div className="form-group">
-                <label>Password *</label>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <input
+              <div>
+                <Label>Password *</Label>
+                <div className="flex gap-2">
+                  <Input
                     type="password"
                     value={password}
                     onChange={(e) => {
@@ -713,35 +422,35 @@
                     placeholder="Minimum 8 characters"
                     required
                     disabled={isSubmitting}
-                    style={{ flex: 1 }}
+                    className="flex-1"
                   />
-                  <button
+                  <Button
                     type="button"
+                    variant="secondary"
                     onClick={generatePassword}
-                    className="btn btn-secondary"
                     disabled={isSubmitting}
                     title="Generate secure password"
                   >
                     Generate
-                  </button>
+                  </Button>
                 </div>
                 {password && (
-                  <div className="password-strength">
-                    <div className="password-strength-bars">
+                  <div className="mt-2">
+                    <div className="flex gap-1 mb-2">
                       {[1, 2, 3, 4, 5].map((level) => (
                         <div
                           key={level}
-                          className={`password-strength-bar ${
+                          className={`flex-1 h-1 rounded ${
                             level <= passwordStrength
-                              ? level <= 2 ? 'weak' : level <= 4 ? 'medium' : 'active'
-                              : ''
+                              ? level <= 2 ? 'bg-destructive' : level <= 4 ? 'bg-yellow-500' : 'bg-green-500'
+                              : 'bg-muted'
                           }`}
                         />
                       ))}
                     </div>
-                    <div className="password-strength-text" style={{
-                      color: passwordStrength <= 2 ? 'var(--danger)' : passwordStrength <= 4 ? 'var(--warning)' : 'var(--success)'
-                    }}>
+                    <div className={`text-xs font-medium ${
+                      passwordStrength <= 2 ? 'text-destructive' : passwordStrength <= 4 ? 'text-yellow-600' : 'text-green-600'
+                    }`}>
                       {passwordStrength <= 2 ? 'Weak' : passwordStrength <= 4 ? 'Medium' : 'Strong'}
                     </div>
                   </div>
@@ -749,30 +458,30 @@
               </div>
             </div>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label>Full name (optional)</label>
-                <input
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div>
+                <Label>Full name (optional)</Label>
+                <Input
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   disabled={isSubmitting}
                 />
               </div>
-              <div className="form-group">
-                <label>Role</label>
-                <select value={role} onChange={(e) => setRole(e.target.value)} disabled={isSubmitting}>
+              <div>
+                <Label>Role</Label>
+                <Select value={role} onChange={(e) => setRole(e.target.value)} disabled={isSubmitting}>
                   <option value="owner">Owner</option>
                   <option value="user">User</option>
                   <option value="admin">Admin</option>
-                </select>
+                </Select>
               </div>
             </div>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label>Store database</label>
-                <input
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+              <div>
+                <Label>Store database</Label>
+                <Input
                   type="text"
                   value={storeDb}
                   onChange={(e) => setStoreDb(e.target.value)}
@@ -780,9 +489,9 @@
                   disabled={isSubmitting}
                 />
               </div>
-              <div className="form-group">
-                <label>DB user</label>
-                <input
+              <div>
+                <Label>DB user</Label>
+                <Input
                   type="text"
                   value={storeUser}
                   onChange={(e) => setStoreUser(e.target.value)}
@@ -790,9 +499,9 @@
                   disabled={isSubmitting}
                 />
               </div>
-              <div className="form-group">
-                <label>DB password</label>
-                <input
+              <div>
+                <Label>DB password</Label>
+                <Input
                   type="password"
                   value={storePass}
                   onChange={(e) => setStorePass(e.target.value)}
@@ -802,10 +511,10 @@
               </div>
             </div>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label>Store name</label>
-                <input
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div>
+                <Label>Store name</Label>
+                <Input
                   type="text"
                   value={storeName}
                   onChange={(e) => setStoreName(e.target.value)}
@@ -813,9 +522,9 @@
                   disabled={isSubmitting}
                 />
               </div>
-              <div className="form-group">
-                <label>Privilege level</label>
-                <select
+              <div>
+                <Label>Privilege level</Label>
+                <Select
                   value={privilegeLevel}
                   onChange={(e) => setPrivilegeLevel(e.target.value)}
                   disabled={isSubmitting}
@@ -823,19 +532,19 @@
                   <option value="read_only">Read Only (SELECT)</option>
                   <option value="read_write">Read/Write (SELECT, INSERT, UPDATE, DELETE)</option>
                   <option value="full_access">Full Access (All privileges)</option>
-                </select>
-                <div className="help-text">
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
                   {privilegeLevel === 'read_only' && 'User can only read data'}
                   {privilegeLevel === 'read_write' && 'User can read and modify data'}
                   {privilegeLevel === 'full_access' && 'User has full database access including schema changes'}
-                </div>
+                </p>
               </div>
             </div>
 
-            <div className="btn-group">
-              <button
+            <div className="flex gap-3 flex-wrap">
+              <Button
                 type="button"
-                className="btn btn-secondary"
+                variant="secondary"
                 disabled={isSubmitting || !storeDb || !storeUser || !storePass}
                 onClick={async () => {
                   if (!onEnsureStore) return;
@@ -848,10 +557,10 @@
                 }}
               >
                 Ensure database exists
-              </button>
-              <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+              </Button>
+              <Button type="submit" variant="default" disabled={isSubmitting}>
                 {isSubmitting ? 'Creating...' : 'Create user'}
-              </button>
+              </Button>
             </div>
           </form>
         );
@@ -892,19 +601,23 @@
         };
 
         return (
-          <form className="card" onSubmit={handleSubmit}>
-            <div className="card-header">
+          <form className="bg-card text-card-foreground border border-border rounded-lg p-8 shadow-sm hover:shadow-md transition-shadow mt-6" onSubmit={handleSubmit}>
+            <div className="flex items-center justify-between mb-6 pb-4 border-b border-border">
               <div>
-                <div className="card-title">Add Store to {user?.email || 'User'}</div>
-                <div className="card-subtitle">Assign a new store database to this user</div>
+                <div className="text-xl font-semibold text-foreground">Add Store to {user?.email || 'User'}</div>
+                <div className="text-sm text-muted-foreground mt-1">Assign a new store database to this user</div>
               </div>
             </div>
-            {formError && <div className="alert alert-error">{formError}</div>}
+            {formError && (
+              <div className="relative w-full rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive mb-6">
+                {formError}
+              </div>
+            )}
             
-            <div className="form-row">
-              <div className="form-group">
-                <label>Store database *</label>
-                <input
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+              <div>
+                <Label>Store database *</Label>
+                <Input
                   type="text"
                   value={storeDb}
                   onChange={(e) => setStoreDb(e.target.value)}
@@ -912,9 +625,9 @@
                   disabled={isSubmitting}
                 />
               </div>
-              <div className="form-group">
-                <label>DB user *</label>
-                <input
+              <div>
+                <Label>DB user *</Label>
+                <Input
                   type="text"
                   value={storeUser}
                   onChange={(e) => setStoreUser(e.target.value)}
@@ -922,9 +635,9 @@
                   disabled={isSubmitting}
                 />
               </div>
-              <div className="form-group">
-                <label>DB password *</label>
-                <input
+              <div>
+                <Label>DB password *</Label>
+                <Input
                   type="password"
                   value={storePass}
                   onChange={(e) => setStorePass(e.target.value)}
@@ -934,10 +647,10 @@
               </div>
             </div>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label>Store name</label>
-                <input
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div>
+                <Label>Store name</Label>
+                <Input
                   type="text"
                   value={storeName}
                   onChange={(e) => setStoreName(e.target.value)}
@@ -945,9 +658,9 @@
                   disabled={isSubmitting}
                 />
               </div>
-              <div className="form-group">
-                <label>Privilege level</label>
-                <select
+              <div>
+                <Label>Privilege level</Label>
+                <Select
                   value={privilegeLevel}
                   onChange={(e) => setPrivilegeLevel(e.target.value)}
                   disabled={isSubmitting}
@@ -955,19 +668,19 @@
                   <option value="read_only">Read Only (SELECT)</option>
                   <option value="read_write">Read/Write (SELECT, INSERT, UPDATE, DELETE)</option>
                   <option value="full_access">Full Access (All privileges)</option>
-                </select>
-                <div className="help-text">
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
                   {privilegeLevel === 'read_only' && 'User can only read data'}
                   {privilegeLevel === 'read_write' && 'User can read and modify data'}
                   {privilegeLevel === 'full_access' && 'User has full database access including schema changes'}
-                </div>
+                </p>
               </div>
             </div>
 
-            <div className="btn-group">
-              <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+            <div className="flex gap-3">
+              <Button type="submit" variant="default" disabled={isSubmitting}>
                 {isSubmitting ? 'Adding...' : 'Add store'}
-              </button>
+              </Button>
             </div>
           </form>
         );
@@ -983,32 +696,32 @@
 
       const StoreAssignments = ({ user, onRemoveStore, isProcessing }) => {
         if (!user?.stores?.length) {
-          return <div className="empty-state">No store assignments yet.</div>;
+          return <div className="text-center py-12 text-muted-foreground text-sm">No store assignments yet.</div>;
         }
 
         return (
-          <div className="store-list">
+          <div className="border border-border rounded-md overflow-hidden max-h-[500px] overflow-y-auto">
             {user.stores.map((store) => {
               const identifier = getStoreIdentifier(store) || store.id || store.store_db;
               return (
-                <div className="store-item" key={`${user.id}-${identifier}`}>
-                  <div className="user-info">
-                    <div className="user-name">
+                <div className="p-5 border-b border-border last:border-b-0 flex items-center justify-between gap-4 hover:bg-accent/50 transition-colors" key={`${user.id}-${identifier}`}>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-foreground mb-1 flex items-center gap-2 flex-wrap">
                       {store.store_name || store.store_db || 'Store'} {getPrivilegeBadge(store.privilege_level)}
                     </div>
-                    <div className="user-details">
+                    <div className="text-sm text-muted-foreground flex gap-4 flex-wrap">
                       <span>DB: {store.store_db || '—'}</span>
                       {store.db_user && <span>User: {store.db_user}</span>}
                     </div>
                   </div>
-                  <button
+                  <Button
                     type="button"
-                    className="btn btn-danger"
+                    variant="destructive"
                     onClick={() => onRemoveStore(user.id, identifier)}
                     disabled={isProcessing}
                   >
                     Remove
-                  </button>
+                  </Button>
                 </div>
               );
             })}
@@ -1018,20 +731,22 @@
 
       const UserList = ({ users, selectedUserId, onSelectUser }) => {
         if (!users?.length) {
-          return <div className="empty-state">No users found yet.</div>;
+          return <div className="text-center py-12 text-muted-foreground text-sm">No users found yet.</div>;
         }
 
         return (
-          <div className="user-list">
+          <div className="border border-border rounded-md overflow-hidden max-h-[500px] overflow-y-auto">
             {users.map((user) => (
               <div
                 key={user.id}
-                className={`user-item ${selectedUserId === user.id ? 'active' : ''}`}
+                className={`p-5 border-b border-border last:border-b-0 cursor-pointer transition-colors ${
+                  selectedUserId === user.id ? 'bg-primary/10' : 'hover:bg-accent/50'
+                }`}
                 onClick={() => onSelectUser(user.id)}
               >
-                <div className="user-info">
-                  <div className="user-name">{user.email}</div>
-                  <div className="user-details">
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-foreground mb-1">{user.email}</div>
+                  <div className="text-sm text-muted-foreground flex gap-4 flex-wrap">
                     <span>{user.full_name || '—'}</span>
                     <span>Role: {formatRole(user.user_role)}</span>
                     <span>{(user.stores?.length || 0)} store{(user.stores?.length === 1 ? '' : 's')}</span>
@@ -1086,51 +801,57 @@
 
         return (
           <>
-            <div className="header">
-              <div className="header-content">
-                <div className="header-title">
-                  <h1>Admin Panel</h1>
+            <div className="bg-card border-b border-border shadow-sm">
+              <div className="max-w-[1600px] mx-auto px-8 py-6 flex items-center justify-between gap-8">
+                <div className="flex items-center gap-4">
+                  <h1 className="text-2xl font-semibold text-foreground">Admin Panel</h1>
                 </div>
-                <div className="header-actions">
-                  <button className="btn btn-secondary" onClick={onRefresh} disabled={isLoading || isProcessing}>
+                <div className="flex items-center gap-4">
+                  <Button variant="secondary" onClick={onRefresh} disabled={isLoading || isProcessing}>
                     Refresh
-                  </button>
-                  <button className="btn btn-secondary" onClick={() => {
-                    // Clear all session data
+                  </Button>
+                  <Button variant="secondary" onClick={() => {
                     clearSession();
-                    // Redirect to login page
                     window.location.href = '/login.html';
                   }}>
                     Sign out
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
 
-            <div className="container">
-              {error && <div className="alert alert-error">{error}</div>}
-              {message && <div className="alert alert-success">{message}</div>}
+            <div className="max-w-[1600px] mx-auto p-8">
+              {error && (
+                <div className="relative w-full rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive mb-6">
+                  {error}
+                </div>
+              )}
+              {message && (
+                <div className="relative w-full rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-800 mb-6">
+                  {message}
+                </div>
+              )}
 
-              <div className="admin-grid">
-                <div className="card">
-                  <div className="card-header">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 mb-8">
+                <div className="bg-card text-card-foreground border border-border rounded-lg p-8 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between mb-6 pb-4 border-b border-border">
                     <div>
-                      <div className="card-title">Users</div>
-                      <div className="card-subtitle">Manage dashboard accounts</div>
+                      <div className="text-xl font-semibold text-foreground">Users</div>
+                      <div className="text-sm text-muted-foreground mt-1">Manage dashboard accounts</div>
                     </div>
                   </div>
                   {isLoading ? (
-                    <div className="loading">Loading users...</div>
+                    <div className="text-center py-12 text-muted-foreground text-sm">Loading users...</div>
                   ) : (
                     <UserList users={users} selectedUserId={selectedUser?.id} onSelectUser={onSelectUser} />
                   )}
                 </div>
 
-                <div className="card">
-                  <div className="card-header">
+                <div className="bg-card text-card-foreground border border-border rounded-lg p-8 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between mb-6 pb-4 border-b border-border">
                     <div>
-                      <div className="card-title">Store Assignments</div>
-                      <div className="card-subtitle">
+                      <div className="text-xl font-semibold text-foreground">Store Assignments</div>
+                      <div className="text-sm text-muted-foreground mt-1">
                         {selectedUser ? `${selectedUser.email} - ${selectedUser.stores?.length || 0} store(s)` : 'Select a user'}
                       </div>
                     </div>
@@ -1145,7 +866,7 @@
                       <AddStoreFormWrapper user={selectedUser} onSubmit={onAddStore} isSubmitting={isProcessing} userId={selectedUser.id} />
                     </>
                   ) : (
-                    <div className="empty-state">Select a user to manage their stores.</div>
+                    <div className="text-center py-12 text-muted-foreground text-sm">Select a user to manage their stores.</div>
                   )}
                 </div>
 
@@ -1164,14 +885,18 @@
       const AdminView = ({ hasKey, users, selectedUserId, onSelectUser, onRefresh, onCreateUser, onAddStore, onRemoveStore, onEnsureStore, isLoading, isProcessing, error, message }) => {
         if (!hasKey) {
           return (
-            <div className="container">
-              <div className="card">
-                <div className="card-header">
-                  <div className="card-title">Admin access unavailable</div>
+            <div className="max-w-[1600px] mx-auto p-8">
+              <div className="bg-card text-card-foreground border border-border rounded-lg p-8 shadow-sm">
+                <div className="flex items-center justify-between mb-6 pb-4 border-b border-border">
+                  <div className="text-xl font-semibold text-foreground">Admin access unavailable</div>
                 </div>
-                {error && <div className="alert alert-error">{error}</div>}
-                <p style={{ color: 'var(--text-secondary)' }}>
-                  Configure the <code>ADMIN_API_KEY</code> environment variable on the server to enable admin tools.
+                {error && (
+                  <div className="relative w-full rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive mb-6">
+                    {error}
+                  </div>
+                )}
+                <p className="text-muted-foreground">
+                  Configure the <code className="px-1.5 py-0.5 bg-muted rounded text-sm">ADMIN_API_KEY</code> environment variable on the server to enable admin tools.
                 </p>
               </div>
             </div>
@@ -1436,7 +1161,7 @@
     <script>
       // Version check to force reload of cached pages
       (function() {
-        const CURRENT_VERSION = '2.0.2';
+        const CURRENT_VERSION = '3.0.0';
         const VERSION_KEY = 'store-insights-html-version';
         const storedVersion = localStorage.getItem(VERSION_KEY);
         
@@ -1460,4 +1185,3 @@
     </script>
   </body>
 </html>
-
