@@ -114,6 +114,13 @@ class UpdatePrivilegesResponse(BaseModel):
     message: str
 
 
+class UpdateUserRequest(BaseModel):
+    email: Optional[EmailStr] = None
+    password: Optional[str] = Field(None, min_length=8)
+    full_name: Optional[str] = None
+    user_role: Optional[UserRole] = None
+
+
 class RotateApiKeyResponse(BaseModel):
     store_db: str
     api_key: str
@@ -170,6 +177,11 @@ def _get_privileges_for_level(privilege_level: PrivilegeLevel) -> str:
 def provision_store(payload: ProvisionStoreRequest, _: None = Depends(_require_admin)):
     """Create the tenant database if missing, ensure user exists, and grant privileges.
 
+    Grants:
+    - SELECT, INSERT, UPDATE, DELETE on platform_core.* (read/write access for user_stores management)
+    - Privileges on spirits-db.{schema}.* based on privilege_level
+    - User can access both platform_core and spirits-db databases
+
     Requires env: STORE_RDS_HOST, STORE_RDS_ADMIN_USER, STORE_RDS_ADMIN_PASS, optional STORE_RDS_PORT.
     MySQL 8.4.6 compatible.
     """
@@ -178,7 +190,12 @@ def provision_store(payload: ProvisionStoreRequest, _: None = Depends(_require_a
     admin_pass = os.getenv("STORE_RDS_ADMIN_PASS")
     port = int(os.getenv("STORE_RDS_PORT", "3306"))
     if not host or not admin_user or not admin_pass:
-        raise HTTPException(status_code=500, detail="Server missing STORE_RDS_* admin configuration")
+        raise HTTPException(
+            status_code=500, detail="Server missing STORE_RDS_* admin configuration"
+        )
+
+    # Get platform_core database name
+    core_db_name = os.getenv("CORE_DB_NAME", "platform_core")
 
     # Basic validation to avoid SQL injection on identifiers
     _validate_identifier(payload.store_db, "store_db")
@@ -187,18 +204,22 @@ def provision_store(payload: ProvisionStoreRequest, _: None = Depends(_require_a
 
     # Determine privilege level
     privilege_level = payload.privilege_level or PrivilegeLevel.read_write
-    privileges = _get_privileges_for_level(privilege_level)
+    schema_privileges = _get_privileges_for_level(privilege_level)
 
     created_db = False
     ensured_user = False
     granted = False
 
     try:
-        admin_conn = mysql.connector.connect(host=host, port=port, user=admin_user, password=admin_pass)
+        admin_conn = mysql.connector.connect(
+            host=host, port=port, user=admin_user, password=admin_pass
+        )
         admin_cur = admin_conn.cursor()
         try:
-            # Create DB if missing
-            admin_cur.execute(f"CREATE DATABASE IF NOT EXISTS `{payload.store_db}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
+            # Create DB if missing (in spirits-db)
+            admin_cur.execute(
+                f"CREATE DATABASE IF NOT EXISTS `{payload.store_db}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+            )
             admin_conn.commit()
             # Detect if it was created: query information_schema
             admin_cur.execute(
@@ -212,13 +233,19 @@ def provision_store(payload: ProvisionStoreRequest, _: None = Depends(_require_a
 
             # Ensure user exists (MySQL 8.4.6 supports CREATE USER IF NOT EXISTS)
             try:
-                admin_cur.execute("CREATE USER IF NOT EXISTS %s@'%%' IDENTIFIED BY %s", (payload.db_user, payload.db_pass))
+                admin_cur.execute(
+                    "CREATE USER IF NOT EXISTS %s@'%%' IDENTIFIED BY %s",
+                    (payload.db_user, payload.db_pass),
+                )
                 ensured_user = True
             except mysql.connector.Error as err:
                 # Fallback for older MySQL versions
                 if err.errno == errorcode.ER_PARSE_ERROR:
                     try:
-                        admin_cur.execute("CREATE USER %s@'%%' IDENTIFIED BY %s", (payload.db_user, payload.db_pass))
+                        admin_cur.execute(
+                            "CREATE USER %s@'%%' IDENTIFIED BY %s",
+                            (payload.db_user, payload.db_pass),
+                        )
                         ensured_user = True
                     except mysql.connector.Error as err2:
                         if err2.errno == errorcode.ER_CANNOT_USER:  # e.g., user exists
@@ -232,20 +259,39 @@ def provision_store(payload: ProvisionStoreRequest, _: None = Depends(_require_a
 
             # Revoke any existing privileges first (for updates)
             try:
-                admin_cur.execute(f"REVOKE ALL PRIVILEGES ON `{payload.store_db}`.* FROM %s@'%%'", (payload.db_user,))
+                # Revoke from spirits-db schema
+                admin_cur.execute(
+                    f"REVOKE ALL PRIVILEGES ON `{payload.store_db}`.* FROM %s@'%%'",
+                    (payload.db_user,),
+                )
+                # Revoke from platform_core
+                admin_cur.execute(
+                    f"REVOKE ALL PRIVILEGES ON `{core_db_name}`.* FROM %s@'%%'",
+                    (payload.db_user,),
+                )
             except mysql.connector.Error:
                 # User might not have privileges yet, ignore
                 pass
 
-            # Grant privileges based on privilege level
-            # MySQL 8.4.6 compatible GRANT syntax
-            admin_cur.execute(f"GRANT {privileges} ON `{payload.store_db}`.* TO %s@'%%'", (payload.db_user,))
+            # Grant SELECT, INSERT, UPDATE, DELETE on platform_core (read/write access for user_stores management)
+            admin_cur.execute(
+                f"GRANT SELECT, INSERT, UPDATE, DELETE ON `{core_db_name}`.* TO %s@'%%'",
+                (payload.db_user,),
+            )
+
+            # Grant privileges on spirits-db schema based on privilege level
+            admin_cur.execute(
+                f"GRANT {schema_privileges} ON `{payload.store_db}`.* TO %s@'%%'",
+                (payload.db_user,),
+            )
+
             admin_cur.execute("FLUSH PRIVILEGES")
             admin_conn.commit()
             granted = True
         finally:
             try:
-                admin_cur.close(); admin_conn.close()
+                admin_cur.close()
+                admin_conn.close()
             except Exception:
                 pass
     except mysql.connector.Error as err:
@@ -256,8 +302,9 @@ def provision_store(payload: ProvisionStoreRequest, _: None = Depends(_require_a
         created_database=created_db,
         ensured_user=ensured_user,
         granted_privileges=granted,
-        message=f"Provisioned successfully with {privilege_level.value} privileges",
+        message=f"Provisioned successfully. User has SELECT, INSERT, UPDATE, DELETE on {core_db_name} and {privilege_level.value} on {payload.store_db}",
     )
+
 
 @router.post("/users", response_model=CreateUserResponse, status_code=status.HTTP_201_CREATED)
 def create_user(payload: CreateUserRequest, _: None = Depends(_require_admin)):
@@ -625,45 +672,75 @@ def list_users(_: None = Depends(_require_admin)):
         conn.close()
 
 
-@router.get("/users/{user_id}", response_model=AdminUser)
-def get_user(user_id: int, _: None = Depends(_require_admin)):
+@router.put("/users/{user_id}", response_model=AdminUser)
+def update_user(
+    user_id: int, payload: UpdateUserRequest, _: None = Depends(_require_admin)
+):
+    """Update an existing user's information."""
     conn = get_core_connection()
     cursor = conn.cursor(dictionary=True)
 
     try:
+        # Check if user exists
+        cursor.execute("SELECT id FROM users WHERE id = %s", (user_id,))
+        if not cursor.fetchone():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+            )
+
         supports_full_name = _has_column(cursor, "users", "full_name")
         supports_user_role = _has_column(cursor, "users", "user_role")
 
-        selected_columns = ["id", "email"]
-        if supports_full_name:
-            selected_columns.append("full_name")
-        if supports_user_role:
-            selected_columns.append("user_role")
+        updates = []
+        params = []
 
-        column_clause = ", ".join(selected_columns)
+        if payload.email:
+            # Check if email is already taken by another user
+            cursor.execute(
+                "SELECT id FROM users WHERE email = %s AND id != %s",
+                (payload.email, user_id),
+            )
+            if cursor.fetchone():
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT, detail="Email already in use"
+                )
+            updates.append("email = %s")
+            params.append(payload.email)
+
+        if payload.password:
+            _validate_password(payload.password)
+            password_hash = bcrypt.hashpw(
+                payload.password.encode("utf-8"), bcrypt.gensalt()
+            ).decode("utf-8")
+            updates.append("password_hash = %s")
+            params.append(password_hash)
+
+        if payload.full_name is not None and supports_full_name:
+            updates.append("full_name = %s")
+            params.append(payload.full_name)
+
+        if payload.user_role is not None and supports_user_role:
+            updates.append("user_role = %s")
+            params.append(payload.user_role.value)
+
+        if not updates:
+            raise HTTPException(status_code=400, detail="No fields to update")
+
+        params.append(user_id)
         cursor.execute(
-            f"SELECT {column_clause} FROM users WHERE id = %s",
-            (user_id,),
+            f"UPDATE users SET {', '.join(updates)} WHERE id = %s",
+            tuple(params),
         )
-        row = cursor.fetchone()
-        if not row:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        conn.commit()
 
-        stores = _list_store_assignments(cursor, user_id)
-
-        user_role = row.get("user_role") if supports_user_role else None
-
-        return AdminUser(
-            id=row["id"],
-            email=row["email"],
-            full_name=row.get("full_name"),
-            user_role=user_role,
-            stores=stores,
-        )
+        # Return updated user
+        return get_user(user_id, _)
     except HTTPException:
+        conn.rollback()
         raise
-    except mysql.connector.Error as err:
-        raise HTTPException(status_code=500, detail=f"Failed to load user: {err}")
+    except Exception as exc:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update user: {exc}")
     finally:
         cursor.close()
         conn.close()
