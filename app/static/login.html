@@ -14,369 +14,109 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+    <!-- Tailwind CSS Play CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // Configure Tailwind with shadcn/ui design tokens
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              border: "hsl(var(--border))",
+              input: "hsl(var(--input))",
+              ring: "hsl(var(--ring))",
+              background: "hsl(var(--background))",
+              foreground: "hsl(var(--foreground))",
+              primary: {
+                DEFAULT: "hsl(var(--primary))",
+                foreground: "hsl(var(--primary-foreground))",
+              },
+              secondary: {
+                DEFAULT: "hsl(var(--secondary))",
+                foreground: "hsl(var(--secondary-foreground))",
+              },
+              destructive: {
+                DEFAULT: "hsl(var(--destructive))",
+                foreground: "hsl(var(--destructive-foreground))",
+              },
+              muted: {
+                DEFAULT: "hsl(var(--muted))",
+                foreground: "hsl(var(--muted-foreground))",
+              },
+              accent: {
+                DEFAULT: "hsl(var(--accent))",
+                foreground: "hsl(var(--accent-foreground))",
+              },
+              popover: {
+                DEFAULT: "hsl(var(--popover))",
+                foreground: "hsl(var(--popover-foreground))",
+              },
+              card: {
+                DEFAULT: "hsl(var(--card))",
+                foreground: "hsl(var(--card-foreground))",
+              },
+            },
+            borderRadius: {
+              lg: "var(--radius)",
+              md: "calc(var(--radius) - 2px)",
+              sm: "calc(var(--radius) - 4px)",
+            },
+            fontFamily: {
+              sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+            },
+          },
+        },
+      }
+    </script>
     <style>
+      /* shadcn/ui CSS Variables */
       :root {
-        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        --bg-primary: #f8fafc;
-        --bg-secondary: #ffffff;
-        --border: #e2e8f0;
-        --text-primary: #0f172a;
-        --text-secondary: #64748b;
-        --primary: #2563eb;
-        --primary-hover: #1d4ed8;
-        --primary-light: #dbeafe;
-        --danger: #ef4444;
-        --danger-light: #fee2e2;
-        --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
-        --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+        --background: 0 0% 100%;
+        --foreground: 222.2 84% 4.9%;
+        --card: 0 0% 100%;
+        --card-foreground: 222.2 84% 4.9%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 222.2 84% 4.9%;
+        --primary: 221.2 83.2% 53.3%;
+        --primary-foreground: 210 40% 98%;
+        --secondary: 210 40% 96.1%;
+        --secondary-foreground: 222.2 47.4% 11.2%;
+        --muted: 210 40% 96.1%;
+        --muted-foreground: 215.4 16.3% 46.9%;
+        --accent: 210 40% 96.1%;
+        --accent-foreground: 222.2 47.4% 11.2%;
+        --destructive: 0 84.2% 60.2%;
+        --destructive-foreground: 210 40% 98%;
+        --border: 214.3 31.8% 91.4%;
+        --input: 214.3 31.8% 91.4%;
+        --ring: 221.2 83.2% 53.3%;
         --radius: 0.5rem;
-        --radius-lg: 0.75rem;
       }
 
       * {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
+        border-color: hsl(var(--border));
       }
 
       body {
-        background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(19, 78, 110, 0.95));
-        color: var(--text-primary);
-        font-size: 14px;
-        line-height: 1.5;
-        min-height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 2rem;
-        position: relative;
-        overflow: hidden;
-      }
-
-      body::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: 
-          radial-gradient(circle at 20% 50%, rgba(14, 165, 233, 0.15) 0%, transparent 50%),
-          radial-gradient(circle at 80% 80%, rgba(139, 92, 246, 0.15) 0%, transparent 50%);
-        pointer-events: none;
-      }
-
-      .login-container {
-        width: 100%;
-        max-width: 480px;
-        position: relative;
-        z-index: 1;
-      }
-
-      .login-card {
-        width: 100%;
-        background: rgba(15, 23, 42, 0.85);
-        backdrop-filter: blur(16px);
-        color: #fff;
-        border-radius: 1.75rem;
-        padding: clamp(2rem, 5vw, 3rem);
-        display: grid;
-        gap: 2rem;
-        box-shadow: 0 40px 80px rgba(15, 23, 42, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.12);
-      }
-
-      .login-card h1 {
-        margin: 0;
-        text-align: center;
-        font-size: clamp(2rem, 5vw, 2.5rem);
-        font-weight: 700;
-        background: linear-gradient(135deg, #fff 0%, rgba(148, 163, 184, 0.9) 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        letter-spacing: -0.02em;
-      }
-
-      .login-card p {
-        margin: 0;
-        text-align: center;
-        color: rgba(226, 232, 240, 0.75);
-        font-size: 0.95rem;
-      }
-
-      .login-options {
-        display: grid;
-        gap: 1rem;
-      }
-
-      .login-option-btn {
-        padding: 1.25rem 1.5rem;
-        border-radius: 1rem;
-        border: 2px solid rgba(148, 163, 184, 0.2);
-        background: rgba(15, 23, 42, 0.6);
-        color: #fff;
-        font-weight: 600;
-        font-size: 1rem;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        text-align: center;
-        position: relative;
-        overflow: hidden;
-        -webkit-tap-highlight-color: transparent;
-        touch-action: manipulation;
-        user-select: none;
-        -webkit-user-select: none;
-        min-height: 48px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-
-      .login-option-btn::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: -100%;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-        transition: left 0.5s ease;
-      }
-
-      .login-option-btn:hover::before {
-        left: 100%;
-      }
-
-      .login-option-btn:hover {
-        border-color: rgba(14, 165, 233, 0.5);
-        background: rgba(14, 165, 233, 0.1);
-        transform: translateY(-2px);
-        box-shadow: 0 8px 24px rgba(14, 165, 233, 0.2);
-      }
-
-      .login-option-btn:active {
-        transform: translateY(0);
-        background: rgba(14, 165, 233, 0.2);
-      }
-
-      .mobility-form {
-        display: grid;
-        gap: 1.25rem;
-        margin-top: 0.5rem;
-        padding-top: 1.5rem;
-        border-top: 1px solid rgba(148, 163, 184, 0.2);
-      }
-
-      .mobility-form label {
-        display: grid;
-        gap: 0.5rem;
-        color: rgba(255, 255, 255, 0.9);
-        font-size: 0.9rem;
-        font-weight: 500;
-      }
-
-      .mobility-form-row {
-        display: grid;
-        grid-template-columns: 2fr 1fr;
-        gap: 1rem;
-      }
-
-      .mobility-form input {
-        background: rgba(15, 23, 42, 0.7);
-        border: 1px solid rgba(148, 163, 184, 0.3);
-        color: #fff;
-        padding: 0.85rem 1rem;
-        border-radius: 0.75rem;
-        font-size: 0.95rem;
-        transition: all 0.2s ease;
-      }
-
-      .mobility-form input:focus {
-        outline: none;
-        border-color: rgba(14, 165, 233, 0.6);
-        background: rgba(15, 23, 42, 0.85);
-        box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
-      }
-
-      .mobility-form input:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
-
-      .mobility-form input.readonly-input {
-        background: rgba(15, 23, 42, 0.5);
-        color: rgba(226, 232, 240, 0.7);
-        border-color: rgba(148, 163, 184, 0.2);
-        cursor: default;
-      }
-
-      .mobility-form input[readonly] {
-        background: rgba(15, 23, 42, 0.5);
-        color: rgba(226, 232, 240, 0.7);
-        border-color: rgba(148, 163, 184, 0.2);
-        cursor: default;
-      }
-
-      .mobility-form input::placeholder {
-        color: rgba(226, 232, 240, 0.5);
-      }
-
-      .edit-btn {
-        padding: 0.6rem 1rem;
-        border-radius: 0.6rem;
-        border: 1px solid rgba(148, 163, 184, 0.3);
-        background: rgba(15, 23, 42, 0.6);
-        color: rgba(255, 255, 255, 0.9);
-        font-weight: 500;
-        font-size: 0.9rem;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        width: 100%;
-        margin-top: 0.5rem;
-      }
-
-      .edit-btn:hover:not(:disabled) {
-        background: rgba(15, 23, 42, 0.8);
-        border-color: rgba(148, 163, 184, 0.5);
-      }
-
-      .edit-btn:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-
-      .countdown-message {
-        text-align: center;
-        color: rgba(226, 232, 240, 0.8);
-        font-size: 0.95rem;
-        padding: 0.75rem;
-        background: rgba(14, 165, 233, 0.1);
-        border-radius: 0.75rem;
-        margin: 0.5rem 0;
-      }
-
-      .mobility-actions {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 0.75rem;
-        margin-top: 0.5rem;
-      }
-
-      .mobility-actions button {
-        padding: 0.85rem 1.25rem;
-        border-radius: 0.75rem;
-        border: none;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        font-size: 0.95rem;
-      }
-
-      .mobility-actions button.primary {
-        background: var(--primary);
-        color: #fff;
-      }
-
-      .mobility-actions button.primary:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 8px 20px rgba(14, 165, 233, 0.3);
-      }
-
-      .mobility-actions button.secondary {
-        background: rgba(15, 23, 42, 0.6);
-        border: 1px solid rgba(148, 163, 184, 0.3);
-        color: rgba(255, 255, 255, 0.9);
-      }
-
-      .mobility-actions button.secondary:hover {
-        background: rgba(15, 23, 42, 0.8);
-        border-color: rgba(148, 163, 184, 0.5);
-      }
-
-      .form-group {
-        margin-bottom: 1.5rem;
-      }
-
-      label {
-        display: block;
-        font-weight: 500;
-        color: var(--text-primary);
-        margin-bottom: 0.5rem;
-        font-size: 0.875rem;
-      }
-
-      .login-card label {
-        color: rgba(255, 255, 255, 0.9);
-      }
-
-      .login-card input {
-        background: rgba(15, 23, 42, 0.65);
-        border: 1px solid rgba(148, 163, 184, 0.25);
-        color: #fff;
-        padding: 0.8rem 1rem;
-        border-radius: 0.9rem;
-        transition: all 0.2s ease;
-        width: 100%;
-        font-size: 0.95rem;
-      }
-
-      .login-card input:focus {
-        outline: none;
-        border-color: rgba(14, 165, 233, 0.6);
-        background: rgba(15, 23, 42, 0.85);
-        box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
-      }
-
-      .login-card input::placeholder {
-        color: rgba(226, 232, 240, 0.6);
-      }
-
-      .login-card button {
-        padding: 0.85rem 1.25rem;
-        border-radius: 0.95rem;
-        border: none;
-        font-weight: 600;
-        cursor: pointer;
-        background: var(--primary);
-        color: #fff;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-        width: 100%;
-      }
-
-      .login-card button:hover,
-      .login-card button:focus {
-        outline: none;
-        transform: translateY(-1px);
-        box-shadow: 0 12px 28px rgba(14, 165, 233, 0.35);
-      }
-
-      .login-card button:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-
-      .login-card button.secondary {
-        background: rgba(15, 23, 42, 0.55);
-        border: 1px solid rgba(148, 163, 184, 0.35);
-      }
-
-      .error-message {
-        padding: 0.9rem 1.1rem;
-        border-radius: 0.95rem;
-        background: rgba(220, 38, 38, 0.18);
-        color: #fecaca;
-        font-weight: 600;
-        margin-bottom: 1rem;
+        background-color: hsl(var(--background));
+        color: hsl(var(--foreground));
+        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       }
     </style>
   </head>
-  <body>
-    <div id="root"></div>
+  <body className="min-h-screen flex items-center justify-center p-8 relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+    {/* Background gradient overlay */}
+    <div className="absolute inset-0 pointer-events-none">
+      <div className="absolute top-0 left-[20%] w-96 h-96 bg-sky-500/15 rounded-full blur-3xl"></div>
+      <div className="absolute bottom-0 right-[20%] w-96 h-96 bg-purple-500/15 rounded-full blur-3xl"></div>
+    </div>
+
+    <div id="root" className="relative z-10 w-full max-w-md"></div>
+    
     <script>
       // Version check to force reload of cached pages
       (function() {
-        const CURRENT_VERSION = '2.0.2';
+        const CURRENT_VERSION = '3.0.0';
         const VERSION_KEY = 'store-insights-html-version';
         const storedVersion = localStorage.getItem(VERSION_KEY);
         
@@ -437,6 +177,35 @@
         selectedStore: 'store-insights/selected-store',
       };
 
+      // Reusable Components
+      const Button = ({ children, variant = "default", className = "", ...props }) => {
+        const baseClasses = "inline-flex items-center justify-center rounded-lg text-sm font-semibold ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 min-h-[48px] px-5 py-3";
+        const variants = {
+          default: "bg-primary text-primary-foreground hover:bg-primary/90 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/35 active:translate-y-0",
+          secondary: "bg-slate-800/60 border border-slate-400/20 text-white hover:bg-slate-800/80 hover:border-slate-400/50",
+          outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
+          ghost: "hover:bg-accent hover:text-accent-foreground",
+        };
+        return (
+          <button className={`${baseClasses} ${variants[variant]} ${className}`} {...props}>
+            {children}
+          </button>
+        );
+      };
+
+      const Input = ({ className = "", ...props }) => (
+        <input
+          className={`flex h-11 w-full rounded-xl border border-slate-400/25 bg-slate-900/65 px-4 py-2.5 text-sm text-white ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-400/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60 focus-visible:ring-offset-2 focus-visible:bg-slate-900/85 focus-visible:border-sky-500/60 disabled:cursor-not-allowed disabled:opacity-60 transition-all ${className}`}
+          {...props}
+        />
+      );
+
+      const Label = ({ children, className = "", ...props }) => (
+        <label className={`text-sm font-medium leading-none text-white/90 mb-2 block ${className}`} {...props}>
+          {children}
+        </label>
+      );
+
       const LoginForm = ({ onSubmit, isLoading, error }) => {
         const [email, setEmail] = useState('');
         const [password, setPassword] = useState('');
@@ -447,10 +216,10 @@
         };
 
         return (
-          <form onSubmit={submit}>
-            <label htmlFor="email">
-              Email
-              <input
+          <form onSubmit={submit} className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
                 id="email"
                 type="email"
                 placeholder="you@example.com"
@@ -459,10 +228,10 @@
                 required
                 disabled={isLoading}
               />
-            </label>
-            <label htmlFor="password">
-              Password
-              <input
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
                 id="password"
                 type="password"
                 placeholder="••••••••"
@@ -471,11 +240,15 @@
                 required
                 disabled={isLoading}
               />
-            </label>
-            {error ? <div className="error-message">{error}</div> : null}
-            <button type="submit" disabled={isLoading}>
+            </div>
+            {error && (
+              <div className="rounded-xl bg-destructive/18 border border-destructive/50 p-3.5 text-destructive-foreground font-semibold text-sm">
+                {error}
+              </div>
+            )}
+            <Button type="submit" variant="default" disabled={isLoading} className="w-full">
               {isLoading ? 'Signing in…' : 'Sign in'}
-            </button>
+            </Button>
           </form>
         );
       };
@@ -494,10 +267,10 @@
         };
 
         return (
-          <div className="login-options">
+          <div className="space-y-4">
             <button
               type="button"
-              className="login-option-btn"
+              className="relative w-full p-5 rounded-2xl border-2 border-slate-400/20 bg-slate-900/60 text-white font-semibold text-base cursor-pointer transition-all overflow-hidden hover:border-sky-500/50 hover:bg-sky-500/10 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-sky-500/20 active:translate-y-0 min-h-[48px] flex items-center justify-center touch-manipulation select-none before:absolute before:inset-0 before:-left-full before:w-full before:h-full before:bg-gradient-to-r before:from-transparent before:via-white/10 before:to-transparent before:transition-all before:duration-500 hover:before:left-full"
               onClick={handleInsightsClick}
               onTouchStart={(e) => {
                 e.currentTarget.style.transform = 'scale(0.98)';
@@ -511,7 +284,7 @@
             </button>
             <button
               type="button"
-              className="login-option-btn"
+              className="relative w-full p-5 rounded-2xl border-2 border-slate-400/20 bg-slate-900/60 text-white font-semibold text-base cursor-pointer transition-all overflow-hidden hover:border-sky-500/50 hover:bg-sky-500/10 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-sky-500/20 active:translate-y-0 min-h-[48px] flex items-center justify-center touch-manipulation select-none before:absolute before:inset-0 before:-left-full before:w-full before:h-full before:bg-gradient-to-r before:from-transparent before:via-white/10 before:to-transparent before:transition-all before:duration-500 hover:before:left-full"
               onClick={handleMobilityClick}
               onTouchStart={(e) => {
                 e.currentTarget.style.transform = 'scale(0.98)';
@@ -566,14 +339,14 @@
         };
 
         return (
-          <div className="mobility-form">
-            <h2 style={{ margin: '0 0 1rem 0', textAlign: 'center', fontSize: '1.25rem', fontWeight: 600 }}>
+          <div className="space-y-5 mt-2 pt-6 border-t border-slate-400/20">
+            <h2 className="text-center text-xl font-semibold text-white mb-4">
               Logging into Spirits Mobility
             </h2>
-            <form onSubmit={handleConnect}>
-              <label htmlFor="server-ip">
-                Server IP Address
-                <input
+            <form onSubmit={handleConnect} className="space-y-5">
+              <div className="space-y-2">
+                <Label htmlFor="server-ip">Server IP Address</Label>
+                <Input
                   id="server-ip"
                   type="text"
                   placeholder="192.168.1.100"
@@ -582,15 +355,15 @@
                   required
                   disabled={!isEditing || isConnecting}
                   readOnly={!isEditing}
-                  className={!isEditing ? 'readonly-input' : ''}
+                  className={!isEditing ? 'bg-slate-900/50 text-slate-300/70 border-slate-400/20 cursor-default' : ''}
                   pattern={isEditing ? "^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$|^[a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?)*$" : undefined}
                   title={isEditing ? "Enter a valid IP address or hostname" : undefined}
                 />
-              </label>
-              <div className="mobility-form-row">
-                <label htmlFor="server-port">
-                  Port
-                  <input
+              </div>
+              <div className="grid grid-cols-[2fr_1fr] gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="server-port">Port</Label>
+                  <Input
                     id="server-port"
                     type="number"
                     placeholder="8080"
@@ -601,38 +374,43 @@
                     max="65535"
                     disabled={!isEditing || isConnecting}
                     readOnly={!isEditing}
-                    className={!isEditing ? 'readonly-input' : ''}
+                    className={!isEditing ? 'bg-slate-900/50 text-slate-300/70 border-slate-400/20 cursor-default' : ''}
                   />
-                </label>
+                </div>
               </div>
               {!isEditing && hasSavedConnection && (
-                <button
+                <Button
                   type="button"
-                  className="edit-btn"
+                  variant="secondary"
                   onClick={handleEdit}
                   disabled={isConnecting}
+                  className="w-full mt-2"
                 >
                   Edit
-                </button>
+                </Button>
               )}
-              {error ? <div className="error-message">{error}</div> : null}
+              {error && (
+                <div className="rounded-xl bg-destructive/18 border border-destructive/50 p-3.5 text-destructive-foreground font-semibold text-sm">
+                  {error}
+                </div>
+              )}
               {!isEditing && hasSavedConnection && countdown !== null && (
-                <div className="countdown-message">
+                <div className="text-center text-slate-200/80 text-sm py-3 px-3 bg-sky-500/10 rounded-xl">
                   Redirecting in {countdown} second{countdown !== 1 ? 's' : ''}...
                 </div>
               )}
-              <div className="mobility-actions">
-                <button type="button" className="secondary" onClick={onBack} disabled={isConnecting}>
+              <div className="grid grid-cols-2 gap-3 mt-2">
+                <Button type="button" variant="secondary" onClick={onBack} disabled={isConnecting} className="w-full">
                   Back
-                </button>
+                </Button>
                 {isEditing ? (
-                  <button type="submit" className="primary" disabled={isConnecting || !serverIp || !serverPort}>
+                  <Button type="submit" variant="default" disabled={isConnecting || !serverIp || !serverPort} className="w-full">
                     {isConnecting ? 'Connecting…' : 'Connect'}
-                  </button>
+                  </Button>
                 ) : (
-                  <button type="button" className="primary" onClick={handleConnect} disabled={isConnecting}>
+                  <Button type="button" variant="default" onClick={handleConnect} disabled={isConnecting} className="w-full">
                     {isConnecting ? 'Connecting…' : 'Continue'}
-                  </button>
+                  </Button>
                 )}
               </div>
             </form>
@@ -784,10 +562,16 @@
         };
 
         return (
-          <div className="login-container">
-            <div className="login-card">
-              <h1>Spirits Store Insights</h1>
-              <p>Choose your login option to continue.</p>
+          <div className="w-full max-w-md relative z-10">
+            <div className="w-full bg-slate-900/85 backdrop-blur-2xl text-white rounded-[1.75rem] p-8 md:p-12 grid gap-8 shadow-2xl border border-white/10">
+              <div>
+                <h1 className="m-0 text-center text-3xl md:text-4xl font-bold bg-gradient-to-br from-white to-slate-400/90 bg-clip-text text-transparent tracking-tight">
+                  Spirits Store Insights
+                </h1>
+                <p className="m-0 text-center text-slate-200/75 text-[0.95rem] mt-2">
+                  Choose your login option to continue.
+                </p>
+              </div>
               {loginView === 'selection' && (
                 <LoginSelection
                   onSelectInsights={() => setLoginView('insights')}
@@ -797,14 +581,14 @@
               {loginView === 'insights' && (
                 <>
                   <LoginForm onSubmit={handleLogin} isLoading={isLoading} error={error} />
-                  <button
+                  <Button
                     type="button"
-                    className="secondary"
+                    variant="secondary"
                     onClick={() => setLoginView('selection')}
-                    style={{ marginTop: '0.5rem', width: '100%' }}
+                    className="w-full mt-2"
                   >
                     Back
-                  </button>
+                  </Button>
                 </>
               )}
               {loginView === 'mobility' && (
@@ -824,4 +608,3 @@
     </script>
   </body>
 </html>
-
