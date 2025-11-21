@@ -1,0 +1,41 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - echo "Installing Python dependencies..."
+        - python -m pip install --upgrade pip
+        - pip install -r requirements.txt
+    build:
+      commands:
+        - echo "Building FastAPI application..."
+        # The build phase can be used for any build steps needed
+        # FastAPI doesn't require compilation, but we can verify the app loads
+        - python -c "from app.main import app; print('✅ FastAPI app loaded successfully')"
+  artifacts:
+    baseDirectory: /
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - '**/node_modules/**/*'
+      - '.venv/**/*'
+      - '**/__pycache__/**/*'
+customHeaders:
+  - pattern: '**/*.html'
+    headers:
+      - key: 'Cache-Control'
+        value: 'no-cache, no-store, must-revalidate, max-age=0'
+      - key: 'Pragma'
+        value: 'no-cache'
+      - key: 'Expires'
+        value: '0'
+  - pattern: '/api/**'
+    headers:
+      - key: 'Access-Control-Allow-Origin'
+        value: '*'
+      - key: 'Access-Control-Allow-Methods'
+        value: 'GET, POST, PUT, DELETE, OPTIONS'
+      - key: 'Access-Control-Allow-Headers'
+        value: 'Content-Type, Authorization, X-Admin-Key'
+

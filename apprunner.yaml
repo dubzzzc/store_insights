@@ -1,0 +1,29 @@
+version: 1.0
+runtime: python3
+build:
+  commands:
+    build:
+      - pip install --upgrade pip
+      - pip install -r requirements.txt
+run:
+  runtime-version: 3.11
+  command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+  network:
+    port: 8000
+    env: PORT
+  # Note: Environment variables should be set in App Runner console
+  # or via AWS Secrets Manager. Do not hardcode sensitive values here.
+  # Required env vars:
+  # - CORE_DB_HOST
+  # - CORE_DB_USER
+  # - CORE_DB_PASSWORD
+  # - CORE_DB_NAME
+  # - JWT_SECRET
+  # Optional env vars:
+  # - ADMIN_API_KEY
+  # - STORE_RDS_HOST
+  # - STORE_RDS_ADMIN_USER
+  # - STORE_RDS_ADMIN_PASS
+  # - STORE_RDS_PORT
+  # - ALLOWED_ORIGINS
+

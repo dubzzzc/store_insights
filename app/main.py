@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 import time
+import os
 
 from app.bootstrap import bootstrap_admin_user
 
@@ -38,14 +39,21 @@ class NoCacheHTMLMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(NoCacheHTMLMiddleware)
+# Build CORS origins list
+cors_origins = [
+    "capacitor://localhost",  # iOS/Android native app
+    "http://localhost",  # Local testing
+    "http://localhost:8000",  # Local FastAPI server
+]
+
+# Add custom allowed origins from environment variable (comma-separated)
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "")
+if allowed_origins_env:
+    cors_origins.extend([origin.strip() for origin in allowed_origins_env.split(",") if origin.strip()])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "capacitor://localhost",  # iOS/Android native app
-        "http://localhost",  # Local testing
-        "http://localhost:8000",  # Local FastAPI server
-        "https://your-api-domain.com",  # Production API domain (update with your actual domain)
-    ],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],  # Includes OPTIONS
     allow_headers=["*"],
