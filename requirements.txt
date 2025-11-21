@@ -10,3 +10,4 @@ email-validator
 platformdirs>=3.0
 pyyaml
 dbfread
+requests
