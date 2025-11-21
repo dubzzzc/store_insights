@@ -738,6 +738,110 @@ def connect_mysql(
     )
 
 
+def connect_core_db(cfg: Optional[dict] = None):
+    """
+    Connect to core database for logging sync operations.
+    Uses environment variables (like the web app) or config if provided.
+    Returns None if core DB is not configured (logging will be skipped).
+    """
+    if mysql is None:
+        return None
+    
+    # Try config first, then environment variables
+    core_cfg = None
+    if cfg and cfg.get("core_db"):
+        core_cfg = cfg["core_db"]
+    
+    host = (core_cfg.get("host") if core_cfg else None) or os.getenv("CORE_DB_HOST")
+    user = (core_cfg.get("user") if core_cfg else None) or os.getenv("CORE_DB_USER")
+    password = (core_cfg.get("password") if core_cfg else None) or os.getenv("CORE_DB_PASSWORD")
+    database = (core_cfg.get("database") if core_cfg else None) or os.getenv("CORE_DB_NAME")
+    port = int((core_cfg.get("port") if core_cfg else None) or os.getenv("CORE_DB_PORT", "3306"))
+    
+    if not all([host, user, password, database]):
+        return None
+    
+    try:
+        return mysql.connector.connect(
+            host=host,
+            user=user,
+            password=password,
+            database=database,
+            port=port,
+            use_pure=True,
+        )
+    except Exception as e:
+        logger.warning(f"Could not connect to core database for logging: {e}")
+        return None
+
+
+def create_sync_log(
+    core_conn, store_db: str, status: str = "running", message: str = ""
+) -> Optional[int]:
+    """
+    Create a new sync log entry in dbf_sync_logs table.
+    Returns the log ID, or None if logging fails.
+    """
+    if core_conn is None:
+        return None
+    
+    try:
+        cursor = core_conn.cursor()
+        started_at = datetime.now()
+        cursor.execute(
+            """
+            INSERT INTO dbf_sync_logs (store_db, status, started_at, message)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (store_db, status, started_at, message),
+        )
+        core_conn.commit()
+        log_id = cursor.lastrowid
+        cursor.close()
+        return log_id
+    except Exception as e:
+        logger.warning(f"Failed to create sync log entry: {e}")
+        try:
+            core_conn.rollback()
+        except Exception:
+            pass
+        return None
+
+
+def update_sync_log(
+    core_conn,
+    log_id: Optional[int],
+    status: str,
+    records_processed: int = 0,
+    message: str = "",
+):
+    """
+    Update an existing sync log entry with completion status.
+    """
+    if core_conn is None or log_id is None:
+        return
+    
+    try:
+        cursor = core_conn.cursor()
+        finished_at = datetime.now()
+        cursor.execute(
+            """
+            UPDATE dbf_sync_logs
+            SET status = %s, finished_at = %s, records_processed = %s, message = %s
+            WHERE id = %s
+            """,
+            (status, finished_at, records_processed, message, log_id),
+        )
+        core_conn.commit()
+        cursor.close()
+    except Exception as e:
+        logger.warning(f"Failed to update sync log entry: {e}")
+        try:
+            core_conn.rollback()
+        except Exception:
+            pass
+
+
 # ---------- Helpers ----------
 
 
@@ -3228,6 +3332,16 @@ def run_headless(
         password = creds["password"]
         schema = creds.get("schema") if engine == "mssql" else None
 
+    # Connect to core database for logging (optional - will skip if not configured)
+    core_conn = connect_core_db(cfg)
+    sync_log_id = None
+    store_db = database  # Use database name as store_db identifier
+    
+    # Track if we need to log an error
+    sync_error = None
+    total_rows = 0
+    files = []
+
     folder = cfg["source"]["folder"]
     include = cfg["source"].get("include")
 
@@ -3374,147 +3488,156 @@ def run_headless(
 
     update_gui_progress(10, f"Starting sync of {total_files} table(s)...")
 
-    for file_idx, p in enumerate(files):
-        # Update progress: 10% base + 80% for files (0-80%) + 10% reserved for completion
-        progress_pct = (
-            10 + int((file_idx / total_files) * 80) if total_files > 0 else 10
-        )
-        base = os.path.splitext(os.path.basename(p))[0]
-        tgt = f"{tpref}{base}{tsuff}"
-        table_key = f"{tracking_key}|{tgt}"
+    # Create sync log entry (after files are determined)
+    sync_log_id = create_sync_log(
+        core_conn,
+        store_db=store_db,
+        status="running",
+        message=f"Starting sync of {total_files} table(s) from {folder}",
+    )
 
-        # Update progress for this file
-        update_gui_progress(progress_pct, f"Processing {base}...")
-
-        # Determine date field for this specific table
-        # Check per-table override first, then fall back to default
-        table_date_field = date_fields_per_table.get(base.lower(), date_field)
-        if not table_date_field:
-            table_date_field = date_fields_per_table.get(base, date_field)
-
-        # Check for related table date field config (e.g., jnl using jnh.tstamp, sll using slh.tstamp)
-        related_table_config = related_table_date_fields.get(
-            base.lower()
-        ) or related_table_date_fields.get(base)
-        if related_table_config:
-            log_to_gui(
-                f"  [Delta Sync] {tgt}: Using related table '{related_table_config.get('related_table')}' "
-                f"field '{related_table_config.get('date_field_related')}' via join on '{related_table_config.get('join_field_local')}'"
+    try:
+        for file_idx, p in enumerate(files):
+            # Update progress: 10% base + 80% for files (0-80%) + 10% reserved for completion
+            progress_pct = (
+                10 + int((file_idx / total_files) * 80) if total_files > 0 else 10
             )
+            base = os.path.splitext(os.path.basename(p))[0]
+            tgt = f"{tpref}{base}{tsuff}"
+            table_key = f"{tracking_key}|{tgt}"
 
-        try:
-            since_date = None
-            if (
-                delta_enabled and not trunc
-            ):  # Delta sync disabled when truncate is enabled
-                # Get last sync time for this table
-                last_sync_str = sync_tracking.get(table_key)
-                if last_sync_str:
-                    try:
-                        since_date = datetime.fromisoformat(last_sync_str)
-                        # Normalize timezone for logging
-                        if since_date.tzinfo:
-                            since_date_display = since_date.replace(tzinfo=None)
-                        else:
-                            since_date_display = since_date
+            # Update progress for this file
+            update_gui_progress(progress_pct, f"Processing {base}...")
+
+            # Determine date field for this specific table
+            # Check per-table override first, then fall back to default
+            table_date_field = date_fields_per_table.get(base.lower(), date_field)
+            if not table_date_field:
+                table_date_field = date_fields_per_table.get(base, date_field)
+
+            # Check for related table date field config (e.g., jnl using jnh.tstamp, sll using slh.tstamp)
+            related_table_config = related_table_date_fields.get(
+                base.lower()
+            ) or related_table_date_fields.get(base)
+            if related_table_config:
+                log_to_gui(
+                    f"  [Delta Sync] {tgt}: Using related table '{related_table_config.get('related_table')}' "
+                    f"field '{related_table_config.get('date_field_related')}' via join on '{related_table_config.get('join_field_local')}'"
+                )
+
+            try:
+                since_date = None
+                if (
+                    delta_enabled and not trunc
+                ):  # Delta sync disabled when truncate is enabled
+                    # Get last sync time for this table
+                    last_sync_str = sync_tracking.get(table_key)
+                    if last_sync_str:
+                        try:
+                            since_date = datetime.fromisoformat(last_sync_str)
+                            # Normalize timezone for logging
+                            if since_date.tzinfo:
+                                since_date_display = since_date.replace(tzinfo=None)
+                            else:
+                                since_date_display = since_date
+                            if auto_sync:
+                                log_to_gui(
+                                    f"  [Auto-Sync] {tgt}: Checking '{table_date_field or date_field}' field - uploading records newer than {since_date_display}"
+                                )
+                            else:
+                                log_to_gui(
+                                    f"  [Delta Sync] {tgt}: Syncing records since {since_date_display} (using field '{table_date_field or date_field}')"
+                                )
+                        except Exception as e:
+                            log_to_gui(
+                                f"  [Delta Sync] WARNING: Could not parse last sync time for {tgt}: {e}. Doing full sync."
+                            )
+                            since_date = None
+                    else:
                         if auto_sync:
                             log_to_gui(
-                                f"  [Auto-Sync] {tgt}: Checking '{table_date_field or date_field}' field - uploading records newer than {since_date_display}"
+                                f"  [Auto-Sync] {tgt}: No previous sync found, doing initial full sync (all records)"
                             )
                         else:
                             log_to_gui(
-                                f"  [Delta Sync] {tgt}: Syncing records since {since_date_display} (using field '{table_date_field or date_field}')"
+                                f"  [Delta Sync] {tgt}: No previous sync found, doing full sync (all records)"
                             )
-                    except Exception as e:
-                        log_to_gui(
-                            f"  [Delta Sync] WARNING: Could not parse last sync time for {tgt}: {e}. Doing full sync."
-                        )
-                        since_date = None
+                elif trunc and delta_enabled:
+                    log_to_gui(
+                        f"  [Delta Sync] {tgt}: Delta sync disabled due to truncate_before_load=True"
+                    )
+
+                # Determine which date field to use for this table
+                # Priority: date_range_field (if enabled) > table_date_field (per-table override) > date_field (default delta sync)
+                if (
+                    date_range_enabled
+                    and date_range_field
+                    and (date_range_start or date_range_end)
+                ):
+                    effective_date_field = date_range_field
+                elif delta_enabled and table_date_field:
+                    effective_date_field = table_date_field
+                elif delta_enabled and date_field:
+                    effective_date_field = date_field
                 else:
-                    if auto_sync:
-                        log_to_gui(
-                            f"  [Auto-Sync] {tgt}: No previous sync found, doing initial full sync (all records)"
-                        )
-                    else:
-                        log_to_gui(
-                            f"  [Delta Sync] {tgt}: No previous sync found, doing full sync (all records)"
-                        )
-            elif trunc and delta_enabled:
-                log_to_gui(
-                    f"  [Delta Sync] {tgt}: Delta sync disabled due to truncate_before_load=True"
-                )
+                    effective_date_field = None
 
-            # Determine which date field to use for this table
-            # Priority: date_range_field (if enabled) > table_date_field (per-table override) > date_field (default delta sync)
-            if (
-                date_range_enabled
-                and date_range_field
-                and (date_range_start or date_range_end)
-            ):
-                effective_date_field = date_range_field
-            elif delta_enabled and table_date_field:
-                effective_date_field = table_date_field
-            elif delta_enabled and date_field:
-                effective_date_field = date_field
-            else:
-                effective_date_field = None
-
-            # Log per-table date field if different from default
-            if delta_enabled and table_date_field and table_date_field != date_field:
-                log_to_gui(
-                    f"  [Delta Sync] {tgt}: Using table-specific date field '{table_date_field}' (default: '{date_field}')"
-                )
-
-            # Check if date field exists in this table (will be checked in iter_dbf_rows)
-            # Note: If date field doesn't exist, iter_dbf_rows will warn and upload entire table
-
-            # Only apply date range filter if enabled and we have at least one date bound
-            effective_date_range_start = (
-                date_range_start if date_range_enabled else None
-            )
-            effective_date_range_end = date_range_end if date_range_enabled else None
-
-            # Validate date range if both bounds are provided
-            if effective_date_range_start and effective_date_range_end:
-                if effective_date_range_start > effective_date_range_end:
+                # Log per-table date field if different from default
+                if delta_enabled and table_date_field and table_date_field != date_field:
                     log_to_gui(
-                        f"WARNING: {tgt} - start_date > end_date, swapping dates"
-                    )
-                    effective_date_range_start, effective_date_range_end = (
-                        effective_date_range_end,
-                        effective_date_range_start,
+                        f"  [Delta Sync] {tgt}: Using table-specific date field '{table_date_field}' (default: '{date_field}')"
                     )
 
-            # When drop_recreate is True, disable delta sync (since_date should be None)
-            # When trunc is True, also disable delta sync for the truncate operation
-            if drop_recreate:
-                effective_since_date = None
-                if delta_enabled:
-                    log_to_gui(
-                        f"  [Delta Sync] {tgt}: Delta sync disabled due to drop_recreate=True"
-                    )
-            elif trunc:
-                # Delta sync will be disabled during truncate operation
-                effective_since_date = None
-            else:
-                effective_since_date = since_date
+                # Check if date field exists in this table (will be checked in iter_dbf_rows)
+                # Note: If date field doesn't exist, iter_dbf_rows will warn and upload entire table
 
-            # Check if date field exists in DBF before upload (for logging)
-            # This check happens inside bulk_insert/iter_dbf_rows, but we can pre-check
-            dbf_preview = open_dbf(p)
-            dbf_field_names = [f.name.lower() for f in dbf_preview.fields]
-            date_field_exists = (
-                effective_date_field and effective_date_field.lower() in dbf_field_names
-            )
+                # Only apply date range filter if enabled and we have at least one date bound
+                effective_date_range_start = (
+                    date_range_start if date_range_enabled else None
+                )
+                effective_date_range_end = date_range_end if date_range_enabled else None
 
-            if effective_date_field and not date_field_exists:
-                log_to_gui(
-                    f"  [Date Filter] {tgt}: Date field '{effective_date_field}' not found - uploading entire table"
+                # Validate date range if both bounds are provided
+                if effective_date_range_start and effective_date_range_end:
+                    if effective_date_range_start > effective_date_range_end:
+                        log_to_gui(
+                            f"WARNING: {tgt} - start_date > end_date, swapping dates"
+                        )
+                        effective_date_range_start, effective_date_range_end = (
+                            effective_date_range_end,
+                            effective_date_range_start,
+                        )
+
+                # When drop_recreate is True, disable delta sync (since_date should be None)
+                # When trunc is True, also disable delta sync for the truncate operation
+                if drop_recreate:
+                    effective_since_date = None
+                    if delta_enabled:
+                        log_to_gui(
+                            f"  [Delta Sync] {tgt}: Delta sync disabled due to drop_recreate=True"
+                        )
+                elif trunc:
+                    # Delta sync will be disabled during truncate operation
+                    effective_since_date = None
+                else:
+                    effective_since_date = since_date
+
+                # Check if date field exists in DBF before upload (for logging)
+                # This check happens inside bulk_insert/iter_dbf_rows, but we can pre-check
+                dbf_preview = open_dbf(p)
+                dbf_field_names = [f.name.lower() for f in dbf_preview.fields]
+                date_field_exists = (
+                    effective_date_field and effective_date_field.lower() in dbf_field_names
                 )
 
-            if drop_recreate:
-                # Drop & recreate fresh table, then load
-                inserted, batches = bulk_insert(
+                if effective_date_field and not date_field_exists:
+                    log_to_gui(
+                        f"  [Date Filter] {tgt}: Date field '{effective_date_field}' not found - uploading entire table"
+                    )
+
+                if drop_recreate:
+                    # Drop & recreate fresh table, then load
+                    inserted, batches = bulk_insert(
                     conn,
                     engine,
                     tgt,
@@ -3532,9 +3655,9 @@ def run_headless(
                         else None
                     ),
                 )
-            else:
-                # Reconcile schema; optional truncate then load
-                inserted, batches = bulk_insert(
+                else:
+                    # Reconcile schema; optional truncate then load
+                    inserted, batches = bulk_insert(
                     conn,
                     engine,
                     tgt,
@@ -3552,14 +3675,14 @@ def run_headless(
                         else None
                     ),
                 )
-                if trunc:
-                    truncate_table(conn, engine, tgt, schema)
-                    log_to_gui(
-                        f"  [Truncate] {tgt}: Table truncated. Delta sync disabled for this load."
-                    )
-                    # When truncating, disable delta sync but keep date range filter if enabled
-                    # This ensures we load all records within the date range after truncating
-                    inserted, batches = bulk_insert(
+                    if trunc:
+                        truncate_table(conn, engine, tgt, schema)
+                        log_to_gui(
+                            f"  [Truncate] {tgt}: Table truncated. Delta sync disabled for this load."
+                        )
+                        # When truncating, disable delta sync but keep date range filter if enabled
+                        # This ensures we load all records within the date range after truncating
+                        inserted, batches = bulk_insert(
                         conn,
                         engine,
                         tgt,
@@ -3572,75 +3695,83 @@ def run_headless(
                         date_range_start=effective_date_range_start,
                         date_range_end=effective_date_range_end,
                         related_table_config=None,  # Disable related table filtering when truncating
+                        )
+
+                total_rows += inserted
+
+                # Update progress after file completion
+                file_progress = (
+                    10 + int(((file_idx + 1) / total_files) * 80) if total_files > 0 else 90
+                )
+                update_gui_progress(
+                    file_progress, f"Completed {base} - {inserted} rows inserted"
+                )
+
+                # Update sync tracking (always update after successful sync)
+                # This timestamp is used for the next delta sync to check for newer records
+                if inserted >= 0:  # Update even if 0 rows (indicates successful sync)
+                    # Store ISO with local timezone info - this becomes the "since_date" for next sync
+                    sync_timestamp = datetime.now().astimezone().isoformat()
+                    sync_updates[table_key] = sync_timestamp
+                    if delta_enabled and not drop_recreate and not trunc:
+                        if auto_sync:
+                            log_to_gui(
+                                f"  [Auto-Sync] {tgt}: Sync complete. Next sync will check for records newer than {sync_timestamp}"
+                            )
+                        else:
+                            log_to_gui(
+                                f"  [Delta Sync] {tgt}: Sync timestamp updated to {sync_timestamp}"
+                            )
+
+                # Determine sync mode for logging
+                if drop_recreate:
+                    sync_mode = "full (drop_recreate)"
+                elif trunc:
+                    sync_mode = "full (truncated)"
+                elif delta_enabled and since_date:
+                    sync_mode = f"delta (since {since_date.replace(tzinfo=None) if since_date and since_date.tzinfo else since_date})"
+                elif date_range_enabled and (
+                    effective_date_range_start or effective_date_range_end
+                ):
+                    range_desc = []
+                    if effective_date_range_start:
+                        range_desc.append(f"from {effective_date_range_start.date()}")
+                    if effective_date_range_end:
+                        range_desc.append(f"to {effective_date_range_end.date()}")
+                    sync_mode = f"date_range ({' '.join(range_desc)})"
+                else:
+                    sync_mode = "full"
+
+                log_to_gui(
+                    f"Loaded {inserted:>8} rows → {tgt} ({batches} batch/es) [{sync_mode}]"
+                )
+            except Exception as e:
+                error_msg = str(e)
+                # Provide more helpful error message for common date-related errors
+                if "invalid date" in error_msg.lower() or (
+                    "date" in error_msg.lower()
+                    and ("b'\\x00" in error_msg or "\\x00" in error_msg)
+                ):
+                    log_to_gui(f"WARNING {base}: Invalid date detected - {error_msg}")
+                    log_to_gui(
+                        f"  → This may be due to uninitialized/null date values in the DBF file."
                     )
+                    log_to_gui(
+                        f"  → Rows with invalid dates are automatically skipped during filtering."
+                    )
+                    log_to_gui(f"  → Continuing with remaining rows...")
+                    # Don't treat this as a fatal error - continue processing
+                    continue
+                else:
+                    log_to_gui(f"ERROR {base}: {e}")
+                    sync_error = e  # Track error but continue processing other files
 
-            total_rows += inserted
-
-            # Update progress after file completion
-            file_progress = (
-                10 + int(((file_idx + 1) / total_files) * 80) if total_files > 0 else 90
-            )
-            update_gui_progress(
-                file_progress, f"Completed {base} - {inserted} rows inserted"
-            )
-
-            # Update sync tracking (always update after successful sync)
-            # This timestamp is used for the next delta sync to check for newer records
-            if inserted >= 0:  # Update even if 0 rows (indicates successful sync)
-                # Store ISO with local timezone info - this becomes the "since_date" for next sync
-                sync_timestamp = datetime.now().astimezone().isoformat()
-                sync_updates[table_key] = sync_timestamp
-                if delta_enabled and not drop_recreate and not trunc:
-                    if auto_sync:
-                        log_to_gui(
-                            f"  [Auto-Sync] {tgt}: Sync complete. Next sync will check for records newer than {sync_timestamp}"
-                        )
-                    else:
-                        log_to_gui(
-                            f"  [Delta Sync] {tgt}: Sync timestamp updated to {sync_timestamp}"
-                        )
-
-            # Determine sync mode for logging
-            if drop_recreate:
-                sync_mode = "full (drop_recreate)"
-            elif trunc:
-                sync_mode = "full (truncated)"
-            elif delta_enabled and since_date:
-                sync_mode = f"delta (since {since_date.replace(tzinfo=None) if since_date and since_date.tzinfo else since_date})"
-            elif date_range_enabled and (
-                effective_date_range_start or effective_date_range_end
-            ):
-                range_desc = []
-                if effective_date_range_start:
-                    range_desc.append(f"from {effective_date_range_start.date()}")
-                if effective_date_range_end:
-                    range_desc.append(f"to {effective_date_range_end.date()}")
-                sync_mode = f"date_range ({' '.join(range_desc)})"
-            else:
-                sync_mode = "full"
-
-            log_to_gui(
-                f"Loaded {inserted:>8} rows → {tgt} ({batches} batch/es) [{sync_mode}]"
-            )
-        except Exception as e:
-            error_msg = str(e)
-            # Provide more helpful error message for common date-related errors
-            if "invalid date" in error_msg.lower() or (
-                "date" in error_msg.lower()
-                and ("b'\\x00" in error_msg or "\\x00" in error_msg)
-            ):
-                log_to_gui(f"WARNING {base}: Invalid date detected - {error_msg}")
-                log_to_gui(
-                    f"  → This may be due to uninitialized/null date values in the DBF file."
-                )
-                log_to_gui(
-                    f"  → Rows with invalid dates are automatically skipped during filtering."
-                )
-                log_to_gui(f"  → Continuing with remaining rows...")
-                # Don't treat this as a fatal error - continue processing
-                continue
-            else:
-                log_to_gui(f"ERROR {base}: {e}")
+    except Exception as e:
+        # Catch any unexpected errors during sync
+        sync_error = e
+        log_to_gui(f"FATAL ERROR during sync: {e}")
+        import traceback
+        logger.exception("Fatal error during sync")
 
     # Save updated sync tracking (always save to track last sync time)
     if sync_updates:
@@ -3665,6 +3796,35 @@ def run_headless(
         conn.close()
     except Exception:
         pass
+
+    # Update sync log with completion status
+    if sync_error:
+        update_sync_log(
+            core_conn,
+            sync_log_id,
+            status="error",
+            records_processed=total_rows,
+            message=f"Sync failed: {sync_error}",
+        )
+    else:
+        update_sync_log(
+            core_conn,
+            sync_log_id,
+            status="completed",
+            records_processed=total_rows,
+            message=f"Successfully synced {len(files)} table(s), {total_rows} total rows",
+        )
+
+    # Close core database connection
+    if core_conn:
+        try:
+            core_conn.close()
+        except Exception:
+            pass
+
+    # Re-raise error if one occurred
+    if sync_error:
+        raise sync_error
 
     update_gui_progress(100, f"Complete! Inserted {total_rows} rows total.")
     log_to_gui(f"ALL DONE. Inserted {total_rows} rows total.")
