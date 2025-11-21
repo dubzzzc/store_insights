@@ -47,7 +47,7 @@
     <script>
       // Version check to force reload of cached pages
       (function() {
-        const CURRENT_VERSION = '3.0.5';
+        const CURRENT_VERSION = '3.0.6';
         const VERSION_KEY = 'store-insights-html-version';
         const storedVersion = localStorage.getItem(VERSION_KEY);
         
@@ -540,7 +540,39 @@
         );
       };
 
-      ReactDOM.render(<LoginApp />, document.getElementById('root'));
+      // Store app component for rendering after components load
+      window.renderLoginApp = function() {
+        if (typeof Button === 'undefined' || typeof Input === 'undefined') {
+          console.error('Components not loaded. Waiting...');
+          setTimeout(window.renderLoginApp, 100);
+          return;
+        }
+        ReactDOM.render(<LoginApp />, document.getElementById('root'));
+      };
+    </script>
+    <script>
+      // Render app after components are loaded
+      (function() {
+        function tryRender() {
+          if (window.componentsLoaded && typeof Button !== 'undefined') {
+            if (window.renderLoginApp) {
+              window.renderLoginApp();
+            }
+          } else {
+            setTimeout(tryRender, 50);
+          }
+        }
+        
+        // Listen for components loaded event
+        window.addEventListener('componentsLoaded', function() {
+          if (window.renderLoginApp) {
+            window.renderLoginApp();
+          }
+        });
+        
+        // Also try periodically (fallback)
+        tryRender();
+      })();
     </script>
   </body>
 </html>

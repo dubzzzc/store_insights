@@ -27,31 +27,6 @@
     <script src="/components/component-loader.js"></script>
     <script type="text/babel">
       const { useState, useEffect, useCallback, useMemo, useRef } = React;
-      
-      // Wait for components to load before rendering
-      (async function waitForComponents() {
-        // Wait up to 3 seconds for components to load
-        const maxWait = 3000;
-        const startTime = Date.now();
-        
-        while (!window.componentsLoaded && (Date.now() - startTime) < maxWait) {
-          await new Promise(resolve => setTimeout(resolve, 50));
-        }
-        
-        if (!window.componentsLoaded) {
-          console.error('Components failed to load within timeout');
-          console.error('Check network tab for component file loading errors');
-        }
-      })();
-      
-      // Verify components are loaded
-      if (typeof Button === 'undefined') {
-        console.error('Button component not found. Component library may not have loaded.');
-        console.error('Components loaded:', window.componentsLoaded);
-      }
-      if (typeof Input === 'undefined') {
-        console.error('Input component not found. Component library may not have loaded.');
-      }
 
       const API_BASE = window.location.origin;
 
@@ -1036,12 +1011,44 @@
         );
       };
 
-      ReactDOM.render(<App />, document.getElementById('root'));
+      // Store app component for rendering after components load
+      window.renderAdminApp = function() {
+        if (typeof Button === 'undefined' || typeof Input === 'undefined') {
+          console.error('Components not loaded. Waiting...');
+          setTimeout(window.renderAdminApp, 100);
+          return;
+        }
+        ReactDOM.render(<App />, document.getElementById('root'));
+      };
+    </script>
+    <script>
+      // Render app after components are loaded
+      (function() {
+        function tryRender() {
+          if (window.componentsLoaded && typeof Button !== 'undefined') {
+            if (window.renderAdminApp) {
+              window.renderAdminApp();
+            }
+          } else {
+            setTimeout(tryRender, 50);
+          }
+        }
+        
+        // Listen for components loaded event
+        window.addEventListener('componentsLoaded', function() {
+          if (window.renderAdminApp) {
+            window.renderAdminApp();
+          }
+        });
+        
+        // Also try periodically (fallback)
+        tryRender();
+      })();
     </script>
     <script>
       // Version check to force reload of cached pages
       (function() {
-        const CURRENT_VERSION = '3.0.5';
+        const CURRENT_VERSION = '3.0.6';
         const VERSION_KEY = 'store-insights-html-version';
         const storedVersion = localStorage.getItem(VERSION_KEY);
         
