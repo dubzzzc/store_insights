@@ -14,15 +14,55 @@ from app.db_core import get_core_connection
 router = APIRouter()
 
 # Add scripts directory to path to import vfp_dbf_to_rdsv2
-scripts_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "scripts")
-if scripts_dir not in sys.path:
-    sys.path.insert(0, scripts_dir)
+# Get absolute path to scripts directory
+app_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(app_dir)
+scripts_dir = os.path.join(project_root, "scripts")
+scripts_dir = os.path.abspath(scripts_dir)
 
-try:
-    from vfp_dbf_to_rdsv2 import run_headless
-except ImportError as e:
-    logging.warning(f"Could not import vfp_dbf_to_rdsv2: {e}")
-    run_headless = None
+# Verify the script file exists
+vfp_script_path = os.path.join(scripts_dir, "vfp_dbf_to_rdsv2.py")
+
+# Try alternative paths if primary doesn't exist
+if not os.path.exists(vfp_script_path):
+    # Try relative to current working directory
+    alt_scripts_dir = os.path.abspath("scripts")
+    alt_vfp_script_path = os.path.join(alt_scripts_dir, "vfp_dbf_to_rdsv2.py")
+    if os.path.exists(alt_vfp_script_path):
+        scripts_dir = alt_scripts_dir
+        vfp_script_path = alt_vfp_script_path
+        logging.info(f"Using alternative scripts path: {scripts_dir}")
+    else:
+        # Try environment variable if set
+        env_scripts_dir = os.getenv("VFP_SCRIPTS_DIR")
+        if env_scripts_dir and os.path.exists(os.path.join(env_scripts_dir, "vfp_dbf_to_rdsv2.py")):
+            scripts_dir = os.path.abspath(env_scripts_dir)
+            vfp_script_path = os.path.join(scripts_dir, "vfp_dbf_to_rdsv2.py")
+            logging.info(f"Using scripts path from environment: {scripts_dir}")
+        else:
+            logging.warning(f"VFP script not found at: {vfp_script_path}")
+            logging.warning(f"Also tried: {alt_vfp_script_path}")
+            if env_scripts_dir:
+                logging.warning(f"Also tried environment path: {env_scripts_dir}")
+
+# Try to import if script file exists
+run_headless = None
+if os.path.exists(vfp_script_path):
+    # Add to path if not already there
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    
+    try:
+        from vfp_dbf_to_rdsv2 import run_headless
+        logging.info(f"Successfully imported vfp_dbf_to_rdsv2 from {scripts_dir}")
+    except ImportError as e:
+        logging.error(f"Could not import vfp_dbf_to_rdsv2 from {scripts_dir}: {e}", exc_info=True)
+        run_headless = None
+    except Exception as e:
+        logging.error(f"Unexpected error importing vfp_dbf_to_rdsv2: {e}", exc_info=True)
+        run_headless = None
+else:
+    logging.error(f"VFP script file does not exist at any checked location")
 
 
 @router.get("/status")
