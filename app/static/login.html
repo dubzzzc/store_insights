@@ -17,17 +17,27 @@
     <!-- Tailwind CSS - Compiled -->
     <link rel="stylesheet" href="/tailwind.css">
     <style>
-      /* Login page specific overrides for gradient background */
-      :root {
-        /* Override primary colors for login page gradient */
-        --background-start: 142 48% 45%; /* #8E548D - plum-500 */
-        --background-end: 222 80% 20%; /* #081E4F - navy */
-        --primary-hover: 142 48% 40%; /* plum-600 */
-      }
-
+      /* Login page uses theme gradient background */
       body {
-        background: linear-gradient(135deg, hsl(var(--background-start)) 0%, hsl(var(--background-end)) 100%);
+        background: linear-gradient(135deg, hsl(var(--color-gradient-start)) 0%, hsl(var(--color-gradient-end)) 100%);
         min-height: 100vh;
+      }
+      
+      /* Login-specific hover state for primary button */
+      :root {
+        --primary-hover: var(--color-brand-primary);
+      }
+      
+      [data-theme="quilt"] {
+        --primary-hover: 270 70% 50%;
+      }
+      
+      [data-theme="liquor"] {
+        --primary-hover: 0 84% 55%;
+      }
+      
+      [data-theme="grocery"] {
+        --primary-hover: 142 76% 32%;
       }
     </style>
   </head>
@@ -37,7 +47,7 @@
     <script>
       // Version check to force reload of cached pages
       (function() {
-        const CURRENT_VERSION = '3.0.4';
+        const CURRENT_VERSION = '3.0.5';
         const VERSION_KEY = 'store-insights-html-version';
         const storedVersion = localStorage.getItem(VERSION_KEY);
         
@@ -190,10 +200,12 @@
 
         return (
           <div className="space-y-4">
-            <button
+            <Button
               type="button"
-              className="relative w-full p-6 rounded-lg border-2 border-accent bg-card text-card-foreground font-semibold text-base cursor-pointer transition-all hover:border-primary hover:bg-primary hover:text-primary-foreground active:scale-[0.98] min-h-[48px] flex items-center justify-center touch-manipulation select-none shadow-md hover:shadow-lg"
+              variant="outline"
+              size="lg"
               onClick={handleInsightsClick}
+              className="w-full min-h-[48px] text-base font-semibold border-2 shadow-md hover:shadow-lg active:scale-[0.98] touch-manipulation select-none"
               onTouchStart={(e) => {
                 e.currentTarget.style.transform = 'scale(0.98)';
               }}
@@ -203,11 +215,13 @@
               }}
             >
               Login to Spirits Insights
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="relative w-full p-6 rounded-lg border-2 border-accent bg-card text-card-foreground font-semibold text-base cursor-pointer transition-all hover:border-primary hover:bg-primary hover:text-primary-foreground active:scale-[0.98] min-h-[48px] flex items-center justify-center touch-manipulation select-none shadow-md hover:shadow-lg"
+              variant="outline"
+              size="lg"
               onClick={handleMobilityClick}
+              className="w-full min-h-[48px] text-base font-semibold border-2 shadow-md hover:shadow-lg active:scale-[0.98] touch-manipulation select-none"
               onTouchStart={(e) => {
                 e.currentTarget.style.transform = 'scale(0.98)';
               }}
@@ -217,7 +231,7 @@
               }}
             >
               Login to Spirits Mobility
-            </button>
+            </Button>
           </div>
         );
       };
