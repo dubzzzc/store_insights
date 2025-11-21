@@ -22,6 +22,12 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Component Library -->
+    <script src="/theme-switcher.js"></script>
+    <script type="text/babel" src="/components/primitives.js"></script>
+    <script type="text/babel" src="/components/form-components.js"></script>
+    <script type="text/babel" src="/components/display-components.js"></script>
+    <script type="text/babel" src="/components/composite-components.js"></script>
     <script type="text/babel">
       const { useState, useEffect, useCallback, useMemo, useRef } = React;
 
@@ -117,46 +123,7 @@
         }
       };
 
-      // Reusable Components
-      const Button = ({ children, variant = "default", className = "", ...props }) => {
-        const baseClasses = "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2";
-        const variants = {
-          default: "bg-primary text-primary-foreground hover:bg-primary/90",
-          secondary: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
-          destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-          outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
-          ghost: "hover:bg-accent hover:text-accent-foreground",
-        };
-        return (
-          <button className={`${baseClasses} ${variants[variant]} ${className}`} {...props}>
-            {children}
-          </button>
-        );
-      };
-
-      const Input = ({ className = "", ...props }) => (
-        <input
-          className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
-          {...props}
-        />
-      );
-
-      const Label = ({ children, className = "", ...props }) => (
-        <label className={`text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 mb-2 block ${className}`} {...props}>
-          {children}
-        </label>
-      );
-
-      const Select = ({ children, className = "", ...props }) => (
-        <select
-          className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
-          {...props}
-        >
-          {children}
-        </select>
-      );
-
-      // Components
+      // Components (Button, Input, Label, Select are now loaded from component library)
       const CreateUserForm = ({ onSubmit, isSubmitting, knownStores = [], onEnsureStore }) => {
         const [email, setEmail] = useState('');
         const [password, setPassword] = useState('');
