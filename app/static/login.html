@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="quilt">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -15,12 +15,51 @@
       rel="stylesheet"
     />
     <!-- Tailwind CSS - Compiled -->
-    <link rel="stylesheet" href="/tailwind.css">
+    <link rel="stylesheet" href="/tailwind.css" onerror="console.error('Failed to load Tailwind CSS')">
     <style>
-      /* Login page uses theme gradient background */
+      /* Critical fallback styles - ensure visibility even if CSS fails */
+      * {
+        box-sizing: border-box;
+      }
+      
       body {
-        background: linear-gradient(135deg, hsl(var(--color-gradient-start)) 0%, hsl(var(--color-gradient-end)) 100%);
+        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        margin: 0;
+        padding: 0;
         min-height: 100vh;
+        /* Fallback gradient if CSS variables not loaded */
+        background: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%);
+      }
+      
+      /* Login page uses theme gradient background with fallbacks */
+      body {
+        /* Fallback gradient (visible immediately) */
+        background: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%);
+        /* Theme gradient (overrides when CSS loads) */
+        background: linear-gradient(135deg, hsl(var(--color-gradient-start, 270 70% 55%)) 0%, hsl(var(--color-gradient-end, 220 80% 50%)) 100%);
+      }
+      
+      /* Ensure text is visible with fallbacks */
+      body, p, div, span, h1, h2, h3, h4, h5, h6, button, input, label {
+        color: #1e293b; /* Fallback dark text */
+        color: hsl(var(--color-foreground-base, 270 30% 10%));
+      }
+      
+      /* Ensure buttons are visible */
+      button {
+        background-color: #8b5cf6; /* Fallback purple */
+        background-color: hsl(var(--color-brand-primary, 270 70% 55%));
+        color: #ffffff; /* Fallback white */
+        color: hsl(var(--color-brand-primary-foreground, 0 0% 100%));
+        border: none;
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.5rem;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      
+      button:hover {
+        opacity: 0.9;
       }
       
       /* Login-specific hover state for primary button */
@@ -74,6 +113,32 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <!-- Component Library -->
     <script src="/theme-switcher.js"></script>
+    <script>
+      // Initialize theme immediately to ensure CSS variables are set
+      (function() {
+        // Set theme attribute immediately (before ThemeSwitcher loads)
+        const savedTheme = localStorage.getItem('store-insights-theme') || 'quilt';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        
+        // Initialize ThemeSwitcher when it loads
+        if (typeof ThemeSwitcher !== 'undefined') {
+          ThemeSwitcher.init();
+        } else {
+          // Wait for ThemeSwitcher to load
+          const checkThemeSwitcher = setInterval(function() {
+            if (typeof ThemeSwitcher !== 'undefined') {
+              ThemeSwitcher.init();
+              clearInterval(checkThemeSwitcher);
+            }
+          }, 50);
+          
+          // Timeout after 2 seconds
+          setTimeout(function() {
+            clearInterval(checkThemeSwitcher);
+          }, 2000);
+        }
+      })();
+    </script>
     <script src="/components/component-loader.js"></script>
     <script type="text/babel">
       const { useState, useEffect, useRef } = React;

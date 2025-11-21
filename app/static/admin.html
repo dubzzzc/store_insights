@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="quilt">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -24,6 +24,32 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <!-- Component Library -->
     <script src="/theme-switcher.js"></script>
+    <script>
+      // Initialize theme immediately to ensure CSS variables are set
+      (function() {
+        // Set theme attribute immediately (before ThemeSwitcher loads)
+        const savedTheme = localStorage.getItem('store-insights-theme') || 'quilt';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        
+        // Initialize ThemeSwitcher when it loads
+        if (typeof ThemeSwitcher !== 'undefined') {
+          ThemeSwitcher.init();
+        } else {
+          // Wait for ThemeSwitcher to load
+          const checkThemeSwitcher = setInterval(function() {
+            if (typeof ThemeSwitcher !== 'undefined') {
+              ThemeSwitcher.init();
+              clearInterval(checkThemeSwitcher);
+            }
+          }, 50);
+          
+          // Timeout after 2 seconds
+          setTimeout(function() {
+            clearInterval(checkThemeSwitcher);
+          }, 2000);
+        }
+      })();
+    </script>
     <script src="/components/component-loader.js"></script>
     <script type="text/babel">
       const { useState, useEffect, useCallback, useMemo, useRef } = React;

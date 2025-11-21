@@ -2,9 +2,15 @@ version: 1.0
 runtime: python3
 build:
   commands:
-    build:
+    prebuild:
+      - echo "Installing Python dependencies..."
       - pip install --upgrade pip
       - pip install -r requirements.txt
+    build:
+      - echo "Building frontend assets..."
+      - npm install
+      - npm run build:css:prod
+      - echo "✅ Build complete"
 run:
   runtime-version: 3.11
   command: uvicorn app.main:app --host 0.0.0.0 --port 8000
