@@ -262,5 +262,5 @@ missing module named 'dns.exception' - imported by mysql.connector.aio (optional
 missing module named defusedxml - imported by PIL.Image (optional)
 missing module named dateutil.tz.tzfile - imported by dateutil.tz (top-level), dateutil.zoneinfo (top-level)
 missing module named jnius - imported by platformdirs.android (delayed, conditional, optional)
-missing module named android - imported by platformdirs.android (delayed, conditional, optional)
+missing module named android.mActivity - imported by android (delayed, conditional, optional), platformdirs.android (delayed, conditional, optional)
 missing module named _scproxy - imported by urllib.request (conditional)

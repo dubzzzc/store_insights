@@ -17,7 +17,7 @@
     <!-- Tailwind CSS Play CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-      // Configure Tailwind with shadcn/ui design tokens
+      // Configure Tailwind with Quilt Design System tokens
       tailwind.config = {
         theme: {
           extend: {
@@ -47,10 +47,6 @@
                 DEFAULT: "hsl(var(--accent))",
                 foreground: "hsl(var(--accent-foreground))",
               },
-              popover: {
-                DEFAULT: "hsl(var(--popover))",
-                foreground: "hsl(var(--popover-foreground))",
-              },
               card: {
                 DEFAULT: "hsl(var(--card))",
                 foreground: "hsl(var(--card-foreground))",
@@ -64,33 +60,62 @@
             fontFamily: {
               sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
             },
+            spacing: {
+              // 8pt grid system
+              '8pt': '8px',
+              '16pt': '16px',
+              '24pt': '24px',
+              '32pt': '32px',
+              '40pt': '40px',
+              '48pt': '48px',
+              '56pt': '56px',
+              '64pt': '64px',
+            },
           },
         },
       }
     </script>
     <style>
-      /* shadcn/ui CSS Variables */
+      /* Quilt Design System - Figma Design Tokens */
       :root {
+        /* Primary - Plum */
+        --primary: 142 48% 45%; /* #8E548D - plum-500 */
+        --primary-foreground: 0 0% 100%;
+        --primary-hover: 142 48% 40%; /* plum-600 */
+        
+        /* Accent - Blue */
+        --accent: 210 60% 70%; /* #9DBFDC - blue-400 */
+        --accent-foreground: 222 47% 11%;
+        
+        /* Secondary - Blue shades */
+        --secondary: 210 70% 85%; /* blue-200 */
+        --secondary-foreground: 222 47% 11%;
+        
+        /* Muted - Gray */
+        --muted: 0 0% 96%; /* gray-100 #F7F7F7 */
+        --muted-foreground: 0 0% 44%; /* gray-500 #707070 */
+        
+        /* Destructive */
+        --destructive: 0 84% 60%; /* #EF4444 */
+        --destructive-foreground: 0 0% 100%;
+        
+        /* Background - Gradient */
+        --background-start: 142 48% 45%; /* #8E548D */
+        --background-end: 222 80% 20%; /* #081E4F */
         --background: 0 0% 100%;
-        --foreground: 222.2 84% 4.9%;
+        --foreground: 222 80% 10%; /* navy-800 */
+        
+        /* Card */
         --card: 0 0% 100%;
-        --card-foreground: 222.2 84% 4.9%;
-        --popover: 0 0% 100%;
-        --popover-foreground: 222.2 84% 4.9%;
-        --primary: 221.2 83.2% 53.3%;
-        --primary-foreground: 210 40% 98%;
-        --secondary: 210 40% 96.1%;
-        --secondary-foreground: 222.2 47.4% 11.2%;
-        --muted: 210 40% 96.1%;
-        --muted-foreground: 215.4 16.3% 46.9%;
-        --accent: 210 40% 96.1%;
-        --accent-foreground: 222.2 47.4% 11.2%;
-        --destructive: 0 84.2% 60.2%;
-        --destructive-foreground: 210 40% 98%;
-        --border: 214.3 31.8% 91.4%;
-        --input: 214.3 31.8% 91.4%;
-        --ring: 221.2 83.2% 53.3%;
-        --radius: 0.5rem;
+        --card-foreground: 222 80% 10%;
+        
+        /* Border & Input */
+        --border: 210 60% 70%; /* blue-400 */
+        --input: 210 60% 70%;
+        --ring: 142 48% 45%; /* plum-500 */
+        
+        /* Radius */
+        --radius: 0.5rem; /* rounded-lg */
       }
 
       * {
@@ -98,19 +123,25 @@
       }
 
       body {
-        background-color: hsl(var(--background));
+        background: linear-gradient(135deg, hsl(var(--background-start)) 0%, hsl(var(--background-end)) 100%);
         color: hsl(var(--foreground));
         font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        min-height: 100vh;
+      }
+      
+      /* Shadow utilities matching Figma */
+      .shadow-sm {
+        box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+      }
+      .shadow-md {
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+      }
+      .shadow-lg {
+        box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
       }
     </style>
   </head>
-  <body className="min-h-screen flex items-center justify-center p-8 relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-    {/* Background gradient overlay */}
-    <div className="absolute inset-0 pointer-events-none">
-      <div className="absolute top-0 left-[20%] w-96 h-96 bg-sky-500/15 rounded-full blur-3xl"></div>
-      <div className="absolute bottom-0 right-[20%] w-96 h-96 bg-purple-500/15 rounded-full blur-3xl"></div>
-    </div>
-
+  <body className="min-h-screen flex items-center justify-center p-8 relative overflow-hidden">
     <div id="root" className="relative z-10 w-full max-w-md"></div>
     
     <script>
@@ -179,10 +210,10 @@
 
       // Reusable Components
       const Button = ({ children, variant = "default", className = "", ...props }) => {
-        const baseClasses = "inline-flex items-center justify-center rounded-lg text-sm font-semibold ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 min-h-[48px] px-5 py-3";
+        const baseClasses = "inline-flex items-center justify-center rounded-lg text-sm font-semibold ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 min-h-[48px] px-6 py-3";
         const variants = {
-          default: "bg-primary text-primary-foreground hover:bg-primary/90 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/35 active:translate-y-0",
-          secondary: "bg-slate-800/60 border border-slate-400/20 text-white hover:bg-slate-800/80 hover:border-slate-400/50",
+          default: "bg-primary text-primary-foreground hover:bg-[hsl(var(--primary-hover))] shadow-md hover:shadow-lg active:scale-[0.98]",
+          secondary: "bg-secondary text-secondary-foreground border border-accent hover:bg-accent hover:text-accent-foreground shadow-sm",
           outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
           ghost: "hover:bg-accent hover:text-accent-foreground",
         };
@@ -193,15 +224,21 @@
         );
       };
 
-      const Input = ({ className = "", ...props }) => (
-        <input
-          className={`flex h-11 w-full rounded-xl border border-slate-400/25 bg-slate-900/65 px-4 py-2.5 text-sm text-white ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-400/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60 focus-visible:ring-offset-2 focus-visible:bg-slate-900/85 focus-visible:border-sky-500/60 disabled:cursor-not-allowed disabled:opacity-60 transition-all ${className}`}
-          {...props}
-        />
-      );
+      const Input = ({ className = "", size = "default", ...props }) => {
+        const sizeClasses = {
+          default: "h-11 px-4 py-2.5",
+          sm: "h-9 px-3 py-2 text-sm",
+        };
+        return (
+          <input
+            className={`flex w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 transition-all shadow-sm ${sizeClasses[size]} ${className}`}
+            {...props}
+          />
+        );
+      };
 
       const Label = ({ children, className = "", ...props }) => (
-        <label className={`text-sm font-medium leading-none text-white/90 mb-2 block ${className}`} {...props}>
+        <label className={`text-sm font-medium leading-none text-foreground mb-2 block ${className}`} {...props}>
           {children}
         </label>
       );
@@ -242,7 +279,7 @@
               />
             </div>
             {error && (
-              <div className="rounded-xl bg-destructive/18 border border-destructive/50 p-3.5 text-destructive-foreground font-semibold text-sm">
+              <div className="rounded-lg bg-destructive/10 border border-destructive/50 p-4 text-destructive font-semibold text-sm shadow-sm">
                 {error}
               </div>
             )}
@@ -270,7 +307,7 @@
           <div className="space-y-4">
             <button
               type="button"
-              className="relative w-full p-5 rounded-2xl border-2 border-slate-400/20 bg-slate-900/60 text-white font-semibold text-base cursor-pointer transition-all overflow-hidden hover:border-sky-500/50 hover:bg-sky-500/10 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-sky-500/20 active:translate-y-0 min-h-[48px] flex items-center justify-center touch-manipulation select-none before:absolute before:inset-0 before:-left-full before:w-full before:h-full before:bg-gradient-to-r before:from-transparent before:via-white/10 before:to-transparent before:transition-all before:duration-500 hover:before:left-full"
+              className="relative w-full p-6 rounded-lg border-2 border-accent bg-card text-card-foreground font-semibold text-base cursor-pointer transition-all hover:border-primary hover:bg-primary hover:text-primary-foreground active:scale-[0.98] min-h-[48px] flex items-center justify-center touch-manipulation select-none shadow-md hover:shadow-lg"
               onClick={handleInsightsClick}
               onTouchStart={(e) => {
                 e.currentTarget.style.transform = 'scale(0.98)';
@@ -284,7 +321,7 @@
             </button>
             <button
               type="button"
-              className="relative w-full p-5 rounded-2xl border-2 border-slate-400/20 bg-slate-900/60 text-white font-semibold text-base cursor-pointer transition-all overflow-hidden hover:border-sky-500/50 hover:bg-sky-500/10 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-sky-500/20 active:translate-y-0 min-h-[48px] flex items-center justify-center touch-manipulation select-none before:absolute before:inset-0 before:-left-full before:w-full before:h-full before:bg-gradient-to-r before:from-transparent before:via-white/10 before:to-transparent before:transition-all before:duration-500 hover:before:left-full"
+              className="relative w-full p-6 rounded-lg border-2 border-accent bg-card text-card-foreground font-semibold text-base cursor-pointer transition-all hover:border-primary hover:bg-primary hover:text-primary-foreground active:scale-[0.98] min-h-[48px] flex items-center justify-center touch-manipulation select-none shadow-md hover:shadow-lg"
               onClick={handleMobilityClick}
               onTouchStart={(e) => {
                 e.currentTarget.style.transform = 'scale(0.98)';
@@ -339,8 +376,8 @@
         };
 
         return (
-          <div className="space-y-5 mt-2 pt-6 border-t border-slate-400/20">
-            <h2 className="text-center text-xl font-semibold text-white mb-4">
+          <div className="space-y-5 mt-2 pt-6 border-t border-border">
+            <h2 className="text-center text-xl font-semibold text-foreground mb-4">
               Logging into Spirits Mobility
             </h2>
             <form onSubmit={handleConnect} className="space-y-5">
@@ -355,7 +392,7 @@
                   required
                   disabled={!isEditing || isConnecting}
                   readOnly={!isEditing}
-                  className={!isEditing ? 'bg-slate-900/50 text-slate-300/70 border-slate-400/20 cursor-default' : ''}
+                  className={!isEditing ? 'bg-muted text-muted-foreground border-muted cursor-default' : ''}
                   pattern={isEditing ? "^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$|^[a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?)*$" : undefined}
                   title={isEditing ? "Enter a valid IP address or hostname" : undefined}
                 />
@@ -374,7 +411,7 @@
                     max="65535"
                     disabled={!isEditing || isConnecting}
                     readOnly={!isEditing}
-                    className={!isEditing ? 'bg-slate-900/50 text-slate-300/70 border-slate-400/20 cursor-default' : ''}
+                    className={!isEditing ? 'bg-muted text-muted-foreground border-muted cursor-default' : ''}
                   />
                 </div>
               </div>
@@ -390,12 +427,12 @@
                 </Button>
               )}
               {error && (
-                <div className="rounded-xl bg-destructive/18 border border-destructive/50 p-3.5 text-destructive-foreground font-semibold text-sm">
+                <div className="rounded-lg bg-destructive/10 border border-destructive/50 p-4 text-destructive font-semibold text-sm shadow-sm">
                   {error}
                 </div>
               )}
               {!isEditing && hasSavedConnection && countdown !== null && (
-                <div className="text-center text-slate-200/80 text-sm py-3 px-3 bg-sky-500/10 rounded-xl">
+                <div className="text-center text-foreground text-sm py-3 px-3 bg-accent/20 rounded-lg border border-accent">
                   Redirecting in {countdown} second{countdown !== 1 ? 's' : ''}...
                 </div>
               )}
@@ -563,12 +600,12 @@
 
         return (
           <div className="w-full max-w-md relative z-10">
-            <div className="w-full bg-slate-900/85 backdrop-blur-2xl text-white rounded-[1.75rem] p-8 md:p-12 grid gap-8 shadow-2xl border border-white/10">
+            <div className="w-full bg-card text-card-foreground rounded-lg p-8 md:p-12 grid gap-8 shadow-lg border border-border">
               <div>
-                <h1 className="m-0 text-center text-3xl md:text-4xl font-bold bg-gradient-to-br from-white to-slate-400/90 bg-clip-text text-transparent tracking-tight">
+                <h1 className="m-0 text-center text-3xl md:text-4xl font-bold text-foreground tracking-tight">
                   Spirits Store Insights
                 </h1>
-                <p className="m-0 text-center text-slate-200/75 text-[0.95rem] mt-2">
+                <p className="m-0 text-center text-muted-foreground text-base mt-2">
                   Choose your login option to continue.
                 </p>
               </div>

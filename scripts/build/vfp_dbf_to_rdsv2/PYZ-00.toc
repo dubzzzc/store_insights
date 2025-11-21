@@ -293,6 +293,7 @@
   ('_pydecimal', 'C:\\Python312\\Lib\\_pydecimal.py', 'PYMODULE'),
   ('_strptime', 'C:\\Python312\\Lib\\_strptime.py', 'PYMODULE'),
   ('_threading_local', 'C:\\Python312\\Lib\\_threading_local.py', 'PYMODULE'),
+  ('android', '-', 'PYMODULE'),
   ('argparse', 'C:\\Python312\\Lib\\argparse.py', 'PYMODULE'),
   ('ast', 'C:\\Python312\\Lib\\ast.py', 'PYMODULE'),
   ('asyncio', 'C:\\Python312\\Lib\\asyncio\\__init__.py', 'PYMODULE'),
