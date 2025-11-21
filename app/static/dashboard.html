@@ -3322,7 +3322,9 @@ const AdminView = ({
   syncLogs,
   storeLabel,
   onRefresh,
+  onSyncLocal,
         isLoading,
+        isSyncing,
         dateRange,
         onDateRangeChange,
 }) => {
@@ -3527,7 +3529,7 @@ const AdminView = ({
               value={dateRange?.end || ''}
               onChange={(e) => onDateRangeChange({ ...(dateRange || {}), end: e.target.value })}
             />
-            <button type="button" className="secondary" onClick={onRefresh} disabled={isLoading}>
+            <button type="button" className="secondary" onClick={onRefresh} disabled={isLoading || isSyncing}>
               {isLoading ? (
                 <>
                   <span className="spinner"></span>
@@ -3535,6 +3537,16 @@ const AdminView = ({
                 </>
               ) : (
                 'Refresh'
+              )}
+            </button>
+            <button type="button" className="secondary" onClick={onSyncLocal} disabled={isLoading || isSyncing}>
+              {isSyncing ? (
+                <>
+                  <span className="spinner"></span>
+                  Syncing…
+                </>
+              ) : (
+                'Sync Local'
               )}
             </button>
           </div>
@@ -4724,6 +4736,7 @@ const ModuleNav = ({ active, onChange }) => {
   quickData,
   onStoreChange,
   onRefresh,
+  onSyncLocal,
   activeModule,
   onModuleChange,
   loading,
@@ -4736,6 +4749,7 @@ const ModuleNav = ({ active, onChange }) => {
         onInvRangeChange,
         token,
         storeQueryValue,
+        isSyncing,
 }) => {
   const storeLabel = useMemo(() => {
     if (storeInfo?.store_name) return storeInfo.store_name;
@@ -4775,7 +4789,9 @@ const ModuleNav = ({ active, onChange }) => {
             syncLogs={syncLogs}
             storeLabel={storeLabel}
             onRefresh={onRefresh}
+            onSyncLocal={onSyncLocal}
             isLoading={loading}
+            isSyncing={isSyncing}
             dateRange={dateRange}
             onDateRangeChange={onDateRangeChange}
           />
@@ -4826,6 +4842,7 @@ const ModuleNav = ({ active, onChange }) => {
         const [authError, setAuthError] = useState('');
         const [isAuthenticating, setIsAuthenticating] = useState(false);
         const [isLoadingData, setIsLoadingData] = useState(false);
+        const [isSyncing, setIsSyncing] = useState(false);
 
         const todayYmd = () => {
           const d = new Date();
@@ -5877,6 +5894,42 @@ const ModuleNav = ({ active, onChange }) => {
           }, 400);
         };
 
+        const handleSyncLocal = async () => {
+          if (!token || userRole === 'admin' || isSyncing) {
+            return;
+          }
+
+          setIsSyncing(true);
+          try {
+            const storeParam = selectedStore 
+              ? (selectedStore.store_id ? `?store=${selectedStore.store_id}` : `?store=${selectedStore.store_db}`)
+              : '';
+            
+            const response = await fetch(`${API_BASE}/sync/trigger${storeParam}`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json().catch(() => ({ detail: 'Sync failed' }));
+              throw new Error(errorData.detail || `Sync failed: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            // Optionally refresh data after sync starts
+            // The sync runs in background, so we can show a success message
+            console.log('Sync started:', result);
+          } catch (error) {
+            console.error('Sync error:', error);
+            alert(`Failed to start sync: ${error.message}`);
+          } finally {
+            setIsSyncing(false);
+          }
+        };
+
         const handleStoreChange = useCallback((nextStore) => {
           // Clear all caches when store changes to ensure fresh data
           clearAllCaches();
@@ -5994,6 +6047,7 @@ const ModuleNav = ({ active, onChange }) => {
                 quickData={quickData}
                 onStoreChange={handleStoreChange}
                 onRefresh={refresh}
+                onSyncLocal={handleSyncLocal}
                 activeModule={activeModule}
                 onModuleChange={setActiveModule}
                 loading={isLoadingData}
@@ -6006,6 +6060,7 @@ const ModuleNav = ({ active, onChange }) => {
                 onPoRangeChange={handlePoRangeChange}
                 invRange={invRange}
                 onInvRangeChange={handleInvRangeChange}
+                isSyncing={isSyncing}
               />
         );
 

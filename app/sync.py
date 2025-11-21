@@ -1,14 +1,28 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+import sys
+import os
+import logging
 
 import mysql.connector
 from mysql.connector import errorcode
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 
 from app.auth import get_auth_user
 from app.db_core import get_core_connection
 
 router = APIRouter()
+
+# Add scripts directory to path to import vfp_dbf_to_rdsv2
+scripts_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "scripts")
+if scripts_dir not in sys.path:
+    sys.path.insert(0, scripts_dir)
+
+try:
+    from vfp_dbf_to_rdsv2 import run_headless
+except ImportError as e:
+    logging.warning(f"Could not import vfp_dbf_to_rdsv2: {e}")
+    run_headless = None
 
 
 @router.get("/status")
@@ -88,3 +102,86 @@ def get_sync_status(
     finally:
         cursor.close()
         conn.close()
+
+
+def _get_store_info(user: dict, store_identifier: Optional[str] = None) -> Dict[str, Any]:
+    """Extract store information from user token, optionally filtered by store identifier."""
+    stores = user.get("stores") or []
+    if not stores and user.get("store_db"):
+        stores = [
+            {
+                "store_db": user.get("store_db"),
+                "db_user": user.get("db_user"),
+                "db_pass": user.get("db_pass"),
+                "store_id": user.get("store_id"),
+                "store_name": user.get("store_name"),
+            }
+        ]
+
+    if not stores:
+        raise HTTPException(status_code=403, detail="No stores associated with this account")
+
+    if store_identifier:
+        matching = [
+            s
+            for s in stores
+            if store_identifier in {str(s.get("store_id")), s.get("store_db")}
+        ]
+        if not matching:
+            raise HTTPException(
+                status_code=404, detail="Requested store is not assigned to this user"
+            )
+        return matching[0]
+
+    # Return first store if no identifier provided
+    return stores[0]
+
+
+def _run_vfp_sync(store_db: str, profile: Optional[str] = None):
+    """Background task to run VFP sync."""
+    if run_headless is None:
+        logging.error("vfp_dbf_to_rdsv2 module not available")
+        return
+
+    try:
+        # Use store_db as profile if not specified
+        sync_profile = profile or store_db
+        logging.info(f"Starting VFP sync for store {store_db} with profile {sync_profile}")
+        run_headless(cfg_path=None, profile=sync_profile, auto_sync=False)
+        logging.info(f"Completed VFP sync for store {store_db}")
+    except Exception as e:
+        logging.error(f"Error during VFP sync for store {store_db}: {e}", exc_info=True)
+
+
+@router.post("/trigger")
+def trigger_sync(
+    store: Optional[str] = Query(
+        default=None, description="Store identifier (store_id or store_db)"
+    ),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    user: dict = Depends(get_auth_user),
+) -> Dict[str, Any]:
+    """Trigger a VFP DBF to RDS sync operation for the authenticated user's store."""
+    if run_headless is None:
+        raise HTTPException(
+            status_code=503,
+            detail="VFP sync module not available. Please ensure vfp_dbf_to_rdsv2.py is accessible.",
+        )
+
+    store_info = _get_store_info(user, store)
+    store_db = store_info.get("store_db")
+
+    if not store_db:
+        raise HTTPException(status_code=400, detail="Store database name not found")
+
+    # Use store_db as the profile name for VFP config
+    profile = store_db
+
+    # Add sync task to background tasks
+    background_tasks.add_task(_run_vfp_sync, store_db, profile)
+
+    return {
+        "status": "started",
+        "message": f"VFP sync started for store {store_db}",
+        "store_db": store_db,
+    }
