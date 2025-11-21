@@ -1,27 +1,35 @@
 /**
  * Component Library Loader
- * Fetches and processes component files with Babel Standalone
- * Ensures components are loaded before main scripts execute
+ * Loads and processes component files with Babel Standalone
+ * Uses async loading but sets a flag when complete
  */
 
 (function() {
   'use strict';
   
-  const ComponentLoader = {
-    loaded: false,
-    loading: false,
-    loadPromise: null,
-    
-    async loadComponentFile(url) {
-      try {
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error(`Failed to load ${url}: ${response.statusText}`);
-        }
-        const code = await response.text();
-        
-        // Process with Babel Standalone
-        if (typeof Babel !== 'undefined' && Babel.transform) {
+  window.componentsLoaded = false;
+  window.componentsLoading = true;
+  
+  async function loadComponentFile(url) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Failed to load ${url}:`, response.status, response.statusText);
+        console.error('Response:', errorText.substring(0, 200));
+        throw new Error(`Failed to load ${url}: ${response.status} ${response.statusText}`);
+      }
+      const code = await response.text();
+      
+      // Check if we got HTML instead of JavaScript (common 404 issue)
+      if (code.trim().startsWith('<!DOCTYPE') || code.trim().startsWith('<html')) {
+        console.error(`Received HTML instead of JavaScript for ${url}. Check file path.`);
+        throw new Error(`Received HTML response for ${url}. File may not exist or path is incorrect.`);
+      }
+      
+      // Process with Babel Standalone
+      if (typeof Babel !== 'undefined' && Babel.transform) {
+        try {
           const transformed = Babel.transform(code, {
             presets: ['react'],
           }).code;
@@ -31,73 +39,58 @@
           script.textContent = transformed;
           document.head.appendChild(script);
           document.head.removeChild(script);
-        } else {
-          // Fallback: try to execute directly (might fail if JSX)
-          console.warn('Babel not available, attempting direct execution');
-          eval(code);
+        } catch (babelError) {
+          console.error(`Babel transformation error for ${url}:`, babelError);
+          throw babelError;
         }
-      } catch (error) {
-        console.error(`Error loading component file ${url}:`, error);
-        throw error;
+      } else {
+        throw new Error('Babel Standalone not found');
       }
-    },
+    } catch (error) {
+      console.error(`Error loading component file ${url}:`, error);
+      throw error;
+    }
+  }
+  
+  async function loadAllComponents() {
+    // Wait for Babel to be available
+    let attempts = 0;
+    while (typeof Babel === 'undefined' && attempts < 100) {
+      await new Promise(resolve => setTimeout(resolve, 20));
+      attempts++;
+    }
     
-    async loadAll() {
-      if (this.loaded) {
-        return Promise.resolve();
+    if (typeof Babel === 'undefined') {
+      throw new Error('Babel Standalone not found. Please ensure @babel/standalone is loaded.');
+    }
+    
+    const componentFiles = [
+      '/components/primitives.js',
+      '/components/form-components.js',
+      '/components/display-components.js',
+      '/components/composite-components.js',
+    ];
+    
+    try {
+      for (const file of componentFiles) {
+        await loadComponentFile(file);
       }
-      
-      if (this.loading) {
-        return this.loadPromise;
-      }
-      
-      this.loading = true;
-      this.loadPromise = (async () => {
-        // Wait for Babel to be available
-        let attempts = 0;
-        while (typeof Babel === 'undefined' && attempts < 50) {
-          await new Promise(resolve => setTimeout(resolve, 50));
-          attempts++;
-        }
-        
-        if (typeof Babel === 'undefined') {
-          throw new Error('Babel Standalone not found. Please ensure @babel/standalone is loaded.');
-        }
-        
-        const componentFiles = [
-          '/components/primitives.js',
-          '/components/form-components.js',
-          '/components/display-components.js',
-          '/components/composite-components.js',
-        ];
-        
-        try {
-          for (const file of componentFiles) {
-            await this.loadComponentFile(file);
-          }
-          this.loaded = true;
-          this.loading = false;
-          console.log('✓ Component library loaded successfully');
-          
-          // Dispatch event so other scripts know components are ready
-          window.dispatchEvent(new CustomEvent('componentsLoaded'));
-        } catch (error) {
-          this.loading = false;
-          console.error('✗ Failed to load component library:', error);
-          throw error;
-        }
-      })();
-      
-      return this.loadPromise;
-    },
-  };
+      window.componentsLoaded = true;
+      window.componentsLoading = false;
+      console.log('✓ Component library loaded successfully');
+      window.dispatchEvent(new CustomEvent('componentsLoaded'));
+    } catch (error) {
+      window.componentsLoading = false;
+      console.error('✗ Failed to load component library:', error);
+      throw error;
+    }
+  }
   
   // Start loading immediately
-  ComponentLoader.loadAll().catch(err => {
+  loadAllComponents().catch(err => {
     console.error('Component loader error:', err);
+    window.componentsLoaded = false;
+    window.componentsLoading = false;
   });
-  
-  // Make available globally
-  window.ComponentLoader = ComponentLoader;
 })();
 

@@ -78,66 +78,8 @@ const ThemeSwitcher = {
     }
   },
   
-  // Create a theme selector component (React)
-  ThemeSelector({ currentTheme, onThemeChange, showDarkMode = true }) {
-    const [theme, setTheme] = React.useState(currentTheme || ThemeSwitcher.getCurrentTheme());
-    const [isDark, setIsDark] = React.useState(ThemeSwitcher.isDarkMode());
-    
-    React.useEffect(() => {
-      const handleThemeChange = (e) => {
-        setTheme(e.detail.theme);
-        if (onThemeChange) onThemeChange(e.detail.theme);
-      };
-      
-      const handleDarkModeChange = (e) => {
-        setIsDark(e.detail.isDark);
-      };
-      
-      window.addEventListener('themechange', handleThemeChange);
-      window.addEventListener('darkmodechange', handleDarkModeChange);
-      
-      return () => {
-        window.removeEventListener('themechange', handleThemeChange);
-        window.removeEventListener('darkmodechange', handleDarkModeChange);
-      };
-    }, [onThemeChange]);
-    
-    const handleThemeSelect = (newTheme) => {
-      ThemeSwitcher.setTheme(newTheme);
-      setTheme(newTheme);
-      if (onThemeChange) onThemeChange(newTheme);
-    };
-    
-    const handleDarkModeToggle = () => {
-      ThemeSwitcher.toggleDarkMode();
-      setIsDark(ThemeSwitcher.isDarkMode());
-    };
-    
-    return (
-      <div className="flex items-center gap-4 p-4 border border-border rounded-lg bg-card">
-        <div className="flex items-center gap-2">
-          <Label>Theme:</Label>
-          <Select
-            value={theme}
-            onChange={(e) => handleThemeSelect(e.target.value)}
-            className="w-32"
-          >
-            {Object.entries(ThemeSwitcher.themes).map(([key, label]) => (
-              <option key={key} value={key}>{label}</option>
-            ))}
-          </Select>
-        </div>
-        
-        {showDarkMode && (
-          <Switch
-            checked={isDark}
-            onCheckedChange={handleDarkModeToggle}
-            label="Dark Mode"
-          />
-        )}
-      </div>
-    );
-  },
+  // ThemeSelector component is defined in HTML files where Babel can process JSX
+  // This utility just provides the theme switching logic
 };
 
 // Auto-initialize on load
